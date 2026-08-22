@@ -658,7 +658,8 @@ Add `sanitize-html` to `api/package.json` dependencies (`^2.13.0`), then:
 import sanitizeHtml from 'sanitize-html'
 
 // The whitelist is deliberately narrow: everything the source content uses and
-// nothing else. `dl`/`dt`/`dd` carry provenance data and must survive.
+// nothing else. `dl`/`dt`/`dd` are kept so the `specs` block round-trips; note
+// the archive itself contains none (see the spec's Task 11 correction).
 const OPTIONS = {
   allowedTags: ['p', 'br', 'em', 'strong', 'a', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'blockquote'],
   allowedAttributes: { a: ['href'] },
@@ -2724,7 +2725,11 @@ export function* walkWidgets(nodes = []) {
   }
 }
 
-/** Splits a <dl> out of a text blob so provenance data becomes structured. */
+/**
+ * Splits a <dl> out of a text blob so provenance data becomes structured.
+ * Correct and tested, but inert against this archive: `_elementor_data` holds
+ * no `dl` markup. Retained for content authored in the new editor.
+ */
 export function liftSpecs(html) {
   const parts = []
   const re = /<dl[\s\S]*?<\/dl>/gi

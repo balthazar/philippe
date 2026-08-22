@@ -191,8 +191,20 @@ A discriminated union stored in order:
 - `specs`: `{ items: [{ term: localized, value: localized }] }`, rendered as a
   definition list.
 
-The `specs` type exists because the source content contains 228 `dl`/`dt`/`dd`
-structures carrying provenance data. Capturing them as data rather than as
+**Correction (recorded 2026-08-22, during Task 11).** The `specs` type was
+originally justified by a claim that the archive contained 228 `dl`/`dt`/`dd`
+structures carrying provenance data. That claim was wrong. Those definition
+lists were counted in WordPress's rendered `post_content` mirror, and every one
+of them carries `class='gallery-item'`: they are auto-generated `[gallery]`
+shortcode boilerplate, not hand-authored data. The migration reads
+`_elementor_data`, which contains **zero** `dl` markup across all 63 articles.
+The real provenance information (titles, dates, dimensions) is plain `p`/`br`
+text inside text widgets and migrates correctly as ordinary `text` blocks.
+
+The `specs` type is retained deliberately, not through inertia: it is built,
+tested, and exposed in the editor, so the artist can enter structured
+provenance on new work going forward. It will simply produce no blocks from
+this migration. Capturing such data as data rather than as
 free-form markup is what makes consistent styling, and later filtering,
 possible.
 
