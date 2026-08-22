@@ -1488,6 +1488,12 @@ describe('GET /api/home', () => {
     expect(res.body.slides.map((s) => s.article.slug)).toEqual(['porte'])
   })
 
+  it('omits a featured work that has no cover, since a slide needs an image', async () => {
+    await Article.create({ category: 'works', status: 'published', slug: { fr: 'sans-image' }, title: { fr: 'Sans image' }, featured: true })
+    const res = await request(createApp()).get('/api/home')
+    expect(res.body.slides.map((s) => s.article.slug)).not.toContain('sans-image')
+  })
+
   it('returns an empty slideshow rather than failing when nothing is featured', async () => {
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
@@ -1509,6 +1515,10 @@ import { Router } from 'express'
 import { Article } from '../models/Article.js'
 import { Page } from '../models/Page.js'
 import { Home } from '../models/Home.js'
+// Registered for its side effect only: every populate path here refs 'Image',
+// and nothing else in the process loads that model, so without this import
+// mongoose throws MissingSchemaError and the request hangs.
+import '../models/Image.js'
 import { resolveDoc } from '../lib/localize.js'
 import { CATEGORIES, PAGE_KEYS } from '../lib/constants.js'
 
@@ -1574,6 +1584,11 @@ publicRouter.get('/home', async (req, res) => {
   // The slideshow IS the featured works. `featured` ("en avant") is the single
   // toggle the editor sets on an article; nothing is curated twice.
   if (!home?.slides?.length) {
+    // `cover: { $ne: null }` also excludes documents missing the field entirely
+    // (verified against MongoDB). That is deliberate: a slide with no image
+    // cannot render, so an imageless featured work is omitted here rather than
+    // emitted as a broken slide. Task 21's editor warns when "en avant" is
+    // ticked on a work with no cover, which is where that should surface.
     const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
       .select(LIST_FIELDS)
       .sort({ position: 1, yearStart: -1 })
@@ -3942,6 +3957,9 @@ export function Slideshow({ slides = [], interval = 6000 }) {
 
   if (!count) return null
   const slide = slides[index]
+  // Defensive: the API omits imageless slides, but a manual Home override could
+  // still contain one, and an <img> with no src is worse than no slide.
+  if (!slide?.image?.variants?.large) return null
 
   return (
     <section
@@ -4588,6 +4606,19 @@ sizing settings:
 The label names both effects, because one toggle doing two things is only
 confusing if the interface hides the second. There is no separate slideshow
 screen: the slideshow is exactly the set of works with this box ticked.
+
+When "en avant" is ticked on a work that has no cover image, the editor shows an
+inline warning next to the checkbox: the slideshow needs an image, so such a work
+is skipped. Without this the omission is silent and the editor is left wondering
+why their choice had no effect.
+
+```jsx
+{article.featured && !article.cover && (
+  <p role="alert" className="field-warning">
+    Cette œuvre n'a pas d'image principale : elle n'apparaîtra pas dans le diaporama.
+  </p>
+)}
+```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
