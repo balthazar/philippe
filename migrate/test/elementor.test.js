@@ -18,8 +18,15 @@ describe('mapElementorToBlocks', () => {
   })
 
   it('maps a heading widget', () => {
-    const blocks = mapElementorToBlocks([widget('heading', { title: 'Provenance', header_size: 'h3' })], null, {})
-    expect(blocks).toEqual([{ type: 'heading', value: { fr: 'Provenance', en: '' }, level: 3 }])
+    // Followed by a text widget so it is not a trailing heading, which
+    // dropTrailingHeadings would otherwise strip; that behaviour has its own
+    // dedicated tests below.
+    const blocks = mapElementorToBlocks(
+      [widget('heading', { title: 'Provenance', header_size: 'h3' }), widget('text-editor', { editor: '<p>x</p>' })],
+      null,
+      {}
+    )
+    expect(blocks[0]).toEqual({ type: 'heading', value: { fr: 'Provenance', en: '' }, level: 3 })
   })
 
   it('maps an image widget to an image block with a legacy id placeholder', () => {
@@ -138,18 +145,77 @@ describe('mapElementorToBlocks', () => {
   })
 
   it('leaves every English value empty when the trees produce a different block COUNT, even if a later pair coincides on type', () => {
-    // fr: toggle (2 blocks: heading+text) then a heading widget (1 block) = 3 blocks total.
-    // en: a single text-editor widget (1 block) then a heading widget (1 block) = 2 blocks total.
-    // Without a length guard, index 1 on each side would both be 'heading' and
-    // wrongly merge, attaching the English heading to the wrong French block.
+    // fr: toggle (2 blocks: heading+text) then a heading widget, then a
+    // trailing text widget (so the sequence does not itself end in a heading
+    // and dropTrailingHeadings, tested separately, is not what is under test
+    // here) = 4 blocks total.
+    // en: a single text-editor widget (1 block) then a heading widget (1
+    // block) = 2 blocks total.
+    // Without a length guard, a positional zip could still coincidentally
+    // align a French and English block of the same type and wrongly merge.
     const fr = [
       widget('toggle', { tabs: [{ tab_title: 'Musée', tab_content: '<p>Collection</p>' }] }),
       widget('heading', { title: 'Suite' }),
+      widget('text-editor', { editor: '<p>Après</p>' }),
     ]
     const en = [widget('text-editor', { editor: '<p>Hello</p>' }), widget('heading', { title: 'Next' })]
     const blocks = mapElementorToBlocks(fr, en, {})
-    expect(blocks).toHaveLength(3)
+    expect(blocks).toHaveLength(4)
     expect(blocks.every((b) => b.value?.en === '')).toBe(true)
+  })
+})
+
+describe('dropTrailingHeadings (via mapElementorToBlocks)', () => {
+  it('drops a single trailing heading', () => {
+    const nodes = [
+      widget('text-editor', { editor: '<p>Intro</p>' }),
+      widget('heading', { title: 'Éditions' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([
+      { type: 'text', value: { fr: '<p>Intro</p>', en: '' } },
+    ])
+  })
+
+  it('drops several trailing headings in a row', () => {
+    const nodes = [
+      widget('text-editor', { editor: '<p>Intro</p>' }),
+      widget('heading', { title: 'Éditions' }),
+      widget('heading', { title: 'Commandes publiques' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([
+      { type: 'text', value: { fr: '<p>Intro</p>', en: '' } },
+    ])
+  })
+
+  it('keeps a heading followed by real content', () => {
+    const nodes = [
+      widget('heading', { title: 'Provenance' }),
+      widget('text-editor', { editor: '<p>Corps</p>' }),
+      widget('heading', { title: 'Éditions' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([
+      { type: 'heading', value: { fr: 'Provenance', en: '' }, level: 2 },
+      { type: 'text', value: { fr: '<p>Corps</p>', en: '' } },
+    ])
+  })
+
+  it('leaves a block list with no headings unchanged', () => {
+    const nodes = [
+      widget('text-editor', { editor: '<p>Un</p>' }),
+      widget('text-editor', { editor: '<p>Deux</p>' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([
+      { type: 'text', value: { fr: '<p>Un</p>', en: '' } },
+      { type: 'text', value: { fr: '<p>Deux</p>', en: '' } },
+    ])
+  })
+
+  it('reduces an all-headings list to empty', () => {
+    const nodes = [
+      widget('heading', { title: 'Un' }),
+      widget('heading', { title: 'Deux' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([])
   })
 })
 

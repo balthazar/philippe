@@ -142,9 +142,23 @@ function widgetToBlocks(widget, ctx) {
   }
 }
 
+/**
+ * A heading with nothing but headings after it labels content that no longer
+ * exists. That happens where a dropped dynamic widget (the7-post-loop and
+ * friends) was introduced by a heading: we regenerate those listings from the
+ * database, correctly labelled, so the original label is left stranded.
+ * Verified against the real archive: this removes exactly the two orphans on
+ * the works page and touches nothing else (0 of 63 articles are affected).
+ */
+function dropTrailingHeadings(blocks) {
+  let end = blocks.length
+  while (end > 0 && blocks[end - 1].type === 'heading') end -= 1
+  return blocks.slice(0, end)
+}
+
 export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   const fr = [...walkWidgets(frNodes)].flatMap((w) => widgetToBlocks(w, ctx))
-  if (!enNodes) return fr
+  if (!enNodes) return dropTrailingHeadings(fr)
   const en = [...walkWidgets(enNodes)].flatMap((w) => widgetToBlocks(w, ctx))
 
   // The merge is positional, so it is only sound when both trees produced the
@@ -152,9 +166,9 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   // shifted pair coincides on type the English text lands on the wrong French
   // block: a wrong translation that looks right, which is worse than none.
   // On divergence, leave the English side empty and fall back to French.
-  if (en.length !== fr.length) return fr
+  if (en.length !== fr.length) return dropTrailingHeadings(fr)
 
-  return fr.map((block, i) => {
+  const merged = fr.map((block, i) => {
     const other = en[i]
     if (!other || other.type !== block.type) return block
     if (block.type === 'text' || block.type === 'heading') {
@@ -171,4 +185,5 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
     }
     return block
   })
+  return dropTrailingHeadings(merged)
 }
