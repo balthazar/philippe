@@ -83,6 +83,17 @@ describe('admin articles', () => {
     await agent.delete(`/api/admin/articles/${a._id}`)
     expect(await Article.countDocuments()).toBe(0)
   })
+
+  // Express 4 does not forward a rejected promise from an async handler, so
+  // without asyncHandler this CastError is an unhandled rejection: the
+  // request never resolves and Node 24 terminates the process. This proves
+  // the wrapper works rather than merely existing.
+  it('returns a clean error for an invalid ObjectId instead of hanging', async () => {
+    const agent = await loginAgent()
+    const res = await agent.get('/api/admin/articles/not-an-id')
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(res.body).toHaveProperty('error')
+  }, 3000)
 })
 
 describe('admin pages', () => {

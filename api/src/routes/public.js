@@ -8,13 +8,14 @@ import { Page } from '../models/Page.js'
 import '../models/Image.js'
 import { resolveDoc } from '../lib/localize.js'
 import { CATEGORIES, PAGE_KEYS } from '../lib/constants.js'
+import { asyncHandler } from '../middleware/asyncHandler.js'
 
 export const publicRouter = Router()
 
 const langOf = (req) => (req.query.lang === 'en' ? 'en' : 'fr')
 const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position featured'
 
-publicRouter.get('/articles', async (req, res) => {
+publicRouter.get('/articles', asyncHandler(async (req, res) => {
   const lang = langOf(req)
   const { category } = req.query
   if (category && !CATEGORIES.includes(category)) return res.status(400).json({ error: 'unknown category' })
@@ -27,9 +28,9 @@ publicRouter.get('/articles', async (req, res) => {
     .lean()
 
   res.json({ items: items.map((a) => resolveDoc(a, lang)), total: items.length })
-})
+}))
 
-publicRouter.get('/articles/:slug', async (req, res) => {
+publicRouter.get('/articles/:slug', asyncHandler(async (req, res) => {
   const lang = langOf(req)
   const { slug } = req.params
   const article = await Article.findOne({
@@ -53,18 +54,18 @@ publicRouter.get('/articles/:slug', async (req, res) => {
     prev: i > 0 ? resolveDoc(siblings[i - 1], lang) : null,
     next: i >= 0 && i < siblings.length - 1 ? resolveDoc(siblings[i + 1], lang) : null,
   })
-})
+}))
 
-publicRouter.get('/pages/:key', async (req, res) => {
+publicRouter.get('/pages/:key', asyncHandler(async (req, res) => {
   const { key } = req.params
   if (!PAGE_KEYS.includes(key)) return res.status(400).json({ error: 'unknown page' })
   const page =
     (await Page.findOne({ key }).populate('blocks.image').populate('blocks.items.image').lean()) ||
     { key, title: { fr: '', en: '' }, blocks: [] }
   res.json(resolveDoc(page, langOf(req)))
-})
+}))
 
-publicRouter.get('/home', async (req, res) => {
+publicRouter.get('/home', asyncHandler(async (req, res) => {
   const lang = langOf(req)
 
   // The slideshow IS the featured works. `featured` ("en avant") is the single
@@ -83,4 +84,4 @@ publicRouter.get('/home', async (req, res) => {
     .lean()
   const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
   res.json(resolveDoc({ slides }, lang))
-})
+}))
