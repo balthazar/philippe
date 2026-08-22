@@ -795,6 +795,44 @@ describe('processImage', () => {
       processImage(Buffer.from('not an image'), { originalName: 'x.jpg', mediaRoot: root })
     ).rejects.toThrow(/unsupported image/i)
   })
+
+  it('gives a TIFF original a .tif extension and keeps it TIFF', async () => {
+    const tiff = await sharp({ create: { width: 500, height: 400, channels: 3, background: '#111' } }).tiff().toBuffer()
+    const result = await processImage(tiff, { originalName: 'scan.tif', mediaRoot: root })
+    expect(result.variants.original.path).toMatch(/\.tif$/)
+    const written = await readFile(join(root, result.variants.original.path))
+    expect((await sharp(written).metadata()).format).toBe('tiff')
+  })
+
+  it('keeps the original out of the served tree and the variants in it', async () => {
+    const result = await processImage(await jpeg(900, 600), { originalName: 'o.jpg', mediaRoot: root })
+    expect(result.variants.original.path.startsWith('_originals/')).toBe(true)
+    for (const name of ['thumb', 'medium', 'large']) {
+      expect(result.variants[name].path.startsWith('_originals/')).toBe(false)
+    }
+  })
+
+  it('returns identical, clock-independent paths for identical bytes', async () => {
+    const buf = await jpeg(1000, 800)
+    const a = await processImage(buf, { originalName: 'a.jpg', mediaRoot: root })
+    const b = await processImage(buf, { originalName: 'b.jpg', mediaRoot: root })
+    expect(b.variants).toEqual(a.variants)
+    // A year in the path would mean a re-run in January writes somewhere else.
+    expect(JSON.stringify(a.variants)).not.toMatch(/\b(19|20)\d{2}\//)
+  })
+
+  it('reports display dimensions, not raw ones, for an EXIF-rotated source', async () => {
+    const rotated = await sharp({ create: { width: 1200, height: 800, channels: 3, background: '#444' } })
+      .withMetadata({ orientation: 6 })   // 90 degrees: display is 800x1200
+      .jpeg()
+      .toBuffer()
+    const result = await processImage(rotated, { originalName: 'r.jpg', mediaRoot: root })
+    expect(result.width).toBe(800)
+    expect(result.height).toBe(1200)
+    // The variants are auto-oriented, so the aspect ratios must agree.
+    expect(result.variants.large.width / result.variants.large.height)
+      .toBeCloseTo(result.width / result.height, 2)
+  })
 })
 ```
 
@@ -816,13 +854,29 @@ import sharp from 'sharp'
 
 const VARIANTS = { thumb: 600, medium: 1400, large: 2400 }
 
-export function mediaPath(mediaRoot, filename) {
-  return join(mediaRoot, filename)
+// sharp's format name is not always the file extension.
+const EXT = { jpeg: 'jpg', png: 'png', webp: 'webp', tiff: 'tif', gif: 'gif', avif: 'avif' }
+
+// Originals live under this prefix. Task 9's media route refuses to serve
+// anything beneath it, so the master is kept but never reachable over HTTP.
+export const ORIGINALS_PREFIX = '_originals'
+
+export function mediaPath(mediaRoot, relPath) {
+  return join(mediaRoot, relPath)
 }
 
 /**
- * Re-encodes through sharp, which strips EXIF and neutralizes payloads hidden
- * in files claiming to be images. The client filename is never used on disk.
+ * The three derived variants are re-encoded through sharp, which strips EXIF
+ * and neutralizes payloads hidden in files claiming to be images. Those are the
+ * only files ever served.
+ *
+ * The original is kept byte-exact as an archival master: it is NOT re-encoded,
+ * so it retains its own metadata, and it is written under ORIGINALS_PREFIX
+ * where the media route will not serve it.
+ *
+ * Every path is a pure function of the content hash, so re-running the
+ * migration writes the same bytes to the same place. Never derive a path from
+ * the clock.
  */
 export async function processImage(buffer, { originalName, mediaRoot }) {
   let meta
@@ -833,19 +887,29 @@ export async function processImage(buffer, { originalName, mediaRoot }) {
   }
   if (!meta.width || !meta.height) throw new Error('unsupported image format')
 
+  // metadata() reports pre-rotation dimensions while every variant is produced
+  // with .rotate(), so orientations 5-8 must be swapped or the top-level
+  // dimensions disagree with the variants and aspect-ratio boxes render wrong.
+  const swapped = meta.orientation >= 5 && meta.orientation <= 8
+  const width = swapped ? meta.height : meta.width
+  const height = swapped ? meta.width : meta.height
+
   const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
-  const dir = join(String(new Date().getFullYear()))
+  const shard = hash.slice(0, 2)
   const variants = {}
 
-  const originalRel = join(dir, `${hash}-original.${meta.format === 'png' ? 'png' : 'jpg'}`)
+  const originalRel = join(ORIGINALS_PREFIX, shard, `${hash}-original.${EXT[meta.format] || meta.format}`)
   await write(mediaRoot, originalRel, buffer)
-  variants.original = { path: originalRel, width: meta.width, height: meta.height, bytes: buffer.length }
+  variants.original = { path: originalRel, width, height, bytes: buffer.length }
 
   for (const [name, targetWidth] of Object.entries(VARIANTS)) {
-    const width = Math.min(targetWidth, meta.width)
-    const out = await sharp(buffer).rotate().resize({ width, withoutEnlargement: true }).webp({ quality: 82 }).toBuffer()
+    const out = await sharp(buffer)
+      .rotate()
+      .resize({ width: Math.min(targetWidth, width), withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer()
     const info = await sharp(out).metadata()
-    const rel = join(dir, `${hash}-${name}.webp`)
+    const rel = join(shard, `${hash}-${name}.webp`)
     await write(mediaRoot, rel, out)
     variants[name] = { path: rel, width: info.width, height: info.height, bytes: out.length }
   }
@@ -854,8 +918,8 @@ export async function processImage(buffer, { originalName, mediaRoot }) {
     filename: hash,
     originalName,
     mime: `image/${meta.format}`,
-    width: meta.width,
-    height: meta.height,
+    width,
+    height,
     bytes: buffer.length,
     variants,
   }
@@ -1721,7 +1785,7 @@ git commit -m "feat(api): add admin content API with sanitizing and reordering"
 
 **Interfaces:**
 - Consumes: `processImage`, `Image`, `Article`, `Home`, auth middleware.
-- Produces: `mediaRouter` mounted at `/media` serving files with a one-year immutable cache header; admin endpoints `GET/POST /api/admin/images`, `PATCH /api/admin/images/:id`, `DELETE /api/admin/images/:id`; `errorHandler` producing `{ error }` with the right status.
+- Produces: `mediaRouter` mounted at `/media` serving files with a one-year immutable cache header, and refusing anything under `ORIGINALS_PREFIX`. Note `mediaPath(mediaRoot, relPath)` takes a variant's `path`, NOT the model's `filename` field (a bare hash that resolves to no file); admin endpoints `GET/POST /api/admin/images`, `PATCH /api/admin/images/:id`, `DELETE /api/admin/images/:id`; `errorHandler` producing `{ error }` with the right status.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1804,6 +1868,13 @@ describe('GET /media', () => {
     const res = await request(createApp()).get('/media/../../etc/passwd')
     expect(res.status).toBeGreaterThanOrEqual(400)
   })
+
+  it('never serves an archival original', async () => {
+    const agent = await loginAgent()
+    const up = await agent.post('/api/admin/images').attach('file', await png(), 'd.png')
+    const res = await request(createApp()).get(`/media/${up.body.variants.original.path}`)
+    expect(res.status).toBe(404)
+  })
 })
 ```
 
@@ -1849,9 +1920,15 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
 // api/src/routes/media.js
 import { Router } from 'express'
 import express from 'express'
+import { ORIGINALS_PREFIX } from '../lib/imagePipeline.js'
 
 export function mediaRouter(mediaRoot = process.env.MEDIA_ROOT || '/data/media') {
   const router = Router()
+  // Archival masters are kept on disk but never served: they are the only
+  // files that are not re-encoded, so they still carry their original metadata.
+  router.use((req, res, next) =>
+    req.path.split('/').includes(ORIGINALS_PREFIX) ? res.status(404).end() : next()
+  )
   // Filenames are content hashes, so a given path's bytes never change.
   router.use(
     express.static(mediaRoot, {
