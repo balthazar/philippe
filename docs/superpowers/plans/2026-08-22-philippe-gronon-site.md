@@ -3371,7 +3371,7 @@ export function langFromPath(pathname) {
 
 ```jsx
 // src/lib/lang.jsx
-import { createContext, useContext, useMemo } from 'react'
+import { createContext, useContext, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { langFromPath, routeFor } from './routes.js'
 
@@ -3380,6 +3380,16 @@ const LangContext = createContext('fr')
 export function LangProvider({ children }) {
   const { pathname } = useLocation()
   const lang = langFromPath(pathname)
+
+  // Keep the document language in step with the route. Without this every page
+  // claims to be French, so screen readers announce English pages with a French
+  // voice and search engines index them as the wrong language. Task 22's
+  // prerender writes the correct value into the static HTML for each route;
+  // this handles client-side navigation after hydration.
+  useEffect(() => {
+    document.documentElement.lang = lang
+  }, [lang])
+
   return <LangContext.Provider value={lang}>{children}</LangContext.Provider>
 }
 
@@ -3455,6 +3465,7 @@ git commit -m "feat(web): scaffold Vite app with bilingual routing"
 **Files:**
 - Create: `src/design/tokens.css`, `src/design/base.css`
 - Create: `src/public-site/components/{Header.jsx,Footer.jsx,Container.jsx}`
+- Modify: `src/lib/lang.jsx` (keep `<html lang>` in step with the route)
 - Test: `src/public-site/components/__tests__/Header.test.jsx`
 
 **Interfaces:**
@@ -3494,6 +3505,13 @@ describe('Header', () => {
   it('offers a toggle to the other language', () => {
     renderAt('/oeuvres')
     expect(screen.getByRole('link', { name: /english/i })).toHaveAttribute('href', '/en/works')
+  })
+
+  it('sets the document language to match the route', () => {
+    renderAt('/oeuvres')
+    expect(document.documentElement.lang).toBe('fr')
+    renderAt('/en/works')
+    expect(document.documentElement.lang).toBe('en')
   })
 })
 ```
