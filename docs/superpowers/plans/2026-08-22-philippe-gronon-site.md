@@ -2609,6 +2609,38 @@ describe('mapElementorToBlocks', () => {
     expect(() => mapElementorToBlocks([g], null, { postId: 17185 })).toThrow(/no inferable content/)
   })
 
+  it('maps a toggle to heading and text pairs, preserving order', () => {
+    const t = widget('toggle', {
+      items_repeater: [
+        { tab_title: 'Collections', tab_content: '<p>Un musée</p>' },
+        { tab_title: 'Expositions', tab_content: '<p>Une galerie</p>' },
+      ],
+    })
+    expect(mapElementorToBlocks([t], null, {}).map((b) => b.type)).toEqual([
+      'heading', 'text', 'heading', 'text',
+    ])
+  })
+
+  it('throws on a toggle with no tab items rather than dropping it', () => {
+    expect(() => mapElementorToBlocks([widget('toggle', {})], null, { postId: 11 })).toThrow(/no tab items/)
+  })
+
+  it('maps a button to a text block containing a link', () => {
+    const b = widget('button', { text: 'Télécharger', link: { url: 'https://example.org/cv.pdf' } })
+    expect(mapElementorToBlocks([b], null, {})).toEqual([
+      { type: 'text', value: { fr: '<p><a href="https://example.org/cv.pdf">Télécharger</a></p>', en: '' } },
+    ])
+  })
+
+  it('drops the dynamic listing widgets the new site regenerates', () => {
+    const dynamic = [
+      widget('the7-post-loop', {}),
+      widget('the7_content_carousel', {}),
+      widget('slider_revolution', {}),
+    ]
+    expect(mapElementorToBlocks(dynamic, null, {})).toEqual([])
+  })
+
   it('throws on an unknown widget rather than silently dropping content', () => {
     expect(() => mapElementorToBlocks([widget('countdown', {})], null, { postId: 42 })).toThrow(/countdown.*42/)
   })
@@ -2662,12 +2694,28 @@ const OPTIONS = {
 }
 const clean = (html) => (html ? sanitizeHtml(html, OPTIONS) : '')
 
-// `global` is deliberately NOT here. Elementor global widgets keep their
-// canonical copy in an elementor_library template and cache the rendered
-// settings inline. This archive has exactly one, in a PUBLISHED article, and it
-// carries a photo credit line. Dropping it would lose that silently, which is
-// precisely the failure mode this phase exists to prevent.
-const DROP = new Set(['spacer', 'the7_nav-menu', 'post-navigation'])
+// Every entry here is a documented decision, not an omission. `global` and
+// `toggle` are deliberately absent because both carry real content in this
+// archive; they are mapped below.
+//
+//   the7-post-loop        the theme's dynamic archive query. It IS the works
+//                         grid, and holds only filter/pagination config. The new
+//                         site regenerates that grid from the database (Task 16)
+//                         and the page's intro text is preserved as page blocks.
+//   the7_content_carousel dynamic carousel sourced from posts, no static content.
+//                         The new home page covers this with the featured
+//                         slideshow plus a selection grid.
+//   slider_revolution     Revolution Slider. The approved spec explicitly does
+//                         not migrate it: the homepage slideshow is rebuilt from
+//                         works flagged "en avant".
+const DROP = new Set([
+  'spacer',
+  'the7_nav-menu',
+  'post-navigation',
+  'the7-post-loop',
+  'the7_content_carousel',
+  'slider_revolution',
+])
 
 export function* walkWidgets(nodes = []) {
   for (const node of nodes || []) {
@@ -2725,6 +2773,37 @@ function widgetToBlocks(widget, ctx) {
       return ids.length
         ? [{ type: 'gallery', columns: 3, items: ids.map((id) => ({ image: { legacyWpId: id }, caption: { fr: '', en: '' } })) }]
         : []
+    }
+    case 'toggle': {
+      // The biography page's toggle holds real content (the public collections
+      // holding the artist's work), not chrome. Each tab becomes a heading plus
+      // its body text, preserving structure and document order.
+      // Find the repeater by SHAPE: this theme does not name the array `tabs`.
+      const items = Object.values(s).find(
+        (v) => Array.isArray(v) && v.some((it) => it && (it.tab_title || it.tab_content))
+      )
+      if (!items) {
+        throw new Error(`toggle widget in post ${ctx.postId} has no tab items; inspect it rather than dropping it`)
+      }
+      return items.flatMap((it) => [
+        ...(it.tab_title ? [{ type: 'heading', value: { fr: stripTags(it.tab_title), en: '' }, level: 3 }] : []),
+        ...(it.tab_content
+          ? liftSpecs(clean(it.tab_content)).map((part) =>
+              part.type === 'specs'
+                ? { type: 'specs', items: part.items.map((i) => ({ term: { fr: i.term, en: '' }, value: { fr: i.value, en: '' } })) }
+                : { type: 'text', value: { fr: part.html, en: '' } }
+            )
+          : []),
+      ])
+    }
+    case 'button': {
+      // Bibliography page document links. The sanitize whitelist allows a[href],
+      // so a text block holding an anchor round-trips safely.
+      const label = stripTags(s.text || '')
+      const href = s.link?.url || ''
+      if (!label && !href) return []
+      const html = href ? `<p><a href="${href}">${label || href}</a></p>` : `<p>${label}</p>`
+      return [{ type: 'text', value: { fr: clean(html), en: '' } }]
     }
     case 'global': {
       // Infer the underlying widget from the cached inline settings rather than
