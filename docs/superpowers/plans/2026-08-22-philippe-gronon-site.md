@@ -2188,6 +2188,7 @@ Source facts confirmed against the dump, so no discovery is needed during implem
 - WordPress also stores its own resized derivatives (files ending `-1000x796.jpg` and similar). The migration uses only the original named by `_wp_attached_file`, so sharp builds our variants from full quality sources.
 - Article titles carry their date in the title itself, in the form `Nouveau | 2024`.
 - Every published post has exactly one category and a `_thumbnail_id`.
+- **Extraction asserts its own completeness.** Every inner join in the extraction can drop a row silently, and a dropped French translation is indistinguishable from a legitimate English-only article: the totals still look plausible. So `extractAll` compares its joined row count against an independent `COUNT(*)` and throws on a mismatch, `pairByTrid` throws rather than overwriting a duplicate (trid, language) pair, and the English-only articles are listed in the output so a human sees them. This matters because the migration is re-run at cutover, potentially weeks after the first run, against a site that may have been edited in between.
 - **Security:** the user-data archive is a full home directory backup containing `.ssh/id_rsa` and `wp-config.php` credentials. It is gitignored. Extract only what is needed, never commit extracted files, and do not copy the archive anywhere shared.
 
 ### Task 10: MariaDB access and extraction
@@ -2262,6 +2263,14 @@ describe('pairByTrid', () => {
     const [only] = pairByTrid(rows)
     expect(only.fr.ID).toBe(9)
     expect(only.enOnly).toBe(true)
+  })
+
+  it('throws rather than silently overwriting a duplicate trid/language row', () => {
+    const rows = [
+      { ID: 1, trid: 10, language_code: 'fr', post_name: 'a' },
+      { ID: 2, trid: 10, language_code: 'fr', post_name: 'a-again' },
+    ]
+    expect(() => pairByTrid(rows)).toThrow(/duplicate fr row for trid 10/)
   })
 })
 ```
@@ -2362,6 +2371,14 @@ export function pairByTrid(rows) {
   const byTrid = new Map()
   for (const row of rows) {
     const entry = byTrid.get(row.trid) || {}
+    // Overwriting here would silently discard a row. The data is supposed to
+    // have exactly one category per post; make the code enforce that instead
+    // of assuming it.
+    if (entry[row.language_code]) {
+      throw new Error(
+        `duplicate ${row.language_code} row for trid ${row.trid}: a post has more than one category or translation row`
+      )
+    }
     entry[row.language_code] = row
     byTrid.set(row.trid, entry)
   }
@@ -2381,8 +2398,27 @@ async function metaFor(ids, key) {
   return new Map(rows.map((r) => [r.post_id, r.meta_value]))
 }
 
+/**
+ * Throws unless the joined rows account for every published row of that type.
+ * An inner join that quietly drops a post is the migration's worst failure mode,
+ * because the article total can still look right afterwards.
+ */
+async function assertNoRowsLost(joinedCount, postType) {
+  const [{ n }] = await query(
+    `SELECT COUNT(*) AS n FROM {p}posts WHERE post_type = ? AND post_status = 'publish'`,
+    [postType]
+  )
+  if (joinedCount !== Number(n)) {
+    throw new Error(
+      `extraction lost rows: joined ${joinedCount} of ${n} published ${postType}s. ` +
+      `A row is missing its translation or category link; fix the source data, not the query.`
+    )
+  }
+}
+
 export async function extractAll({ outDir = new URL('./data/', import.meta.url).pathname } = {}) {
   await mkdir(outDir, { recursive: true })
+  try {
 
   const postRows = await query(`
     SELECT p.ID, p.post_title, p.post_name, p.post_date, p.post_status,
@@ -2394,6 +2430,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     JOIN {p}terms term ON term.term_id = tt.term_id
     WHERE p.post_type = 'post' AND p.post_status = 'publish'
   `)
+
+  await assertNoRowsLost(postRows.length, 'post')
 
   const ids = postRows.map((r) => r.ID)
   const elementor = await metaFor(ids, '_elementor_data')
@@ -2424,9 +2462,12 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       yearStart: base.yearStart,
       yearEnd: base.yearEnd,
       coverLegacyId: Number(thumbs.get(pair.fr.ID) || 0) || null,
+      // Gate the English source on enOnly for the same reason the title is
+      // gated: for an English-only article pair.en IS pair.fr, and passing the
+      // same payload as both languages produces self-referential duplicates.
       blocks: mapElementorToBlocks(
         JSON.parse(elementor.get(pair.fr.ID) || '[]'),
-        JSON.parse((pair.en && elementor.get(pair.en.ID)) || 'null'),
+        JSON.parse((!pair.enOnly && pair.en && elementor.get(pair.en.ID)) || 'null'),
         { postId: pair.fr.ID }
       ),
     }
@@ -2438,6 +2479,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     JOIN {p}icl_translations t ON t.element_id = p.ID AND t.element_type = 'post_page'
     WHERE p.post_type = 'page' AND p.post_status = 'publish'
   `)
+  await assertNoRowsLost(pageRows.length, 'page')
+
   const pageElementor = await metaFor(pageRows.map((r) => r.ID), '_elementor_data')
   const pages = pairByTrid(pageRows).map((pair) => ({
     legacyWpId: pair.fr.ID,
@@ -2453,12 +2496,23 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
   await writeFile(`${outDir}/articles.json`, JSON.stringify(articles, null, 2))
   await writeFile(`${outDir}/pages.json`, JSON.stringify(pages, null, 2))
   await writeFile(`${outDir}/media.json`, JSON.stringify(media, null, 2))
-  await close()
-  return { articles: articles.length, pages: pages.length, media: media.length }
+
+    // Surfaced, not buried: an article with no French version is legitimate but
+    // rare, and a human should see which ones they are on every run.
+    const enOnly = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
+    return { articles: articles.length, pages: pages.length, media: media.length, enOnly }
+  } finally {
+    // The designed behaviour of this function is to throw; leaving the pool
+    // open on that path hangs the process.
+    await close()
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  extractAll().then((counts) => console.log('extracted', counts))
+  extractAll().then(({ enOnly, ...counts }) => {
+    console.log('extracted', counts)
+    console.log(`English-only articles (${enOnly.length}):`, enOnly.join(', ') || 'none')
+  })
 }
 ```
 
