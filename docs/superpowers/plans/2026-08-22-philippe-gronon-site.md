@@ -2687,8 +2687,8 @@ const clean = (html) => (html ? sanitizeHtml(html, OPTIONS) : '')
 //                         The new home page covers this with its slideshow of
 //                         recent works plus a selection grid.
 //   slider_revolution     Revolution Slider. The approved spec explicitly does
-//                         not migrate it: the homepage slideshow is rebuilt from
-//                         works flagged "en avant".
+//                         not migrate it: the homepage slideshow is rebuilt
+//                         from the most recent works.
 const DROP = new Set([
   'spacer',
   'the7_nav-menu',
@@ -5455,7 +5455,7 @@ Recorded so it is not silently lost:
 - WooCommerce (9 products, 41 product variations) is not migrated. The current site has a shop; this build has none.
 - Revolution Slider content is not migrated; the homepage slideshow is rebuilt from work covers.
 - The 24 `.doc`, 8 `.docx`, 8 `.pdf` and 2 `.zip` attachments are migrated only if `verify.js` reports article bodies linking to them.
-- The `Home` model and its manual `slides` override were deleted in Task 7. They were unreachable (nothing wrote them) and carried two real defects: the override branch published draft articles and returned a different response shape than the derived one. If slideshow curation beyond `featured` is ever wanted, add it deliberately with status filtering and a matching projection.
+- The `Home` model and its manual `slides` override were deleted in Task 7. They were unreachable (nothing wrote them) and carried two real defects: the override branch published draft articles and returned a different response shape than the derived one. If slideshow curation beyond "the most recent works" is ever wanted, add it deliberately with status filtering and a matching projection.
 - Per-route preload data in the prerender (Task 22 renders chrome and head tags, not article bodies).
 - The spec listed `GET /api/sitemap.xml`. The plan does not build it: the prerender reads the existing `/api/articles` endpoints and writes `dist/sitemap.xml` directly, so a second endpoint would be dead code.
 - DNS cutover to `philippegronon.com`, which is a separate change once the staging site is signed off.
