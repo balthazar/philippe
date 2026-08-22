@@ -232,10 +232,12 @@ otherwise report a swapped aspect ratio and render the wrong placeholder shape.
 
 ### Home
 
-A single document holding `slides: [{ image: ref, article: ref | null, caption:
-localized }]`, retained as a manual override. In normal operation it is empty and
-the slideshow is exactly the set of articles flagged `featured`, so the artist
-curates it from the article editor rather than from a second screen.
+There is no `Home` document. The slideshow is exactly the set of published
+articles flagged `featured` that have a cover image, so the artist curates it
+from the article editor rather than from a second screen. An earlier draft kept a
+stored slide list as an override; it was removed because nothing wrote it, it
+published draft articles, and it returned a different response shape than the
+derived path.
 
 ### User
 

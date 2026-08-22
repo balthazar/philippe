@@ -48,7 +48,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 | `lib/slug.js` | `slugify`, uniqueness suffixing |
 | `lib/sanitize.js` | The HTML whitelist, one exported `sanitize()` |
 | `lib/imagePipeline.js` | sharp variants, content hashing, disk writes |
-| `models/{Article,Page,Image,User,Home}.js` | Schemas and indexes only, no request logic |
+| `models/{Article,Page,Image,User}.js` | Schemas and indexes only, no request logic |
 | `routes/public.js` | Read-only endpoints, language-resolved output |
 | `routes/auth.js` | Login, logout, me, password change |
 | `routes/admin.js` | CRUD, raw localized output |
@@ -334,12 +334,12 @@ git commit -m "feat(api): add localized field helper with French fallback"
 ### Task 3: Models and database connection
 
 **Files:**
-- Create: `api/src/models/{Image,Article,Page,Home,User}.js`, `api/src/db.js`, `api/src/lib/constants.js`
+- Create: `api/src/models/{Image,Article,Page,User}.js`, `api/src/db.js`, `api/src/lib/constants.js`
 - Test: `api/test/models/article.test.js`, `api/test/helpers/db.js`
 
 **Interfaces:**
 - Consumes: `localizedField` from Task 2.
-- Produces: Mongoose models `Image`, `Article`, `Page`, `Home`, `User`; `connect(uri, dbName)` and `disconnect()` from `db.js`; `CATEGORIES` and `PAGE_KEYS` arrays from `constants.js`; a test helper `withDb()` starting `mongodb-memory-server`.
+- Produces: Mongoose models `Image`, `Article`, `Page`, `User`; `connect(uri, dbName)` and `disconnect()` from `db.js`; `CATEGORIES` and `PAGE_KEYS` arrays from `constants.js`; a test helper `withDb()` starting `mongodb-memory-server`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -517,31 +517,6 @@ const pageSchema = new mongoose.Schema(
 )
 
 export const Page = mongoose.model('Page', pageSchema)
-```
-
-```js
-// api/src/models/Home.js
-import mongoose from 'mongoose'
-import { localizedField } from '../lib/localize.js'
-
-const homeSchema = new mongoose.Schema(
-  {
-    singleton: { type: String, default: 'home', unique: true },
-    slides: [
-      new mongoose.Schema(
-        {
-          image: { type: mongoose.Schema.Types.ObjectId, ref: 'Image', required: true },
-          article: { type: mongoose.Schema.Types.ObjectId, ref: 'Article', default: null },
-          caption: localizedField(),
-        },
-        { _id: false }
-      ),
-    ],
-  },
-  { timestamps: true }
-)
-
-export const Home = mongoose.model('Home', homeSchema)
 ```
 
 ```js
@@ -1507,6 +1482,26 @@ describe('GET /api/home', () => {
     expect(res.body.slides[0].image.variants.medium.path).toBe('ab/testcover-medium.webp')
   })
 
+  it('resolves localized values nested inside blocks', async () => {
+    await Article.create({
+      category: 'works', status: 'published', slug: { fr: 'avec-blocs' }, title: { fr: 'Avec blocs' },
+      blocks: [
+        { type: 'text', value: { fr: '<p>Texte</p>', en: '' } },
+        { type: 'specs', items: [{ term: { fr: 'Tirage', en: 'Edition' }, value: { fr: '3', en: '' } }] },
+      ],
+    })
+    const res = await request(createApp()).get('/api/articles/avec-blocs?lang=en')
+    expect(res.body.blocks[0].value).toBe('<p>Texte</p>')      // falls back to French
+    expect(res.body.blocks[1].items[0].term).toBe('Edition')   // English override wins
+    expect(res.body.blocks[1].items[0].value).toBe('3')
+  })
+
+  it('degrades an unrecognised language to French', async () => {
+    const res = await request(createApp()).get('/api/articles?category=works&lang=de')
+    expect(res.status).toBe(200)
+    expect(res.body.items.map((a) => a.title)).toEqual(['Porte', 'Châssis-Presse'])
+  })
+
   it('omits a featured work that has no cover, since a slide needs an image', async () => {
     await Article.create({ category: 'works', status: 'published', slug: { fr: 'sans-image' }, title: { fr: 'Sans image' }, featured: true })
     const res = await request(createApp()).get('/api/home')
@@ -1533,7 +1528,6 @@ Expected: FAIL, 404s because `publicRouter` is not mounted.
 import { Router } from 'express'
 import { Article } from '../models/Article.js'
 import { Page } from '../models/Page.js'
-import { Home } from '../models/Home.js'
 // Registered for its side effect only: every populate path here refs 'Image',
 // and nothing else in the process loads that model, so without this import
 // mongoose throws MissingSchemaError and the request hangs.
@@ -1598,25 +1592,24 @@ publicRouter.get('/pages/:key', async (req, res) => {
 
 publicRouter.get('/home', async (req, res) => {
   const lang = langOf(req)
-  const home = await Home.findOne({ singleton: 'home' }).populate('slides.image').populate('slides.article').lean()
 
   // The slideshow IS the featured works. `featured` ("en avant") is the single
-  // toggle the editor sets on an article; nothing is curated twice.
-  if (!home?.slides?.length) {
-    // `cover: { $ne: null }` also excludes documents missing the field entirely
-    // (verified against MongoDB). That is deliberate: a slide with no image
-    // cannot render, so an imageless featured work is omitted here rather than
-    // emitted as a broken slide. Task 21's editor warns when "en avant" is
-    // ticked on a work with no cover, which is where that should surface.
-    const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
-      .select(LIST_FIELDS)
-      .sort({ position: 1, yearStart: -1 })
-      .populate('cover')
-      .lean()
-    const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
-    return res.json(resolveDoc({ slides }, lang))
-  }
-  res.json(resolveDoc(home, lang))
+  // toggle the editor sets on an article; nothing is curated twice, and there is
+  // deliberately no stored slide list to drift out of sync or leak drafts.
+  //
+  // `cover: { $ne: null }` also excludes documents missing the field entirely
+  // (verified against MongoDB). That is deliberate: a slide with no image cannot
+  // render, so an imageless featured work is omitted here rather than emitted as
+  // a broken slide. Task 21's editor warns when "en avant" is ticked on a work
+  // with no cover, which is where that should surface.
+  const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
+    .select(LIST_FIELDS)
+    .sort({ position: 1, yearStart: -1, createdAt: -1 })
+    .populate('cover')
+    .lean()
+
+  const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
+  res.json(resolveDoc({ slides }, lang))
 })
 ```
 
@@ -1879,7 +1872,8 @@ git commit -m "feat(api): add admin content API with sanitizing and reordering"
 ### Task 9: Media upload and serving
 
 **Files:**
-- Create: `api/src/routes/media.js`, `api/src/middleware/upload.js`, `api/src/middleware/errors.js`
+- Create: `api/src/routes/media.js`, `api/src/middleware/upload.js`, `api/src/middleware/errors.js`, `api/src/middleware/asyncHandler.js`
+- Modify: `api/src/routes/public.js`, `api/src/routes/auth.js`, `api/src/routes/admin.js` (wrap async handlers)
 - Modify: `api/src/app.js`, `api/src/routes/admin.js` (image endpoints)
 - Test: `api/test/routes/media.test.js`
 
@@ -2005,6 +1999,16 @@ export const upload = multer({
 export class UploadTypeError extends Error {
   constructor(message) { super(message); this.status = 400 }
 }
+```
+
+Express 4 does not forward a rejected promise from an async handler, so a
+database hiccup inside any route hangs the request instead of reaching the error
+handler below. Wrap every async route in this, including the public and auth
+routes written in Tasks 6 and 7:
+
+```js
+// api/src/middleware/asyncHandler.js
+export const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 ```
 
 ```js
@@ -5257,7 +5261,7 @@ Recorded so it is not silently lost:
 - WooCommerce (9 products, 41 product variations) is not migrated. The current site has a shop; this build has none.
 - Revolution Slider content is not migrated; the homepage slideshow is rebuilt from work covers.
 - The 24 `.doc`, 8 `.docx`, 8 `.pdf` and 2 `.zip` attachments are migrated only if `verify.js` reports article bodies linking to them.
-- The `Home` model retains a manual `slides` override the public API still honours, but no admin screen writes it now that the slideshow is driven by `featured`. Either wire a curation screen later or delete the model; it is currently an unused escape hatch.
+- The `Home` model and its manual `slides` override were deleted in Task 7. They were unreachable (nothing wrote them) and carried two real defects: the override branch published draft articles and returned a different response shape than the derived one. If slideshow curation beyond `featured` is ever wanted, add it deliberately with status filtering and a matching projection.
 - Per-route preload data in the prerender (Task 22 renders chrome and head tags, not article bodies).
 - The spec listed `GET /api/sitemap.xml`. The plan does not build it: the prerender reads the existing `/api/articles` endpoints and writes `dist/sitemap.xml` directly, so a second endpoint would be dead code.
 - DNS cutover to `philippegronon.com`, which is a separate change once the staging site is signed off.
