@@ -30,7 +30,8 @@ Every task's requirements implicitly include this section. Values are copied ver
 - Migration targets, asserted by `verify.js`: **63 articles** (62 FR/EN pairs plus 1 EN-only), **7 pages**, and every article having a cover and at least one block.
 - Secrets are never committed. `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` come from a k8s Secret created out of band.
 - **Any task that adds a dependency MUST stage `package.json` AND `package-lock.json` in the same commit as the code that imports it.** A commit that imports a package it did not declare does not build from a clean checkout and breaks `npm ci` in CI, even though it passes locally where `node_modules` is already populated.
-- **Image sizing is exactly two settings, no more.** (1) The gallery grid: `columns` on each gallery block, 1 to 6, and `span` on each item, 1 to 6, being how many of those columns that image occupies. A span is clamped to the block's column count at render time, so an editor cannot produce a broken grid by lowering `columns` after setting a wide span. (2) `featured` ("en avant") on each article: a single toggle that both puts the work in the homepage slideshow and gives it a double-width card in the works list. There is no separately curated slideshow list and no per-card size field; one toggle drives both so they cannot drift apart.
+- **Image sizing is exactly one setting.** The gallery grid: `columns` on each gallery block, 1 to 6, and `span` on each item, 1 to 6, being how many of those columns that image occupies. A span is clamped to the block's column count at render time, so an editor cannot produce a broken grid by lowering `columns` after setting a wide span.
+- **There is no curation flag.** Each work has exactly one image, its `cover`, and that same image serves both the archive grid and the homepage slideshow. The slideshow is simply the most recent published works; nothing is curated twice and nothing is toggled. An earlier draft had a `featured` ("en avant") boolean driving slideshow membership and a double-width card; it was removed as unnecessary.
 - Regexes must never contain literal combining or invisible Unicode characters. Write them as ASCII escape sequences so the source stays reviewable and diff-safe.
 
 ---
@@ -925,12 +926,12 @@ git commit -m "feat(api): add sharp image pipeline with content-addressed varian
 
 ---
 
-### Task 5A: Image sizing fields
+### Task 5A: Gallery sizing fields
 
-Two settings, added to the schemas Task 3 created. Everything downstream reads
-them; nothing else stores sizing. Task 3 shipped `columns` as an enum of 2, 3 or
-4; this task widens it to a 1-to-6 range so the editor controls the gallery's
-column count directly.
+One setting, added to the schema Task 3 created. Everything downstream reads it;
+nothing else stores sizing. Task 3 shipped `columns` as an enum of 2, 3 or 4;
+this task widens it to a 1-to-6 range so the editor controls the gallery's
+column count directly, and adds `span` per item.
 
 **Files:**
 - Modify: `api/src/models/Article.js`
@@ -938,8 +939,8 @@ column count directly.
 
 **Interfaces:**
 - Consumes: `Article`, `blockSchema` (Task 3).
-- Produces: `featured` on Article, `span` on gallery items. Task 7 filters the
-  slideshow on `featured`; Tasks 16, 17 and 18 render both; Task 21 edits both.
+- Produces: `span` on gallery items and a widened `columns` range on gallery
+  blocks. Task 17 renders both; Task 21 edits both.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -952,19 +953,6 @@ import { Article } from '../../src/models/Article.js'
 const db = withDb()
 beforeAll(db.start)
 afterAll(db.stop)
-
-describe('featured', () => {
-  it('defaults to false', async () => {
-    const a = await Article.create({ category: 'works', slug: { fr: 'f1' }, title: { fr: 'A' } })
-    expect(a.featured).toBe(false)
-  })
-
-  it('is settable and queryable', async () => {
-    await Article.create({ category: 'works', slug: { fr: 'f2' }, title: { fr: 'B' }, featured: true })
-    const found = await Article.find({ featured: true })
-    expect(found.map((a) => a.slug.fr)).toEqual(['f2'])
-  })
-})
 
 describe('gallery columns', () => {
   it('defaults to three', async () => {
@@ -1024,7 +1012,7 @@ describe('gallery item span', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cd api && npm test -- sizing`
-Expected: FAIL, `featured` is undefined and `span` is not a schema path.
+Expected: FAIL, `span` is not a schema path and `columns` still rejects 1, 5 and 6.
 
 - [ ] **Step 3: Write the minimal implementation**
 
@@ -1041,18 +1029,11 @@ range, so the editor picks the gallery's column count:
     columns: { type: Number, min: 1, max: 6, default: 3 },
 ```
 
-and add `featured` to the article schema, next to `position`:
+and an index supporting the slideshow query, which selects recent published
+works that have a cover:
 
 ```js
-    // "en avant": one toggle, two effects. The work joins the homepage
-    // slideshow and takes a double-width card in the works list.
-    featured: { type: Boolean, default: false },
-```
-
-and an index supporting the slideshow query:
-
-```js
-articleSchema.index({ featured: 1, status: 1, position: 1 })
+articleSchema.index({ category: 1, status: 1, yearStart: -1 })
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -1064,7 +1045,7 @@ Expected: PASS, 8 tests.
 
 ```bash
 git add api/src/models/Article.js api/test/models/sizing.test.js
-git commit -m "feat(api): add featured flag and gallery column/span sizing"
+git commit -m "feat(api): add gallery column and span sizing"
 ```
 
 ---
@@ -1474,8 +1455,7 @@ describe('GET /api/pages/:key', () => {
 })
 
 describe('GET /api/home', () => {
-  it('builds the slideshow from featured articles', async () => {
-    await Article.updateOne({ 'slug.fr': 'porte' }, { featured: true })
+  it('builds the slideshow from the most recent works', async () => {
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
     expect(res.body.slides.map((s) => s.article.slug)).toEqual(['porte'])
@@ -1503,13 +1483,13 @@ describe('GET /api/home', () => {
     expect(res.body.items.map((a) => a.title)).toEqual(['Porte', 'Châssis-Presse'])
   })
 
-  it('omits a featured work that has no cover, since a slide needs an image', async () => {
-    await Article.create({ category: 'works', status: 'published', slug: { fr: 'sans-image' }, title: { fr: 'Sans image' }, featured: true })
+  it('omits a work that has no cover, since a slide needs an image', async () => {
+    await Article.create({ category: 'works', status: 'published', slug: { fr: 'sans-image' }, title: { fr: 'Sans image' } })
     const res = await request(createApp()).get('/api/home')
     expect(res.body.slides.map((s) => s.article.slug)).not.toContain('sans-image')
   })
 
-  it('returns an empty slideshow rather than failing when nothing is featured', async () => {
+  it('returns an empty slideshow rather than failing when no work has a cover', async () => {
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
     expect(res.body.slides).toEqual([])
@@ -1539,7 +1519,7 @@ import { CATEGORIES, PAGE_KEYS } from '../lib/constants.js'
 export const publicRouter = Router()
 
 const langOf = (req) => (req.query.lang === 'en' ? 'en' : 'fr')
-const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position featured'
+const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position'
 
 publicRouter.get('/articles', async (req, res) => {
   const lang = langOf(req)
@@ -1594,22 +1574,22 @@ publicRouter.get('/pages/:key', async (req, res) => {
 publicRouter.get('/home', async (req, res) => {
   const lang = langOf(req)
 
-  // The slideshow IS the featured works. `featured` ("en avant") is the single
-  // toggle the editor sets on an article; nothing is curated twice, and there is
-  // deliberately no stored slide list to drift out of sync or leak drafts.
+  // The slideshow is simply the most recent works. There is no curation flag:
+  // each work has one image, its cover, and that same image serves both the
+  // archive grid and the slideshow, so nothing is chosen twice.
   //
   // `cover: { $ne: null }` also excludes documents missing the field entirely
   // (verified against MongoDB). That is deliberate: a slide with no image cannot
-  // render, so an imageless featured work is omitted here rather than emitted as
-  // a broken slide. Task 21's editor warns when "en avant" is ticked on a work
-  // with no cover, which is where that should surface.
-  const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
+  // render, so a work without a cover is omitted rather than emitted as a broken
+  // slide.
+  const recent = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
     .select(LIST_FIELDS)
-    .sort({ position: 1, yearStart: -1, createdAt: -1 })
+    .sort({ yearStart: -1, createdAt: -1 })
+    .limit(8)
     .populate('cover')
     .lean()
 
-  const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
+  const slides = recent.map((a) => ({ image: a.cover, article: a, caption: a.title }))
   res.json(resolveDoc({ slides }, lang))
 })
 ```
@@ -2704,8 +2684,8 @@ const clean = (html) => (html ? sanitizeHtml(html, OPTIONS) : '')
 //                         site regenerates that grid from the database (Task 16)
 //                         and the page's intro text is preserved as page blocks.
 //   the7_content_carousel dynamic carousel sourced from posts, no static content.
-//                         The new home page covers this with the featured
-//                         slideshow plus a selection grid.
+//                         The new home page covers this with its slideshow of
+//                         recent works plus a selection grid.
 //   slider_revolution     Revolution Slider. The approved spec explicitly does
 //                         not migrate it: the homepage slideshow is rebuilt from
 //                         works flagged "en avant".
@@ -3066,24 +3046,6 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
     pageCount += 1
   }
 
-  // The slideshow is defined purely as the featured set, and WordPress had no
-  // equivalent field, so a fresh migration would leave the homepage with no
-  // slides at all. Seed the most recent works ONLY when nothing is featured:
-  // that makes this idempotent and means it can never override the artist's
-  // own curation once they have touched a single checkbox.
-  let featuredSeeded = 0
-  if ((await Article.countDocuments({ featured: true })) === 0) {
-    const recent = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
-      .sort({ yearStart: -1, createdAt: -1 })
-      .limit(8)
-      .select('_id')
-      .lean()
-    if (recent.length) {
-      await Article.updateMany({ _id: { $in: recent.map((a) => a._id) } }, { featured: true })
-      featuredSeeded = recent.length
-    }
-  }
-
   if (unresolved.size) {
     console.warn(`UNRESOLVED image references (${unresolved.size}): ${[...unresolved].join(', ')}`)
   }
@@ -3095,7 +3057,6 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
     pages: pageCount,
     unmappedPageSlugs,
     unresolvedRefs: [...unresolved],
-    featuredSeeded,
   }
 }
 
@@ -3692,15 +3653,15 @@ import { LangProvider } from '../../../lib/lang.jsx'
 import * as api from '../../../lib/api.js'
 import { Works } from '../Works.jsx'
 
-const article = (slug, category, yearStart, featured = false) => ({
-  _id: slug, slug, category, yearStart, featured, title: slug, yearLabel: String(yearStart || ''),
+const article = (slug, category, yearStart) => ({
+  _id: slug, slug, category, yearStart, title: slug, yearLabel: String(yearStart || ''),
   cover: { variants: { thumb: { path: 't.webp', width: 600, height: 400 }, medium: { path: 'm.webp', width: 1400, height: 933 } } },
 })
 
 beforeEach(() => {
   vi.spyOn(api, 'apiGet').mockImplementation(async (path, params) => {
     const byCategory = {
-      works: [article('porte', 'works', 2023, true), article('chassis', 'works', 2018)],
+      works: [article('porte', 'works', 2023), article('chassis', 'works', 2018)],
       editions: [article('de', 'editions', 2009)],
       'public-orders': [article('tribunal', 'public-orders', 1984)],
     }
@@ -3720,13 +3681,6 @@ describe('Works page', () => {
     render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Éditions' })).toBeInTheDocument())
     expect(screen.getByRole('heading', { name: 'Commandes publiques' })).toBeInTheDocument()
-  })
-
-  it('gives a featured work a double-width cell', async () => {
-    render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
-    await waitFor(() => expect(screen.getByRole('link', { name: /porte/i })).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: /porte/i }).closest('li')).toHaveClass('is-featured')
-    expect(screen.getByRole('link', { name: /chassis/i }).closest('li')).not.toHaveClass('is-featured')
   })
 
   it('links each card to its article', async () => {
@@ -3811,9 +3765,7 @@ export function ArticleGrid({ items, routeKey }) {
   return (
     <ul className="grid">
       {items.map((article) => (
-        // "en avant" works take a double-width cell. The card itself is
-        // unchanged; only the cell it sits in grows, so the grid stays aligned.
-        <li key={article._id || article.slug} className={article.featured ? 'is-featured' : undefined}>
+        <li key={article._id || article.slug}>
           <ArticleCard article={article} routeKey={routeKey} />
         </li>
       ))}
@@ -4881,37 +4833,9 @@ export function BlockEditor({ blocks = [], lang, onChange }) {
 
 `RichText.jsx` wraps TipTap with `StarterKit` configured to allow only bold, italic, bullet and ordered lists, blockquote and link, and calls `onChange(editor.getHTML())`. `ImagePicker.jsx` lists `/admin/images`, uploads through `apiUpload('/admin/images', file)`, and returns the chosen image objects. `ArticleEditor.jsx` composes `LocalizedInput` for title, yearLabel and slug, a category select, an `ImagePicker` for the cover, `BlockEditor` for the body, an FR/EN toggle driving the `lang` prop, and a save button calling `apiSend('POST'|'PATCH', ...)`. `PageEditor.jsx` reuses the same pieces.
 
-`ArticleEditor.jsx` also carries the "en avant" toggle, the second of the two
-sizing settings:
-
-```jsx
-<label htmlFor="featured">
-  <input
-    id="featured"
-    type="checkbox"
-    checked={Boolean(article.featured)}
-    onChange={(e) => setArticle({ ...article, featured: e.target.checked })}
-  />
-  En avant (diaporama d'accueil et grande vignette)
-</label>
-```
-
-The label names both effects, because one toggle doing two things is only
-confusing if the interface hides the second. There is no separate slideshow
-screen: the slideshow is exactly the set of works with this box ticked.
-
-When "en avant" is ticked on a work that has no cover image, the editor shows an
-inline warning next to the checkbox: the slideshow needs an image, so such a work
-is skipped. Without this the omission is silent and the editor is left wondering
-why their choice had no effect.
-
-```jsx
-{article.featured && !article.cover && (
-  <p role="alert" className="field-warning">
-    Cette œuvre n'a pas d'image principale : elle n'apparaîtra pas dans le diaporama.
-  </p>
-)}
-```
+There is no slideshow curation control in the editor. The homepage slideshow is
+the most recent works, drawn from the same cover image the archive grid uses, so
+there is nothing extra to choose.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 

@@ -170,7 +170,6 @@ absent or empty `en` is the fallback signal.
 | `blocks` | [Block] | Ordered body |
 | `status` | enum | `draft`, `published` |
 | `position` | Number | Manual override within a category; defaults to year descending |
-| `featured` | Boolean | "En avant". One toggle, two effects: the work joins the homepage slideshow and takes a double-width card in the works list |
 | `seoDescription` | localized | |
 | `legacyWpId` | Number | Migration idempotency key, indexed |
 
@@ -244,9 +243,10 @@ otherwise report a swapped aspect ratio and render the wrong placeholder shape.
 
 ### Home
 
-There is no `Home` document. The slideshow is exactly the set of published
-articles flagged `featured` that have a cover image, so the artist curates it
-from the article editor rather than from a second screen. An earlier draft kept a
+There is no `Home` document and no curation flag. The slideshow is simply the
+most recent published works that have a cover image. Each work has exactly one
+image, its `cover`, and that same image serves both the archive grid and the
+slideshow, so nothing is chosen twice. An earlier draft kept a
 stored slide list as an override; it was removed because nothing wrote it, it
 published draft articles, and it returned a different response shape than the
 derived path.
@@ -378,8 +378,8 @@ Structural decisions, in order of impact:
    follow as labelled sections at the foot.
 2. Cards use a uniform aspect ratio with images letterboxed on a neutral
    ground, so the grid reads as a grid. Title and year sit on single lines
-   beneath. A `featured` work takes a double-width cell, giving the archive
-   hierarchy without breaking alignment.
+   beneath. Every cell is the same size, which is what makes the archive read
+   as a grid rather than as the ragged masonry it replaces.
 3. One type family in two weights on a four-step scale, one container width,
    consistent gutters.
 4. A slim sticky header: wordmark, four nav items, FR/EN toggle. On mobile the
@@ -392,8 +392,8 @@ Structural decisions, in order of impact:
    lightbox. Each gallery block has an editor-chosen column count from 1 to 6,
    and each image within it spans 1 to 6 of those columns.
 
-Image sizing is deliberately two settings and no more: `span` per gallery image,
-and `featured` per article. Both draw from a fixed vocabulary rather than free
+Image sizing is deliberately one setting: the gallery grid's `columns` and each
+image's `span` within it. Both draw from a fixed vocabulary rather than free
 pixel values, so the editor gets real control without reintroducing the ragged
 layout the restructure exists to remove.
 
