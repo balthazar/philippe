@@ -189,7 +189,7 @@ This is the single most reused piece of the system. Every model embeds it and ev
 **Interfaces:**
 - Consumes: nothing.
 - Produces:
-  - `localizedField(opts?)` returning a Mongoose schema fragment `{ fr: String, en: String }`.
+  - `localizedField()` returning a Mongoose schema fragment `{ fr: String, en: String }`.
   - `localize(field, lang)` returning a string.
   - `resolveDoc(value, lang)` deep-resolving every localized object inside a plain object or array.
   - `isLocalized(value)` predicate.
@@ -199,6 +199,7 @@ This is the single most reused piece of the system. Every model embeds it and ev
 ```js
 // api/test/lib/localize.test.js
 import { describe, it, expect } from 'vitest'
+import mongoose from 'mongoose'
 import { localize, resolveDoc } from '../../src/lib/localize.js'
 
 describe('localize', () => {
@@ -233,6 +234,30 @@ describe('resolveDoc', () => {
   it('leaves non-localized objects alone', () => {
     expect(resolveDoc({ size: { w: 10, h: 20 } }, 'fr')).toEqual({ size: { w: 10, h: 20 } })
   })
+
+  // Tasks 7 and 8 pass .lean() documents through this on every read path.
+  it('passes ObjectId, Date and null through untouched', () => {
+    const id = new mongoose.Types.ObjectId()
+    const when = new Date('2021-03-04T00:00:00Z')
+    const out = resolveDoc({ _id: id, createdAt: when, cover: null }, 'en')
+    expect(out._id).toBeInstanceOf(mongoose.Types.ObjectId)
+    expect(String(out._id)).toBe(String(id))
+    expect(out.createdAt).toBeInstanceOf(Date)
+    expect(out.cover).toBeNull()
+  })
+
+  it('resolves a realistic document without damaging its references', () => {
+    const id = new mongoose.Types.ObjectId()
+    const cover = new mongoose.Types.ObjectId()
+    const out = resolveDoc(
+      { _id: id, title: { fr: 'Porte', en: '' }, cover, createdAt: new Date() },
+      'en'
+    )
+    expect(out.title).toBe('Porte')
+    expect(String(out._id)).toBe(String(id))
+    expect(String(out.cover)).toBe(String(cover))
+    expect(out.createdAt).toBeInstanceOf(Date)
+  })
 })
 ```
 
@@ -262,10 +287,23 @@ export function localize(field, lang) {
   return field[lang] || field.fr || ''
 }
 
+/**
+ * Only PLAIN objects are recursed into. Blacklisting Date is not enough: a
+ * Mongoose ObjectId is also an object, and recursing into one turns every _id
+ * in every API response into a meaningless buffer object. One prototype check
+ * excludes ObjectId, Date, Buffer and every other class instance at once, and
+ * keeps this module free of a mongoose import.
+ */
+function isPlainObject(value) {
+  if (!value || typeof value !== 'object') return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
 export function resolveDoc(value, lang) {
   if (Array.isArray(value)) return value.map((v) => resolveDoc(v, lang))
   if (isLocalized(value)) return localize(value, lang)
-  if (value && typeof value === 'object' && !(value instanceof Date)) {
+  if (isPlainObject(value)) {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveDoc(v, lang)]))
   }
   return value
@@ -404,11 +442,17 @@ const articleSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-articleSchema.index({ 'slug.fr': 1 }, { unique: true, sparse: true })
-articleSchema.index({ 'slug.en': 1 }, { unique: true, sparse: true })
+// A sparse index skips only missing/null values, but localizedField() defaults
+// both languages to '', so every article without an English slug would collide
+// with every other one. Partial indexes on non-empty strings are what we want.
+articleSchema.index({ 'slug.fr': 1 }, { unique: true, partialFilterExpression: { 'slug.fr': { $gt: '' } } })
+articleSchema.index({ 'slug.en': 1 }, { unique: true, partialFilterExpression: { 'slug.en': { $gt: '' } } })
 articleSchema.index({ category: 1, status: 1, yearStart: -1 })
 articleSchema.index({ legacyWpId: 1 }, { unique: true, sparse: true })
 
+// Exported so Page can reuse the same block shape without reaching into
+// Article's schema internals. Sharing a sub-schema across models is supported.
+export { blockSchema }
 export const Article = mongoose.model('Article', articleSchema)
 ```
 
@@ -453,13 +497,13 @@ export const Image = mongoose.model('Image', imageSchema)
 import mongoose from 'mongoose'
 import { localizedField } from '../lib/localize.js'
 import { PAGE_KEYS } from '../lib/constants.js'
-import { Article } from './Article.js'
+import { blockSchema } from './Article.js'
 
 const pageSchema = new mongoose.Schema(
   {
     key: { type: String, enum: PAGE_KEYS, required: true, unique: true },
     title: localizedField(),
-    blocks: { type: Article.schema.path('blocks').options.type, default: [] },
+    blocks: { type: [blockSchema], default: [] },
     seoDescription: localizedField(),
   },
   { timestamps: true }
