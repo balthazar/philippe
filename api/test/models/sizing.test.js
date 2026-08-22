@@ -6,19 +6,6 @@ const db = withDb()
 beforeAll(db.start)
 afterAll(db.stop)
 
-describe('featured', () => {
-  it('defaults to false', async () => {
-    const a = await Article.create({ category: 'works', slug: { fr: 'f1' }, title: { fr: 'A' } })
-    expect(a.featured).toBe(false)
-  })
-
-  it('is settable and queryable', async () => {
-    await Article.create({ category: 'works', slug: { fr: 'f2' }, title: { fr: 'B' }, featured: true })
-    const found = await Article.find({ featured: true })
-    expect(found.map((a) => a.slug.fr)).toEqual(['f2'])
-  })
-})
-
 describe('gallery columns', () => {
   it('defaults to three', async () => {
     const a = await Article.create({

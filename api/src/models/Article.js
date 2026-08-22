@@ -39,9 +39,6 @@ const articleSchema = new mongoose.Schema(
     blocks: [blockSchema],
     status: { type: String, enum: ['draft', 'published'], default: 'draft' },
     position: { type: Number, default: 0 },
-    // "en avant": one toggle, two effects. The work joins the homepage
-    // slideshow and takes a double-width card in the works list.
-    featured: { type: Boolean, default: false },
     seoDescription: localizedField(),
     legacyWpId: Number,
   },
@@ -55,7 +52,6 @@ articleSchema.index({ 'slug.fr': 1 }, { unique: true, partialFilterExpression: {
 articleSchema.index({ 'slug.en': 1 }, { unique: true, partialFilterExpression: { 'slug.en': { $gt: '' } } })
 articleSchema.index({ category: 1, status: 1, yearStart: -1 })
 articleSchema.index({ legacyWpId: 1 }, { unique: true, sparse: true })
-articleSchema.index({ featured: 1, status: 1, position: 1 })
 
 // Exported so Page can reuse the same block shape without reaching into
 // Article's schema internals. Sharing a sub-schema across models is supported.

@@ -106,23 +106,23 @@ describe('GET /api/pages/:key', () => {
 })
 
 describe('GET /api/home', () => {
-  it('builds the slideshow from featured articles', async () => {
-    await Article.updateOne({ 'slug.fr': 'porte' }, { featured: true })
+  it('builds the slideshow from the most recent works', async () => {
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
-    expect(res.body.slides.map((s) => s.article.slug)).toEqual(['porte'])
+    expect(res.body.slides.map((s) => s.article.slug)).toContain('porte')
     expect(res.body.slides[0].image.variants.medium.path).toBe('ab/testcover-medium.webp')
   })
 
-  it('returns an empty slideshow rather than failing when nothing is featured', async () => {
+  it('omits a work that has no cover, since a slide needs an image', async () => {
+    await Article.create({ category: 'works', status: 'published', slug: { fr: 'sans-image' }, title: { fr: 'Sans image' }, yearStart: 2024 })
+    const res = await request(createApp()).get('/api/home')
+    expect(res.body.slides.map((s) => s.article.slug)).not.toContain('sans-image')
+  })
+
+  it('returns an empty slideshow rather than failing when no work has a cover', async () => {
+    await Article.updateOne({ 'slug.fr': 'porte' }, { $unset: { cover: 1 } })
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
     expect(res.body.slides).toEqual([])
-  })
-
-  it('omits a featured work that has no cover, since a slide needs an image', async () => {
-    await Article.create({ category: 'works', status: 'published', slug: { fr: 'sans-image' }, title: { fr: 'Sans image' }, featured: true })
-    const res = await request(createApp()).get('/api/home')
-    expect(res.body.slides.map((s) => s.article.slug)).not.toContain('sans-image')
   })
 })

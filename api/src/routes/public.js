@@ -13,7 +13,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js'
 export const publicRouter = Router()
 
 const langOf = (req) => (req.query.lang === 'en' ? 'en' : 'fr')
-const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position featured'
+const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position'
 
 publicRouter.get('/articles', asyncHandler(async (req, res) => {
   const lang = langOf(req)
@@ -68,20 +68,21 @@ publicRouter.get('/pages/:key', asyncHandler(async (req, res) => {
 publicRouter.get('/home', asyncHandler(async (req, res) => {
   const lang = langOf(req)
 
-  // The slideshow IS the featured works. `featured` ("en avant") is the single
-  // toggle the editor sets on an article; nothing is curated twice, so there is
-  // no separate override to read here.
+  // The slideshow is simply the most recent works. There is no curation flag:
+  // each work has one image, its cover, and that same image serves both the
+  // archive grid and the slideshow, so nothing is chosen twice.
   //
   // `cover: { $ne: null }` also excludes documents missing the field entirely
-  // (verified against MongoDB). That is deliberate: a slide with no image
-  // cannot render, so an imageless featured work is omitted here rather than
-  // emitted as a broken slide. Task 21's editor warns when "en avant" is
-  // ticked on a work with no cover, which is where that should surface.
-  const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
+  // (verified against MongoDB). That is deliberate: a slide with no image cannot
+  // render, so a work without a cover is omitted rather than emitted as a broken
+  // slide.
+  const recent = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
     .select(LIST_FIELDS)
-    .sort({ position: 1, yearStart: -1, createdAt: -1 })
+    .sort({ yearStart: -1, createdAt: -1 })
+    .limit(8)
     .populate('cover')
     .lean()
-  const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
+
+  const slides = recent.map((a) => ({ image: a.cover, article: a, caption: a.title }))
   res.json(resolveDoc({ slides }, lang))
 }))
