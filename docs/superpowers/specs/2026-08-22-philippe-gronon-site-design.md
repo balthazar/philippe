@@ -184,7 +184,10 @@ A discriminated union stored in order:
 - `text`: `{ value: localized }`, sanitized HTML.
 - `heading`: `{ value: localized, level: 2 | 3 }`.
 - `image`: `{ image: ref, caption: localized, size: 'full' | 'wide' | 'inset' }`.
-- `gallery`: `{ items: [{ image: ref, caption: localized, span: 1 | 2 }], columns: 2 | 3 | 4 }`.
+- `gallery`: `{ items: [{ image: ref, caption: localized, span: 1..6 }], columns: 1..6 }`.
+  `columns` is the gallery's grid width and `span` is how many of those columns
+  one image occupies. A span is clamped to the block's column count at render,
+  so reducing `columns` after the fact can never produce a broken grid.
 - `specs`: `{ items: [{ term: localized, value: localized }] }`, rendered as a
   definition list.
 
@@ -358,7 +361,8 @@ Structural decisions, in order of impact:
    autoplay disabled under `prefers-reduced-motion`.
 6. Article pages are image-led, captions in a consistent column, `specs` as a
    definition list, prev/next at the foot. Galleries open a keyboard-navigable
-   lightbox, and each gallery image carries a `span` of one or two columns.
+   lightbox. Each gallery block has an editor-chosen column count from 1 to 6,
+   and each image within it spans 1 to 6 of those columns.
 
 Image sizing is deliberately two settings and no more: `span` per gallery image,
 and `featured` per article. Both draw from a fixed vocabulary rather than free
