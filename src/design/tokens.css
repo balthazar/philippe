@@ -1,0 +1,25 @@
+:root {
+  --ink: #14110f;
+  --ink-soft: #5d5751;
+  --paper: #fbfaf8;
+  --ground: #eeebe6;     /* letterbox ground behind images */
+  --rule: #d9d4cc;
+
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* Four steps, nothing between. */
+  --text-s: 0.8125rem;
+  --text-m: 1rem;
+  --text-l: 1.375rem;
+  --text-xl: 2.25rem;
+
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 2rem;
+  --space-4: 4rem;
+  --space-5: 8rem;
+
+  --container: 1440px;
+  --gutter: clamp(1rem, 4vw, 3rem);
+  --card-ratio: 4 / 3;
+}
