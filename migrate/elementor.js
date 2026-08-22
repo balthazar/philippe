@@ -14,7 +14,21 @@ const clean = (html) => (html ? sanitizeHtml(html, OPTIONS) : '')
 // settings inline. This archive has exactly one, in a PUBLISHED article, and it
 // carries a photo credit line. Dropping it would lose that silently, which is
 // precisely the failure mode this phase exists to prevent.
-const DROP = new Set(['spacer', 'the7_nav-menu', 'post-navigation'])
+//
+// The three below ARE safe to drop, each for a documented reason inspected
+// against the real data, not by default:
+//   - the7-post-loop: the theme's dynamic archive query (the works grid on
+//     oeuvres/works). Its settings are filter/pagination config, no static
+//     content. The new site regenerates this grid natively (Task 16) by
+//     querying /api/articles?category=works; the page's own intro text is
+//     preserved separately as page blocks.
+//   - the7_content_carousel: dynamic carousel sourced from posts (`source`,
+//     `autoplay`, `arrows`), no static content. The new home page's featured
+//     slideshow plus selection grid covers the same ground.
+//   - slider_revolution: per the approved spec, Revolution Slider content is
+//     explicitly out of migration scope; the homepage slideshow is rebuilt
+//     from works flagged "en avant". This is agreed scope, not an oversight.
+const DROP = new Set(['spacer', 'the7_nav-menu', 'post-navigation', 'the7-post-loop', 'the7_content_carousel', 'slider_revolution'])
 
 export function* walkWidgets(nodes = []) {
   for (const node of nodes || []) {
@@ -47,7 +61,12 @@ export function liftSpecs(html) {
 const stripTags = (s) => sanitizeHtml(s, { allowedTags: [], allowedAttributes: {} }).trim()
 
 function galleryIds(settings) {
-  const list = settings?.wp_gallery || settings?.images || settings?.gallery || []
+  // `query_manual_attachment` is how every real wpr-media-grid widget in the
+  // archive actually stores its images (query_selection: 'manual'), confirmed
+  // against all 78 instances in the live data. `images`/`gallery` are kept as
+  // defensive fallbacks for shapes not seen in this archive but plausible for
+  // the widget in general; wp_gallery is what image-gallery uses.
+  const list = settings?.wp_gallery || settings?.query_manual_attachment || settings?.images || settings?.gallery || []
   return list.map((i) => Number(i.id)).filter(Boolean)
 }
 
@@ -72,6 +91,37 @@ function widgetToBlocks(widget, ctx) {
       return ids.length
         ? [{ type: 'gallery', columns: 3, items: ids.map((id) => ({ image: { legacyWpId: id }, caption: { fr: '', en: '' } })) }]
         : []
+    }
+    case 'toggle': {
+      // The biography page's toggle holds real content (collection listings),
+      // not chrome. Each tab becomes a heading plus its body text. Find the
+      // repeater array by shape rather than a fixed key name: tab_title/
+      // tab_content are present but the containing array isn't called `tabs`
+      // in this theme's payload, so hardcoding a key would break.
+      const items = Object.values(s).find(
+        (v) => Array.isArray(v) && v.some((it) => it && (it.tab_title || it.tab_content))
+      )
+      if (!items) {
+        throw new Error(`toggle widget in post ${ctx.postId} has no tab items; inspect it rather than dropping it`)
+      }
+      return items.flatMap((it) => [
+        ...(it.tab_title ? [{ type: 'heading', value: { fr: stripTags(it.tab_title), en: '' }, level: 3 }] : []),
+        ...(it.tab_content ? liftSpecs(clean(it.tab_content)).map((part) =>
+          part.type === 'specs'
+            ? { type: 'specs', items: part.items.map((i) => ({ term: { fr: i.term, en: '' }, value: { fr: i.value, en: '' } })) }
+            : { type: 'text', value: { fr: part.html, en: '' } }
+        ) : []),
+      ])
+    }
+    case 'button': {
+      // Settings carry `text` and `link.url`, on the bibliography page: almost
+      // certainly document links. The sanitize whitelist already allows
+      // a[href], so a text block holding an anchor round-trips safely.
+      const label = stripTags(s.text || '')
+      const href = s.link?.url || ''
+      if (!label && !href) return []
+      const html = href ? `<p><a href="${href}">${label || href}</a></p>` : `<p>${label}</p>`
+      return [{ type: 'text', value: { fr: clean(html), en: '' } }]
     }
     case 'global': {
       // Infer the underlying widget from the cached inline settings rather than

@@ -45,9 +45,65 @@ describe('mapElementorToBlocks', () => {
     expect(blocks[0].items[0].image.legacyWpId).toBe(7)
   })
 
+  it('reads wpr-media-grid images from query_manual_attachment, the shape every real instance in the archive uses', () => {
+    const blocks = mapElementorToBlocks(
+      [widget('wpr-media-grid', { query_selection: 'manual', query_manual_attachment: [{ id: 16098 }, { id: 16099 }] })],
+      null,
+      {}
+    )
+    expect(blocks[0].type).toBe('gallery')
+    expect(blocks[0].items.map((i) => i.image.legacyWpId)).toEqual([16098, 16099])
+  })
+
   it('drops chrome widgets', () => {
     const chrome = [widget('spacer', {}), widget('the7_nav-menu', {}), widget('post-navigation', {})]
     expect(mapElementorToBlocks(chrome, null, {})).toEqual([])
+  })
+
+  it('drops the three dynamic widgets with no static content', () => {
+    const dynamic = [
+      widget('the7-post-loop', { template_id: '9780' }),
+      widget('the7_content_carousel', { source: 'posts', autoplay: 'yes' }),
+      widget('slider_revolution', { alias: 'home-slider' }),
+    ]
+    expect(mapElementorToBlocks(dynamic, null, {})).toEqual([])
+  })
+
+  it('maps a toggle widget to heading+text pairs in document order', () => {
+    const g = widget('toggle', {
+      tabs: [
+        { tab_title: 'Musée A', tab_content: '<p>Collection A</p>' },
+        { tab_title: 'Musée B', tab_content: '<p>Collection B</p>' },
+      ],
+    })
+    expect(mapElementorToBlocks([g], null, {})).toEqual([
+      { type: 'heading', value: { fr: 'Musée A', en: '' }, level: 3 },
+      { type: 'text', value: { fr: '<p>Collection A</p>', en: '' } },
+      { type: 'heading', value: { fr: 'Musée B', en: '' }, level: 3 },
+      { type: 'text', value: { fr: '<p>Collection B</p>', en: '' } },
+    ])
+  })
+
+  it('finds the toggle repeater array by shape, not by a fixed key name', () => {
+    const g = widget('toggle', {
+      toggle_items: [{ tab_title: 'Musée C', tab_content: '<p>Collection C</p>' }],
+    })
+    expect(mapElementorToBlocks([g], null, {})).toEqual([
+      { type: 'heading', value: { fr: 'Musée C', en: '' }, level: 3 },
+      { type: 'text', value: { fr: '<p>Collection C</p>', en: '' } },
+    ])
+  })
+
+  it('throws on a toggle widget with no tab items', () => {
+    const g = widget('toggle', { some_other_setting: 'x' })
+    expect(() => mapElementorToBlocks([g], null, { postId: 99 })).toThrow(/no tab items/)
+  })
+
+  it('maps a button widget to a text block holding an anchor', () => {
+    const g = widget('button', { text: 'Catalogue', link: { url: 'https://example.com/catalogue.pdf' } })
+    expect(mapElementorToBlocks([g], null, {})).toEqual([
+      { type: 'text', value: { fr: '<p><a href="https://example.com/catalogue.pdf">Catalogue</a></p>', en: '' } },
+    ])
   })
 
   it('keeps a global widget by mapping its cached settings, rather than dropping it', () => {
