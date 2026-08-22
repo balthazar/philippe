@@ -1,10 +1,13 @@
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import { useLang } from './lib/lang.jsx'
 import { SEGMENTS } from './lib/routes.js'
+import { Header } from './public-site/components/Header.jsx'
+import { Footer } from './public-site/components/Footer.jsx'
 
-// Scaffold only (Task 14). Task 15 adds Header/Footer, Tasks 16-19 add the
-// real pages and replace this route table wholesale. Kept intentionally
-// minimal so it never imports a component that doesn't exist yet.
+// Scaffold only (Task 14/15). Task 15 adds the chrome (Header/Footer) around
+// this route table so it can be verified in the browser; Tasks 16-19 add the
+// real pages and replace the route table wholesale. Kept intentionally
+// minimal so it never imports a page component that doesn't exist yet.
 
 function ScaffoldPage({ label }) {
   const { lang } = useLang()
@@ -32,19 +35,15 @@ function localizedRoutes(lang) {
 }
 
 export default function App() {
-  const { lang, otherLang, href } = useLang()
   return (
-    <div>
-      <nav>
-        <Link to={href('home')}>{lang === 'fr' ? 'Accueil' : 'Home'}</Link>
-        {' | '}
-        <Link to={otherLang === 'en' ? '/en' : '/'}>{otherLang === 'en' ? 'English' : 'Français'}</Link>
-      </nav>
+    <>
+      <Header />
       <Routes>
         <Route path="/">{localizedRoutes('fr')}</Route>
         <Route path="/en">{localizedRoutes('en')}</Route>
         <Route path="*" element={<p>404</p>} />
       </Routes>
-    </div>
+      <Footer />
+    </>
   )
 }
