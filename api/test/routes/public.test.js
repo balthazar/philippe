@@ -54,6 +54,12 @@ describe('GET /api/articles', () => {
     const res = await request(createApp()).get('/api/articles?category=sculpture')
     expect(res.status).toBe(400)
   })
+
+  it('degrades an unrecognised language to French', async () => {
+    const res = await request(createApp()).get('/api/articles?lang=de')
+    expect(res.status).toBe(200)
+    expect(res.body.items[0].title).toBe('Porte')
+  })
 })
 
 describe('GET /api/articles/:slug', () => {
@@ -70,6 +76,20 @@ describe('GET /api/articles/:slug', () => {
     const res = await request(createApp()).get('/api/articles/porte')
     expect(res.body.next.slug).toBe('chassis')
     expect(res.body.prev).toBeNull()
+  })
+
+  it('resolves localized values nested inside blocks', async () => {
+    await Article.create({
+      category: 'works', status: 'published', slug: { fr: 'avec-blocs' }, title: { fr: 'Avec blocs' },
+      blocks: [
+        { type: 'text', value: { fr: '<p>Texte</p>', en: '' } },
+        { type: 'specs', items: [{ term: { fr: 'Tirage', en: 'Edition' }, value: { fr: '3', en: '' } }] },
+      ],
+    })
+    const res = await request(createApp()).get('/api/articles/avec-blocs?lang=en')
+    expect(res.body.blocks[0].value).toBe('<p>Texte</p>')      // falls back to French
+    expect(res.body.blocks[1].items[0].term).toBe('Edition')   // English override wins
+    expect(res.body.blocks[1].items[0].value).toBe('3')
   })
 })
 

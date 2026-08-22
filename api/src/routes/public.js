@@ -1,10 +1,9 @@
 import { Router } from 'express'
 import { Article } from '../models/Article.js'
 import { Page } from '../models/Page.js'
-import { Home } from '../models/Home.js'
-// Registered for its side effect only: `cover`, `blocks.image`, and `slides.image`
-// populate paths on Article/Page/Home all ref 'Image', and nothing else in the
-// process loads this model, so without this import mongoose.populate() throws
+// Registered for its side effect only: `cover` and `blocks.image` populate
+// paths on Article/Page both ref 'Image', and nothing else in the process
+// loads this model, so without this import mongoose.populate() throws
 // MissingSchemaError (an unhandled rejection that hangs the request).
 import '../models/Image.js'
 import { resolveDoc } from '../lib/localize.js'
@@ -67,23 +66,21 @@ publicRouter.get('/pages/:key', async (req, res) => {
 
 publicRouter.get('/home', async (req, res) => {
   const lang = langOf(req)
-  const home = await Home.findOne({ singleton: 'home' }).populate('slides.image').populate('slides.article').lean()
 
   // The slideshow IS the featured works. `featured` ("en avant") is the single
-  // toggle the editor sets on an article; nothing is curated twice.
-  if (!home?.slides?.length) {
-    // `cover: { $ne: null }` also excludes documents missing the field entirely
-    // (verified against MongoDB). That is deliberate: a slide with no image
-    // cannot render, so an imageless featured work is omitted here rather than
-    // emitted as a broken slide. Task 21's editor warns when "en avant" is
-    // ticked on a work with no cover, which is where that should surface.
-    const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
-      .select(LIST_FIELDS)
-      .sort({ position: 1, yearStart: -1 })
-      .populate('cover')
-      .lean()
-    const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
-    return res.json(resolveDoc({ slides }, lang))
-  }
-  res.json(resolveDoc(home, lang))
+  // toggle the editor sets on an article; nothing is curated twice, so there is
+  // no separate override to read here.
+  //
+  // `cover: { $ne: null }` also excludes documents missing the field entirely
+  // (verified against MongoDB). That is deliberate: a slide with no image
+  // cannot render, so an imageless featured work is omitted here rather than
+  // emitted as a broken slide. Task 21's editor warns when "en avant" is
+  // ticked on a work with no cover, which is where that should surface.
+  const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
+    .select(LIST_FIELDS)
+    .sort({ position: 1, yearStart: -1, createdAt: -1 })
+    .populate('cover')
+    .lean()
+  const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
+  res.json(resolveDoc({ slides }, lang))
 })
