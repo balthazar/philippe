@@ -50,10 +50,18 @@ describe('POST /api/auth/login', () => {
     expect(bad.body).toEqual(unknown.body)
   })
 
-  it('succeeds behind a proxy that sets X-Forwarded-For', async () => {
+  it('trusts exactly one proxy hop, so the rate limiter sees real client IPs', () => {
+    // Asserting the status code here would prove nothing: express-rate-limit
+    // swallows its own validation error and serves the request either way. What
+    // actually differs is IP attribution, and with no trust proxy every client
+    // shares one bucket, letting anyone lock the only admin out of login.
+    expect(createApp().get('trust proxy')).toBe(1)
+  })
+
+  it('logs in normally when Traefik has added X-Forwarded-For', async () => {
     const res = await request(app())
       .post('/api/auth/login')
-      .set('X-Forwarded-For', '203.0.113.5')
+      .set('X-Forwarded-For', '203.0.113.7')
       .send({ email: 'admin@example.com', password: 'correct horse battery' })
     expect(res.status).toBe(200)
     expect(res.headers['set-cookie'][0]).toMatch(/philippe_token=/)
