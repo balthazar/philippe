@@ -26,6 +26,8 @@ Every task's requirements implicitly include this section. Values are copied ver
 - Deploy target: namespace `apps`, `imagePullSecrets: ghcr-creds`, images `ghcr.io/goobernetics/philippe-api` and `ghcr.io/goobernetics/philippe-web`, host `philippe.natazar.org`, Traefik ingress class, MongoDB at `mongo.infra.svc.cluster.local:27017`, database `philippe`.
 - Migration targets, asserted by `verify.js`: **63 articles** (62 FR/EN pairs plus 1 EN-only), **7 pages**, and every article having a cover and at least one block.
 - Secrets are never committed. `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` come from a k8s Secret created out of band.
+- **Any task that adds a dependency MUST stage `package.json` AND `package-lock.json` in the same commit as the code that imports it.** A commit that imports a package it did not declare does not build from a clean checkout and breaks `npm ci` in CI, even though it passes locally where `node_modules` is already populated.
+- Regexes must never contain literal combining or invisible Unicode characters. Write them as ASCII escape sequences so the source stays reviewable and diff-safe.
 
 ---
 
@@ -695,7 +697,7 @@ export function slugify(text) {
   return String(text || '')
     .normalize('NFD')
     .replace(/Œ/g, 'OE').replace(/œ/g, 'oe')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
@@ -712,7 +714,10 @@ export async function uniqueSlug(base, exists) {
 ```
 
 Note: `Œ` must be replaced before `normalize('NFD')` strips diacritics, because
-NFD does not decompose the ligature.
+NFD does not decompose the ligature. The `\u0300-\u036f` range is the combining
+diacritical marks block, written as escapes rather than as the literal characters:
+literal combining marks are invisible in an editor and are silently mangled by
+copy/paste and reformatting.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -722,7 +727,7 @@ Expected: PASS, 6 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add api/src/lib/sanitize.js api/src/lib/slug.js api/test/lib
+git add api/package.json api/package-lock.json api/src/lib/sanitize.js api/src/lib/slug.js api/test/lib
 git commit -m "feat(api): add HTML sanitizing and slug helpers"
 ```
 
@@ -869,7 +874,7 @@ Expected: PASS, 4 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add api/src/lib/imagePipeline.js api/test/lib/imagePipeline.test.js
+git add api/package.json api/package-lock.json api/src/lib/imagePipeline.js api/test/lib/imagePipeline.test.js
 git commit -m "feat(api): add sharp image pipeline with content-addressed variants"
 ```
 
@@ -1103,7 +1108,7 @@ Expected: PASS, 7 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add api/src/routes/auth.js api/src/middleware/auth.js api/src/lib/seedAdmin.js api/src/app.js api/test/routes/auth.test.js
+git add api/package.json api/package-lock.json api/src/routes/auth.js api/src/middleware/auth.js api/src/lib/seedAdmin.js api/src/app.js api/test/routes/auth.test.js
 git commit -m "feat(api): add cookie auth with rate limiting and CSRF header check"
 ```
 
@@ -1796,7 +1801,7 @@ Expected: PASS, 7 tests.
 
 ```bash
 cd api && npm test
-git add api/src api/test
+git add api/package.json api/package-lock.json api/src api/test
 git commit -m "feat(api): add image upload, deletion guard and media serving"
 ```
 
@@ -4228,7 +4233,7 @@ Expected: PASS, 9 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/admin
+git add package.json package-lock.json src/admin
 git commit -m "feat(admin): add article editor with language override and block editing"
 ```
 
