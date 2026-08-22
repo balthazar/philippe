@@ -27,6 +27,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 - Migration targets, asserted by `verify.js`: **63 articles** (62 FR/EN pairs plus 1 EN-only), **7 pages**, and every article having a cover and at least one block.
 - Secrets are never committed. `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` come from a k8s Secret created out of band.
 - **Any task that adds a dependency MUST stage `package.json` AND `package-lock.json` in the same commit as the code that imports it.** A commit that imports a package it did not declare does not build from a clean checkout and breaks `npm ci` in CI, even though it passes locally where `node_modules` is already populated.
+- **Image sizing is exactly two settings, no more.** (1) `span` on each gallery item: how many columns that image occupies inside a work's gallery grid, `1` or `2`. (2) `featured` ("en avant") on each article: a single toggle that both puts the work in the homepage slideshow and gives it a double-width card in the works list. There is no separately curated slideshow list and no per-card size field; one toggle drives both so they cannot drift apart.
 - Regexes must never contain literal combining or invisible Unicode characters. Write them as ASCII escape sequences so the source stays reviewable and diff-safe.
 
 ---
@@ -880,6 +881,113 @@ git commit -m "feat(api): add sharp image pipeline with content-addressed varian
 
 ---
 
+### Task 5A: Image sizing fields
+
+Two settings, added to the schemas Task 3 created. Everything downstream reads
+them; nothing else stores sizing.
+
+**Files:**
+- Modify: `api/src/models/Article.js`
+- Test: `api/test/models/sizing.test.js`
+
+**Interfaces:**
+- Consumes: `Article`, `blockSchema` (Task 3).
+- Produces: `featured` on Article, `span` on gallery items. Task 7 filters the
+  slideshow on `featured`; Tasks 16, 17 and 18 render both; Task 21 edits both.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+// api/test/models/sizing.test.js
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { withDb } from '../helpers/db.js'
+import { Article } from '../../src/models/Article.js'
+
+const db = withDb()
+beforeAll(db.start)
+afterAll(db.stop)
+
+describe('featured', () => {
+  it('defaults to false', async () => {
+    const a = await Article.create({ category: 'works', slug: { fr: 'f1' }, title: { fr: 'A' } })
+    expect(a.featured).toBe(false)
+  })
+
+  it('is settable and queryable', async () => {
+    await Article.create({ category: 'works', slug: { fr: 'f2' }, title: { fr: 'B' }, featured: true })
+    const found = await Article.find({ featured: true })
+    expect(found.map((a) => a.slug.fr)).toEqual(['f2'])
+  })
+})
+
+describe('gallery item span', () => {
+  it('defaults to one column', async () => {
+    const a = await Article.create({
+      category: 'works', slug: { fr: 's1' }, title: { fr: 'C' },
+      blocks: [{ type: 'gallery', columns: 3, items: [{ caption: { fr: '' } }] }],
+    })
+    expect(a.blocks[0].items[0].span).toBe(1)
+  })
+
+  it('accepts a two-column span', async () => {
+    const a = await Article.create({
+      category: 'works', slug: { fr: 's2' }, title: { fr: 'D' },
+      blocks: [{ type: 'gallery', columns: 3, items: [{ span: 2, caption: { fr: '' } }] }],
+    })
+    expect(a.blocks[0].items[0].span).toBe(2)
+  })
+
+  it('rejects a span outside the allowed set', async () => {
+    const a = new Article({
+      category: 'works', slug: { fr: 's3' }, title: { fr: 'E' },
+      blocks: [{ type: 'gallery', items: [{ span: 5 }] }],
+    })
+    await expect(a.validate()).rejects.toThrow(/span/)
+  })
+})
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `cd api && npm test -- sizing`
+Expected: FAIL, `featured` is undefined and `span` is not a schema path.
+
+- [ ] **Step 3: Write the minimal implementation**
+
+In `api/src/models/Article.js`, add `span` to the block items sub-schema:
+
+```js
+          span: { type: Number, enum: [1, 2], default: 1 },        // gallery
+```
+
+and add `featured` to the article schema, next to `position`:
+
+```js
+    // "en avant": one toggle, two effects. The work joins the homepage
+    // slideshow and takes a double-width card in the works list.
+    featured: { type: Boolean, default: false },
+```
+
+and an index supporting the slideshow query:
+
+```js
+articleSchema.index({ featured: 1, status: 1, position: 1 })
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `cd api && npm test -- sizing`
+Expected: PASS, 5 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add api/src/models/Article.js api/test/models/sizing.test.js
+git commit -m "feat(api): add featured flag and gallery span"
+```
+
+---
+
 ## Phase 2: API
 
 ### Task 6: Authentication
@@ -1205,10 +1313,17 @@ describe('GET /api/pages/:key', () => {
 })
 
 describe('GET /api/home', () => {
-  it('falls back to recent work covers when no slides are configured', async () => {
+  it('builds the slideshow from featured articles', async () => {
+    await Article.updateOne({ 'slug.fr': 'porte' }, { featured: true })
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
-    expect(Array.isArray(res.body.slides)).toBe(true)
+    expect(res.body.slides.map((s) => s.article.slug)).toEqual(['porte'])
+  })
+
+  it('returns an empty slideshow rather than failing when nothing is featured', async () => {
+    const res = await request(createApp()).get('/api/home')
+    expect(res.status).toBe(200)
+    expect(res.body.slides).toEqual([])
   })
 })
 ```
@@ -1232,7 +1347,7 @@ import { CATEGORIES, PAGE_KEYS } from '../lib/constants.js'
 export const publicRouter = Router()
 
 const langOf = (req) => (req.query.lang === 'en' ? 'en' : 'fr')
-const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position'
+const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position featured'
 
 publicRouter.get('/articles', async (req, res) => {
   const lang = langOf(req)
@@ -1288,15 +1403,15 @@ publicRouter.get('/home', async (req, res) => {
   const lang = langOf(req)
   const home = await Home.findOne({ singleton: 'home' }).populate('slides.image').populate('slides.article').lean()
 
-  // Never render an empty homepage: fall back to the newest published works.
+  // The slideshow IS the featured works. `featured` ("en avant") is the single
+  // toggle the editor sets on an article; nothing is curated twice.
   if (!home?.slides?.length) {
-    const recent = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
+    const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
       .select(LIST_FIELDS)
-      .sort({ yearStart: -1 })
-      .limit(8)
+      .sort({ position: 1, yearStart: -1 })
       .populate('cover')
       .lean()
-    const slides = recent.map((a) => ({ image: a.cover, article: a, caption: a.title }))
+    const slides = featured.map((a) => ({ image: a.cover, article: a, caption: a.title }))
     return res.json(resolveDoc({ slides }, lang))
   }
   res.json(resolveDoc(home, lang))
