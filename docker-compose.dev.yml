@@ -1,0 +1,12 @@
+services:
+  mongo:
+    image: mongo:7
+    ports: ['27018:27017']
+    volumes: ['./.dev/mongo:/data/db']
+  mariadb:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: wp
+    ports: ['3399:3306']
+    volumes: ['./.dev/mariadb:/var/lib/mysql']
