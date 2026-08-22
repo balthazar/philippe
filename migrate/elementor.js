@@ -95,9 +95,9 @@ function widgetToBlocks(widget, ctx) {
     case 'toggle': {
       // The biography page's toggle holds real content (collection listings),
       // not chrome. Each tab becomes a heading plus its body text. Find the
-      // repeater array by shape rather than a fixed key name: tab_title/
-      // tab_content are present but the containing array isn't called `tabs`
-      // in this theme's payload, so hardcoding a key would break.
+      // repeater by shape rather than by key name. Both real toggles in this
+      // archive use `tabs`, but the lookup does not depend on that, so a
+      // theme or Elementor version that names it differently still migrates.
       const items = Object.values(s).find(
         (v) => Array.isArray(v) && v.some((it) => it && (it.tab_title || it.tab_content))
       )
@@ -147,8 +147,13 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   if (!enNodes) return fr
   const en = [...walkWidgets(enNodes)].flatMap((w) => widgetToBlocks(w, ctx))
 
-  // Positional merge. Where the trees disagree, the English side stays empty
-  // and the reader falls back to French, which is the correct default.
+  // The merge is positional, so it is only sound when both trees produced the
+  // same block sequence. A count divergence shifts every later index, and if a
+  // shifted pair coincides on type the English text lands on the wrong French
+  // block: a wrong translation that looks right, which is worse than none.
+  // On divergence, leave the English side empty and fall back to French.
+  if (en.length !== fr.length) return fr
+
   return fr.map((block, i) => {
     const other = en[i]
     if (!other || other.type !== block.type) return block

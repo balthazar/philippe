@@ -136,6 +136,21 @@ describe('mapElementorToBlocks', () => {
     const en = [widget('heading', { title: 'Hello' })]
     expect(mapElementorToBlocks(fr, en, {})[0].value.en).toBe('')
   })
+
+  it('leaves every English value empty when the trees produce a different block COUNT, even if a later pair coincides on type', () => {
+    // fr: toggle (2 blocks: heading+text) then a heading widget (1 block) = 3 blocks total.
+    // en: a single text-editor widget (1 block) then a heading widget (1 block) = 2 blocks total.
+    // Without a length guard, index 1 on each side would both be 'heading' and
+    // wrongly merge, attaching the English heading to the wrong French block.
+    const fr = [
+      widget('toggle', { tabs: [{ tab_title: 'Musée', tab_content: '<p>Collection</p>' }] }),
+      widget('heading', { title: 'Suite' }),
+    ]
+    const en = [widget('text-editor', { editor: '<p>Hello</p>' }), widget('heading', { title: 'Next' })]
+    const blocks = mapElementorToBlocks(fr, en, {})
+    expect(blocks).toHaveLength(3)
+    expect(blocks.every((b) => b.value?.en === '')).toBe(true)
+  })
 })
 
 describe('liftSpecs', () => {
