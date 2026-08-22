@@ -139,9 +139,11 @@ adminRouter.delete('/images/:id', asyncHandler(async (req, res, next) => {
   try {
     const { id } = req.params
     // Deleting a referenced image would leave holes in the archive, so refuse.
-    const used = await Article.exists({
-      $or: [{ cover: id }, { 'blocks.image': id }, { 'blocks.items.image': id }],
-    })
+    // Page reuses Article's blockSchema (no `cover` field of its own), so
+    // content pages like biography can hold image/gallery blocks too.
+    const used =
+      (await Article.exists({ $or: [{ cover: id }, { 'blocks.image': id }, { 'blocks.items.image': id }] })) ||
+      (await Page.exists({ $or: [{ 'blocks.image': id }, { 'blocks.items.image': id }] }))
     if (used) return res.status(409).json({ error: 'image is in use' })
     const image = await Image.findById(id)
     if (!image) return res.status(404).json({ error: 'not found' })

@@ -88,10 +88,10 @@ describe('admin articles', () => {
   // without asyncHandler this CastError is an unhandled rejection: the
   // request never resolves and Node 24 terminates the process. This proves
   // the wrapper works rather than merely existing.
-  it('returns a clean error for an invalid ObjectId instead of hanging', async () => {
+  it('returns a clean 400 for an invalid ObjectId instead of hanging or a 500', async () => {
     const agent = await loginAgent()
     const res = await agent.get('/api/admin/articles/not-an-id')
-    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(res.status).toBe(400)
     expect(res.body).toHaveProperty('error')
   }, 3000)
 })
