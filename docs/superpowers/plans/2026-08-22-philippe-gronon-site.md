@@ -27,7 +27,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 - Migration targets, asserted by `verify.js`: **63 articles** (62 FR/EN pairs plus 1 EN-only), **7 pages**, and every article having a cover and at least one block.
 - Secrets are never committed. `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` come from a k8s Secret created out of band.
 - **Any task that adds a dependency MUST stage `package.json` AND `package-lock.json` in the same commit as the code that imports it.** A commit that imports a package it did not declare does not build from a clean checkout and breaks `npm ci` in CI, even though it passes locally where `node_modules` is already populated.
-- **Image sizing is exactly two settings, no more.** (1) `span` on each gallery item: how many columns that image occupies inside a work's gallery grid, `1` or `2`. (2) `featured` ("en avant") on each article: a single toggle that both puts the work in the homepage slideshow and gives it a double-width card in the works list. There is no separately curated slideshow list and no per-card size field; one toggle drives both so they cannot drift apart.
+- **Image sizing is exactly two settings, no more.** (1) The gallery grid: `columns` on each gallery block, 1 to 6, and `span` on each item, 1 to 6, being how many of those columns that image occupies. A span is clamped to the block's column count at render time, so an editor cannot produce a broken grid by lowering `columns` after setting a wide span. (2) `featured` ("en avant") on each article: a single toggle that both puts the work in the homepage slideshow and gives it a double-width card in the works list. There is no separately curated slideshow list and no per-card size field; one toggle drives both so they cannot drift apart.
 - Regexes must never contain literal combining or invisible Unicode characters. Write them as ASCII escape sequences so the source stays reviewable and diff-safe.
 
 ---
@@ -884,7 +884,9 @@ git commit -m "feat(api): add sharp image pipeline with content-addressed varian
 ### Task 5A: Image sizing fields
 
 Two settings, added to the schemas Task 3 created. Everything downstream reads
-them; nothing else stores sizing.
+them; nothing else stores sizing. Task 3 shipped `columns` as an enum of 2, 3 or
+4; this task widens it to a 1-to-6 range so the editor controls the gallery's
+column count directly.
 
 **Files:**
 - Modify: `api/src/models/Article.js`
@@ -920,6 +922,34 @@ describe('featured', () => {
   })
 })
 
+describe('gallery columns', () => {
+  it('defaults to three', async () => {
+    const a = await Article.create({
+      category: 'works', slug: { fr: 'c1' }, title: { fr: 'C' },
+      blocks: [{ type: 'gallery', items: [] }],
+    })
+    expect(a.blocks[0].columns).toBe(3)
+  })
+
+  it('accepts any count from one to six', async () => {
+    for (const columns of [1, 2, 3, 4, 5, 6]) {
+      const a = await Article.create({
+        category: 'works', slug: { fr: `c-${columns}` }, title: { fr: 'C' },
+        blocks: [{ type: 'gallery', columns, items: [] }],
+      })
+      expect(a.blocks[0].columns).toBe(columns)
+    }
+  })
+
+  it('rejects a count outside one to six', async () => {
+    const a = new Article({
+      category: 'works', slug: { fr: 'c9' }, title: { fr: 'C' },
+      blocks: [{ type: 'gallery', columns: 7, items: [] }],
+    })
+    await expect(a.validate()).rejects.toThrow(/columns/)
+  })
+})
+
 describe('gallery item span', () => {
   it('defaults to one column', async () => {
     const a = await Article.create({
@@ -929,18 +959,18 @@ describe('gallery item span', () => {
     expect(a.blocks[0].items[0].span).toBe(1)
   })
 
-  it('accepts a two-column span', async () => {
+  it('accepts a span wider than two', async () => {
     const a = await Article.create({
       category: 'works', slug: { fr: 's2' }, title: { fr: 'D' },
-      blocks: [{ type: 'gallery', columns: 3, items: [{ span: 2, caption: { fr: '' } }] }],
+      blocks: [{ type: 'gallery', columns: 6, items: [{ span: 4, caption: { fr: '' } }] }],
     })
-    expect(a.blocks[0].items[0].span).toBe(2)
+    expect(a.blocks[0].items[0].span).toBe(4)
   })
 
-  it('rejects a span outside the allowed set', async () => {
+  it('rejects a span outside one to six', async () => {
     const a = new Article({
       category: 'works', slug: { fr: 's3' }, title: { fr: 'E' },
-      blocks: [{ type: 'gallery', items: [{ span: 5 }] }],
+      blocks: [{ type: 'gallery', items: [{ span: 7 }] }],
     })
     await expect(a.validate()).rejects.toThrow(/span/)
   })
@@ -957,7 +987,14 @@ Expected: FAIL, `featured` is undefined and `span` is not a schema path.
 In `api/src/models/Article.js`, add `span` to the block items sub-schema:
 
 ```js
-          span: { type: Number, enum: [1, 2], default: 1 },        // gallery
+          span: { type: Number, min: 1, max: 6, default: 1 },      // gallery item width
+```
+
+and widen the existing `columns` field on the same sub-schema from its enum to a
+range, so the editor picks the gallery's column count:
+
+```js
+    columns: { type: Number, min: 1, max: 6, default: 3 },
 ```
 
 and add `featured` to the article schema, next to `position`:
@@ -977,13 +1014,13 @@ articleSchema.index({ featured: 1, status: 1, position: 1 })
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd api && npm test -- sizing`
-Expected: PASS, 5 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add api/src/models/Article.js api/test/models/sizing.test.js
-git commit -m "feat(api): add featured flag and gallery span"
+git commit -m "feat(api): add featured flag and gallery column/span sizing"
 ```
 
 ---
@@ -3470,11 +3507,16 @@ describe('BlockRenderer', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
-  it('lets a gallery item span two columns', () => {
-    render(<BlockRenderer blocks={[{ type: 'gallery', columns: 3, items: [{ image: img('a.webp'), span: 2 }, { image: img('b.webp') }] }]} />)
+  it('lets a gallery item span several columns', () => {
+    render(<BlockRenderer blocks={[{ type: 'gallery', columns: 6, items: [{ image: img('a.webp'), span: 4 }, { image: img('b.webp') }] }]} />)
     const cells = screen.getAllByRole('listitem')
-    expect(cells[0]).toHaveStyle({ gridColumn: 'span 2' })
+    expect(cells[0]).toHaveStyle({ gridColumn: 'span 4' })
     expect(cells[1]).toHaveStyle({ gridColumn: 'span 1' })
+  })
+
+  it('clamps a span wider than the gallery to the column count', () => {
+    render(<BlockRenderer blocks={[{ type: 'gallery', columns: 2, items: [{ image: img('a.webp'), span: 5 }] }]} />)
+    expect(screen.getAllByRole('listitem')[0]).toHaveStyle({ gridColumn: 'span 2' })
   })
 
   it('ignores an unknown block type instead of crashing the page', () => {
@@ -3552,8 +3594,9 @@ export function BlockRenderer({ blocks = [] }) {
             return (
               <ul key={i} className="block-gallery" style={{ '--columns': block.columns || 3 }}>
                 {items.map((item, j) => (
-                  // span is the per-image grid setting: 1 or 2 columns.
-                  <li key={j} style={{ gridColumn: `span ${item.span || 1}` }}>
+                  // span is the per-image grid setting. Clamped to the block's
+                  // column count so lowering `columns` later cannot break the grid.
+                  <li key={j} style={{ gridColumn: `span ${Math.min(item.span || 1, block.columns || 3)}` }}>
                     <button
                       type="button"
                       aria-label={item.image?.alt || `Image ${j + 1}`}
@@ -4315,17 +4358,31 @@ export function BlockEditor({ blocks = [], lang, onChange }) {
                   })
                 }
               />
+              <div className="gallery-columns">
+                <label htmlFor={`columns-${i}`}>Colonnes</label>
+                <select
+                  id={`columns-${i}`}
+                  value={block.columns || 3}
+                  onChange={(e) => replace(i, { ...block, columns: Number(e.target.value) })}
+                >
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
               <ul className="gallery-spans">
                 {block.items.map((item, j) => (
                   <li key={j}>
                     <label htmlFor={`span-${i}-${j}`}>Largeur</label>
                     <select
                       id={`span-${i}-${j}`}
-                      value={item.span || 1}
+                      value={Math.min(item.span || 1, block.columns || 3)}
                       onChange={(e) => replace(i, { ...block, items: block.items.map((it, k) => (k === j ? { ...it, span: Number(e.target.value) } : it)) })}
                     >
-                      <option value={1}>1 colonne</option>
-                      <option value={2}>2 colonnes</option>
+                      {/* Never offer a span wider than the gallery itself. */}
+                      {Array.from({ length: block.columns || 3 }, (_, n) => n + 1).map((n) => (
+                        <option key={n} value={n}>{n === 1 ? '1 colonne' : `${n} colonnes`}</option>
+                      ))}
                     </select>
                   </li>
                 ))}
