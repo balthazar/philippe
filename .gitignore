@@ -9,3 +9,4 @@ build/
 backup_*.tar
 migrate/data/
 migrate/uploads/
+.superpowers/
