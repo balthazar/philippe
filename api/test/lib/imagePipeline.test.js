@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
-import { processImage } from '../../src/lib/imagePipeline.js'
+import { processImage, ORIGINALS_PREFIX } from '../../src/lib/imagePipeline.js'
 
 let root
 beforeAll(async () => { root = await mkdtemp(join(tmpdir(), 'media-')) })
@@ -26,7 +26,7 @@ async function rotatedJpeg(width, height, orientation) {
 
 function shardOf(path) {
   const parts = path.split('/')
-  return parts[0] === '_originals' ? parts[1] : parts[0]
+  return parts[0] === ORIGINALS_PREFIX ? parts[1] : parts[0]
 }
 
 describe('processImage', () => {
@@ -71,9 +71,9 @@ describe('processImage', () => {
 
   it('writes the original under _originals/ and the webp variants outside it', async () => {
     const result = await processImage(await jpeg(800, 600), { originalName: 'o.jpg', mediaRoot: root })
-    expect(result.variants.original.path.startsWith('_originals/')).toBe(true)
+    expect(result.variants.original.path.startsWith(`${ORIGINALS_PREFIX}/`)).toBe(true)
     for (const name of ['thumb', 'medium', 'large']) {
-      expect(result.variants[name].path.startsWith('_originals/')).toBe(false)
+      expect(result.variants[name].path.startsWith(`${ORIGINALS_PREFIX}/`)).toBe(false)
     }
   })
 
@@ -95,5 +95,18 @@ describe('processImage', () => {
     expect(result.variants.original.width).toBe(2000)
     expect(result.variants.original.height).toBe(3000)
     expect(result.variants.large.width).toBe(2000)
+  })
+
+  // Raw (pre-rotation) width, 800, is SMALLER than the display width, 2400,
+  // once orientation 6 is applied. withoutEnlargement can't mask a bug here
+  // the way it can when raw width is larger than display width: sizing off
+  // the raw axis would clamp large to 800, sizing off the display axis (the
+  // correct behaviour) gives 2400.
+  it('sizes the never-upscale comparison off the display axis, not the raw one', async () => {
+    const buf = await rotatedJpeg(800, 2400, 6)
+    const result = await processImage(buf, { originalName: 'p.jpg', mediaRoot: root })
+    expect(result.width).toBe(2400)
+    expect(result.height).toBe(800)
+    expect(result.variants.large.width).toBe(2400)
   })
 })

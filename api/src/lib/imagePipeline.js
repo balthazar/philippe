@@ -6,6 +6,11 @@ import sharp from 'sharp'
 const VARIANTS = { thumb: 600, medium: 1400, large: 2400 }
 const EXT = { jpeg: 'jpg', png: 'png', webp: 'webp', tiff: 'tif', gif: 'gif', avif: 'avif' }
 
+// Originals are kept as an unserved archival master (see processImage doc
+// comment). Exported so route code (Task 9) can build its refusal check
+// against this same constant instead of duplicating the literal.
+export const ORIGINALS_PREFIX = '_originals'
+
 export function mediaPath(mediaRoot, filename) {
   return join(mediaRoot, filename)
 }
@@ -39,7 +44,7 @@ export async function processImage(buffer, { originalName, mediaRoot }) {
   const variants = {}
 
   const ext = EXT[meta.format] || meta.format
-  const originalRel = join('_originals', shard, `${hash}-original.${ext}`)
+  const originalRel = join(ORIGINALS_PREFIX, shard, `${hash}-original.${ext}`)
   await write(mediaRoot, originalRel, buffer)
   variants.original = { path: originalRel, width, height, bytes: buffer.length }
 
