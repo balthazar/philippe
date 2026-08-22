@@ -1411,6 +1411,7 @@ import { withDb } from '../helpers/db.js'
 import { createApp } from '../../src/app.js'
 import { Article } from '../../src/models/Article.js'
 import { Page } from '../../src/models/Page.js'
+import { Image } from '../../src/models/Image.js'
 
 const db = withDb()
 beforeAll(db.start)
@@ -1418,11 +1419,27 @@ afterAll(db.stop)
 beforeEach(async () => {
   await Article.deleteMany({})
   await Page.deleteMany({})
+  // Images are cleared too: `filename` is unique, so a leftover row from the
+  // previous test fails the next insert on a duplicate key.
+  await Image.deleteMany({})
+  // Every one of the 125 migrated archive posts has a featured image, so a
+  // fixture whose article has no cover is not representative, and a slideshow
+  // test built on one would pass even with image population entirely broken.
+  const cover = await Image.create({
+    filename: 'testcover',
+    width: 2000,
+    height: 1500,
+    variants: {
+      thumb: { path: 'ab/testcover-thumb.webp', width: 600, height: 450 },
+      medium: { path: 'ab/testcover-medium.webp', width: 1400, height: 1050 },
+      large: { path: 'ab/testcover-large.webp', width: 2000, height: 1500 },
+    },
+  })
   await Article.create([
     { category: 'works', status: 'published', slug: { fr: 'chassis', en: 'press-frame' },
       title: { fr: 'Châssis-Presse', en: '' }, yearStart: 2018, yearEnd: 2021, yearLabel: { fr: '2018-2021' } },
     { category: 'works', status: 'published', slug: { fr: 'porte' },
-      title: { fr: 'Porte' }, yearStart: 2023 },
+      title: { fr: 'Porte' }, yearStart: 2023, cover: cover._id },
     { category: 'works', status: 'draft', slug: { fr: 'brouillon' }, title: { fr: 'Brouillon' } },
     { category: 'exhibitions', status: 'published', slug: { fr: 'expo' }, title: { fr: 'Expo' }, yearStart: 2020 },
   ])
@@ -1486,6 +1503,8 @@ describe('GET /api/home', () => {
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
     expect(res.body.slides.map((s) => s.article.slug)).toEqual(['porte'])
+    // Proves the Image model is registered and the ref actually populates.
+    expect(res.body.slides[0].image.variants.medium.path).toBe('ab/testcover-medium.webp')
   })
 
   it('omits a featured work that has no cover, since a slide needs an image', async () => {
