@@ -14,5 +14,8 @@ export function withDb() {
       await mongoose.disconnect()
       await server.stop()
     },
+    get uri() {
+      return server?.getUri()
+    },
   }
 }

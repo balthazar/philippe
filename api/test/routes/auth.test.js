@@ -49,6 +49,15 @@ describe('POST /api/auth/login', () => {
     expect(unknown.status).toBe(401)
     expect(bad.body).toEqual(unknown.body)
   })
+
+  it('succeeds behind a proxy that sets X-Forwarded-For', async () => {
+    const res = await request(app())
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.5')
+      .send({ email: 'admin@example.com', password: 'correct horse battery' })
+    expect(res.status).toBe(200)
+    expect(res.headers['set-cookie'][0]).toMatch(/philippe_token=/)
+  })
 })
 
 describe('protected routes', () => {
