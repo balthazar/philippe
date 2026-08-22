@@ -14,7 +14,7 @@
 
 Every task's requirements implicitly include this section. Values are copied verbatim from the spec.
 
-- **Node >= 20.19**, ESM throughout (`"type": "module"` in both package.json files). The floor is 20.19 and not plain "20" for a concrete reason: `sanitize-html` resolves to 2.17.x, which depends on `htmlparser2` v12, a pure-ESM package that sanitize-html's own CommonJS entry point `require()`s. `require(ESM)` was only enabled by default in Node 20.19, so on 20.18 the sanitize module cannot be imported at all and the API would fail to boot. Both `package.json` files declare `"engines": { "node": ">=20.19" }`, `.nvmrc` pins a concrete 20.19+ version, and Docker images use a `node:20.19-alpine` style tag rather than a floating `node:20-alpine`.
+- **Node 24 LTS**, ESM throughout (`"type": "module"` in both package.json files). Node 20's LTS window has ended, so it receives no further security updates; a new project must not be pinned to an unsupported runtime. Node 24 is the current LTS. Node 26 is Current rather than LTS and is not an appropriate pin for a deployed site. Both `package.json` files declare `"engines": { "node": ">=24" }`, `.nvmrc` pins `24.19.0`, and Docker images use `node:24.19-alpine`, a concrete tag rather than a floating major, so a rebuild cannot silently change the runtime underneath us. Node 24 also supports `require(ESM)` natively, which removes the `sanitize-html`/`htmlparser2` interop failure as a class of problem rather than working around it.
 - **Test evidence means the `Test Files` line and the exit code, not the test count.** Vitest prints a passing test count even when an entire file fails to load and contributes zero tests. A suite that fails to collect is a failure regardless of how many other tests passed.
 - API listens on port **8080** and exposes **`/health`**.
 - Categories are exactly: `works`, `exhibitions`, `editions`, `public-orders`.
@@ -4872,13 +4872,13 @@ git commit -m "feat(web): prerender routes with sitemap and robots"
 
 ```dockerfile
 # api/Dockerfile
-FROM node:20.19-alpine AS build
+FROM node:24.19-alpine AS build
 WORKDIR /app
 COPY api/package.json api/package-lock.json ./
 RUN npm ci --omit=dev
 COPY api/src ./src
 
-FROM node:20.19-alpine AS runtime
+FROM node:24.19-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app /app
@@ -4981,7 +4981,7 @@ spec:
 
 ```dockerfile
 # Dockerfile (web)
-FROM node:20.19-alpine AS build
+FROM node:24.19-alpine AS build
 WORKDIR /app
 ARG PRERENDER_API_URL
 ARG SITE_URL=https://philippe.natazar.org
