@@ -1443,7 +1443,7 @@ git commit -m "feat(api): add public read API with language resolution"
 
 **Interfaces:**
 - Consumes: `requireAuth`, `requireCsrfHeader`, `sanitize`, `slugify`, `uniqueSlug`, all models.
-- Produces: `adminRouter` mounted at `/api/admin` with articles CRUD, `POST /articles/reorder`, `PATCH /pages/:key`, `PATCH /home`. Responses keep raw `{fr, en}` objects so the editor can tell an override from a fallback. Test helper `loginAgent(app)` returning a supertest agent with the cookie and CSRF header preset.
+- Produces: `adminRouter` mounted at `/api/admin` with articles CRUD, `POST /articles/reorder`, `PATCH /pages/:key`. Responses keep raw `{fr, en}` objects so the editor can tell an override from a fallback. Test helper `loginAgent(app)` returning a supertest agent with the cookie and CSRF header preset.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1564,7 +1564,6 @@ Expected: FAIL, 404 because `adminRouter` is not mounted.
 import { Router } from 'express'
 import { Article } from '../models/Article.js'
 import { Page } from '../models/Page.js'
-import { Home } from '../models/Home.js'
 import { requireAuth, requireCsrfHeader } from '../middleware/auth.js'
 import { sanitize } from '../lib/sanitize.js'
 import { uniqueSlug } from '../lib/slug.js'
@@ -1657,20 +1656,6 @@ adminRouter.patch('/pages/:key', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-adminRouter.get('/home', async (req, res) => {
-  res.json((await Home.findOne({ singleton: 'home' }).lean()) || { singleton: 'home', slides: [] })
-})
-
-adminRouter.patch('/home', async (req, res, next) => {
-  try {
-    const home = await Home.findOneAndUpdate(
-      { singleton: 'home' },
-      { slides: req.body?.slides || [] },
-      { new: true, upsert: true, runValidators: true }
-    ).lean()
-    res.json(home)
-  } catch (err) { next(err) }
-})
 ```
 
 Mount in `api/src/app.js`: `app.use('/api/admin', adminRouter)`.
@@ -3218,15 +3203,15 @@ import { LangProvider } from '../../../lib/lang.jsx'
 import * as api from '../../../lib/api.js'
 import { Works } from '../Works.jsx'
 
-const article = (slug, category, yearStart) => ({
-  _id: slug, slug, category, yearStart, title: slug, yearLabel: String(yearStart || ''),
+const article = (slug, category, yearStart, featured = false) => ({
+  _id: slug, slug, category, yearStart, featured, title: slug, yearLabel: String(yearStart || ''),
   cover: { variants: { thumb: { path: 't.webp', width: 600, height: 400 }, medium: { path: 'm.webp', width: 1400, height: 933 } } },
 })
 
 beforeEach(() => {
   vi.spyOn(api, 'apiGet').mockImplementation(async (path, params) => {
     const byCategory = {
-      works: [article('porte', 'works', 2023), article('chassis', 'works', 2018)],
+      works: [article('porte', 'works', 2023, true), article('chassis', 'works', 2018)],
       editions: [article('de', 'editions', 2009)],
       'public-orders': [article('tribunal', 'public-orders', 1984)],
     }
@@ -3246,6 +3231,13 @@ describe('Works page', () => {
     render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Éditions' })).toBeInTheDocument())
     expect(screen.getByRole('heading', { name: 'Commandes publiques' })).toBeInTheDocument()
+  })
+
+  it('gives a featured work a double-width cell', async () => {
+    render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
+    await waitFor(() => expect(screen.getByRole('link', { name: /porte/i })).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: /porte/i }).closest('li')).toHaveClass('is-featured')
+    expect(screen.getByRole('link', { name: /chassis/i }).closest('li')).not.toHaveClass('is-featured')
   })
 
   it('links each card to its article', async () => {
@@ -3330,7 +3322,9 @@ export function ArticleGrid({ items, routeKey }) {
   return (
     <ul className="grid">
       {items.map((article) => (
-        <li key={article._id || article.slug}>
+        // "en avant" works take a double-width cell. The card itself is
+        // unchanged; only the cell it sits in grows, so the grid stays aligned.
+        <li key={article._id || article.slug} className={article.featured ? 'is-featured' : undefined}>
           <ArticleCard article={article} routeKey={routeKey} />
         </li>
       ))}
@@ -3476,6 +3470,13 @@ describe('BlockRenderer', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
+  it('lets a gallery item span two columns', () => {
+    render(<BlockRenderer blocks={[{ type: 'gallery', columns: 3, items: [{ image: img('a.webp'), span: 2 }, { image: img('b.webp') }] }]} />)
+    const cells = screen.getAllByRole('listitem')
+    expect(cells[0]).toHaveStyle({ gridColumn: 'span 2' })
+    expect(cells[1]).toHaveStyle({ gridColumn: 'span 1' })
+  })
+
   it('ignores an unknown block type instead of crashing the page', () => {
     render(<BlockRenderer blocks={[{ type: 'video', value: 'x' }, { type: 'text', value: '<p>ok</p>' }]} />)
     expect(screen.getByText('ok')).toBeInTheDocument()
@@ -3551,7 +3552,8 @@ export function BlockRenderer({ blocks = [] }) {
             return (
               <ul key={i} className="block-gallery" style={{ '--columns': block.columns || 3 }}>
                 {items.map((item, j) => (
-                  <li key={j}>
+                  // span is the per-image grid setting: 1 or 2 columns.
+                  <li key={j} style={{ gridColumn: `span ${item.span || 1}` }}>
                     <button
                       type="button"
                       aria-label={item.image?.alt || `Image ${j + 1}`}
@@ -4055,7 +4057,6 @@ import { ArticleList } from './ArticleList.jsx'
 import { ArticleEditor } from './ArticleEditor.jsx'
 import { MediaLibrary } from './MediaLibrary.jsx'
 import { PageEditor } from './PageEditor.jsx'
-import { HomeEditor } from './HomeEditor.jsx'
 import './admin.css'
 
 export default function Admin() {
@@ -4068,7 +4069,6 @@ export default function Admin() {
       <nav className="admin-nav">
         <Link to="/admin">Articles</Link>
         <Link to="/admin/media">Images</Link>
-        <Link to="/admin/home">Accueil</Link>
         <Link to="/admin/pages/biography">Pages</Link>
         <button type="button" onClick={logout}>Déconnexion</button>
       </nav>
@@ -4077,7 +4077,6 @@ export default function Admin() {
         <Route path="articles/new" element={<ArticleEditor />} />
         <Route path="articles/:id" element={<ArticleEditor />} />
         <Route path="media" element={<MediaLibrary />} />
-        <Route path="home" element={<HomeEditor />} />
         <Route path="pages/:key" element={<PageEditor />} />
       </Routes>
     </div>
@@ -4085,8 +4084,8 @@ export default function Admin() {
 }
 ```
 
-Ordering note: `Admin.jsx` imports `ArticleEditor`, `MediaLibrary`, `PageEditor`
-and `HomeEditor`, which Task 21 creates. Stub each one now so the router
+Ordering note: `Admin.jsx` imports `ArticleEditor`, `MediaLibrary` and
+`PageEditor`, which Task 21 creates. Stub each one now so the router
 resolves, and let Task 21 replace them:
 
 ```jsx
@@ -4115,7 +4114,7 @@ git commit -m "feat(admin): add authentication shell and article list"
 The piece the site owner uses daily. The language toggle semantics are the part worth testing hardest.
 
 **Files:**
-- Create: `src/admin/{ArticleEditor.jsx,LocalizedInput.jsx,BlockEditor.jsx,RichText.jsx,ImagePicker.jsx,MediaLibrary.jsx,PageEditor.jsx,HomeEditor.jsx}`
+- Create: `src/admin/{ArticleEditor.jsx,LocalizedInput.jsx,BlockEditor.jsx,RichText.jsx,ImagePicker.jsx,MediaLibrary.jsx,PageEditor.jsx}`
 - Test: `src/admin/__tests__/LocalizedInput.test.jsx`, `src/admin/__tests__/BlockEditor.test.jsx`
 
 **Interfaces:**
@@ -4301,7 +4300,37 @@ export function BlockEditor({ blocks = [], lang, onChange }) {
           )}
 
           {block.type === 'gallery' && (
-            <ImagePicker multiple value={block.items.map((it) => it.image)} onChange={(images) => replace(i, { ...block, items: images.map((image) => ({ image, caption: { fr: '', en: '' } })) })} />
+            <>
+              <ImagePicker
+                multiple
+                value={block.items.map((it) => it.image)}
+                onChange={(images) =>
+                  replace(i, {
+                    ...block,
+                    // Preserve each existing item's span when the selection changes.
+                    items: images.map((image) => {
+                      const existing = block.items.find((it) => it.image?._id === image?._id)
+                      return existing || { image, caption: { fr: '', en: '' }, span: 1 }
+                    }),
+                  })
+                }
+              />
+              <ul className="gallery-spans">
+                {block.items.map((item, j) => (
+                  <li key={j}>
+                    <label htmlFor={`span-${i}-${j}`}>Largeur</label>
+                    <select
+                      id={`span-${i}-${j}`}
+                      value={item.span || 1}
+                      onChange={(e) => replace(i, { ...block, items: block.items.map((it, k) => (k === j ? { ...it, span: Number(e.target.value) } : it)) })}
+                    >
+                      <option value={1}>1 colonne</option>
+                      <option value={2}>2 colonnes</option>
+                    </select>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
 
           {block.type === 'specs' && (
@@ -4338,7 +4367,26 @@ export function BlockEditor({ blocks = [], lang, onChange }) {
 }
 ```
 
-`RichText.jsx` wraps TipTap with `StarterKit` configured to allow only bold, italic, bullet and ordered lists, blockquote and link, and calls `onChange(editor.getHTML())`. `ImagePicker.jsx` lists `/admin/images`, uploads through `apiUpload('/admin/images', file)`, and returns the chosen image objects. `ArticleEditor.jsx` composes `LocalizedInput` for title, yearLabel and slug, a category select, an `ImagePicker` for the cover, `BlockEditor` for the body, an FR/EN toggle driving the `lang` prop, and a save button calling `apiSend('POST'|'PATCH', ...)`. `PageEditor.jsx` and `HomeEditor.jsx` reuse the same pieces.
+`RichText.jsx` wraps TipTap with `StarterKit` configured to allow only bold, italic, bullet and ordered lists, blockquote and link, and calls `onChange(editor.getHTML())`. `ImagePicker.jsx` lists `/admin/images`, uploads through `apiUpload('/admin/images', file)`, and returns the chosen image objects. `ArticleEditor.jsx` composes `LocalizedInput` for title, yearLabel and slug, a category select, an `ImagePicker` for the cover, `BlockEditor` for the body, an FR/EN toggle driving the `lang` prop, and a save button calling `apiSend('POST'|'PATCH', ...)`. `PageEditor.jsx` reuses the same pieces.
+
+`ArticleEditor.jsx` also carries the "en avant" toggle, the second of the two
+sizing settings:
+
+```jsx
+<label htmlFor="featured">
+  <input
+    id="featured"
+    type="checkbox"
+    checked={Boolean(article.featured)}
+    onChange={(e) => setArticle({ ...article, featured: e.target.checked })}
+  />
+  En avant (diaporama d'accueil et grande vignette)
+</label>
+```
+
+The label names both effects, because one toggle doing two things is only
+confusing if the interface hides the second. There is no separate slideshow
+screen: the slideshow is exactly the set of works with this box ticked.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -4958,6 +5006,7 @@ Recorded so it is not silently lost:
 - WooCommerce (9 products, 41 product variations) is not migrated. The current site has a shop; this build has none.
 - Revolution Slider content is not migrated; the homepage slideshow is rebuilt from work covers.
 - The 24 `.doc`, 8 `.docx`, 8 `.pdf` and 2 `.zip` attachments are migrated only if `verify.js` reports article bodies linking to them.
+- The `Home` model retains a manual `slides` override the public API still honours, but no admin screen writes it now that the slideshow is driven by `featured`. Either wire a curation screen later or delete the model; it is currently an unused escape hatch.
 - Per-route preload data in the prerender (Task 22 renders chrome and head tags, not article bodies).
 - The spec listed `GET /api/sitemap.xml`. The plan does not build it: the prerender reads the existing `/api/articles` endpoints and writes `dist/sitemap.xml` directly, so a second endpoint would be dead code.
 - DNS cutover to `philippegronon.com`, which is a separate change once the staging site is signed off.
