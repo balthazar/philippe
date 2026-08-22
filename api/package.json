@@ -2,6 +2,9 @@
   "name": "philippe-api",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
