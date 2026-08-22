@@ -72,7 +72,12 @@ publicRouter.get('/home', async (req, res) => {
   // The slideshow IS the featured works. `featured` ("en avant") is the single
   // toggle the editor sets on an article; nothing is curated twice.
   if (!home?.slides?.length) {
-    const featured = await Article.find({ status: 'published', featured: true })
+    // `cover: { $ne: null }` also excludes documents missing the field entirely
+    // (verified against MongoDB). That is deliberate: a slide with no image
+    // cannot render, so an imageless featured work is omitted here rather than
+    // emitted as a broken slide. Task 21's editor warns when "en avant" is
+    // ticked on a work with no cover, which is where that should surface.
+    const featured = await Article.find({ status: 'published', featured: true, cover: { $ne: null } })
       .select(LIST_FIELDS)
       .sort({ position: 1, yearStart: -1 })
       .populate('cover')

@@ -4,6 +4,7 @@ import { withDb } from '../helpers/db.js'
 import { createApp } from '../../src/app.js'
 import { Article } from '../../src/models/Article.js'
 import { Page } from '../../src/models/Page.js'
+import { Image } from '../../src/models/Image.js'
 
 const db = withDb()
 beforeAll(db.start)
@@ -11,11 +12,22 @@ afterAll(db.stop)
 beforeEach(async () => {
   await Article.deleteMany({})
   await Page.deleteMany({})
+  await Image.deleteMany({})
+  const cover = await Image.create({
+    filename: 'testcover',
+    width: 2000,
+    height: 1500,
+    variants: {
+      thumb: { path: 'ab/testcover-thumb.webp', width: 600, height: 450 },
+      medium: { path: 'ab/testcover-medium.webp', width: 1400, height: 1050 },
+      large: { path: 'ab/testcover-large.webp', width: 2000, height: 1500 },
+    },
+  })
   await Article.create([
     { category: 'works', status: 'published', slug: { fr: 'chassis', en: 'press-frame' },
       title: { fr: 'Châssis-Presse', en: '' }, yearStart: 2018, yearEnd: 2021, yearLabel: { fr: '2018-2021' } },
     { category: 'works', status: 'published', slug: { fr: 'porte' },
-      title: { fr: 'Porte' }, yearStart: 2023 },
+      title: { fr: 'Porte' }, yearStart: 2023, cover: cover._id },
     { category: 'works', status: 'draft', slug: { fr: 'brouillon' }, title: { fr: 'Brouillon' } },
     { category: 'exhibitions', status: 'published', slug: { fr: 'expo' }, title: { fr: 'Expo' }, yearStart: 2020 },
   ])
@@ -79,11 +91,18 @@ describe('GET /api/home', () => {
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
     expect(res.body.slides.map((s) => s.article.slug)).toEqual(['porte'])
+    expect(res.body.slides[0].image.variants.medium.path).toBe('ab/testcover-medium.webp')
   })
 
   it('returns an empty slideshow rather than failing when nothing is featured', async () => {
     const res = await request(createApp()).get('/api/home')
     expect(res.status).toBe(200)
     expect(res.body.slides).toEqual([])
+  })
+
+  it('omits a featured work that has no cover, since a slide needs an image', async () => {
+    await Article.create({ category: 'works', status: 'published', slug: { fr: 'sans-image' }, title: { fr: 'Sans image' }, featured: true })
+    const res = await request(createApp()).get('/api/home')
+    expect(res.body.slides.map((s) => s.article.slug)).not.toContain('sans-image')
   })
 })
