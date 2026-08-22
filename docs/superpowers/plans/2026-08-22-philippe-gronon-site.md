@@ -2783,7 +2783,9 @@ function widgetToBlocks(widget, ctx) {
       // The biography page's toggle holds real content (the public collections
       // holding the artist's work), not chrome. Each tab becomes a heading plus
       // its body text, preserving structure and document order.
-      // Find the repeater by SHAPE: this theme does not name the array `tabs`.
+      // Find the repeater by shape rather than by key name. Both real toggles in
+      // this archive do use `tabs`, but the lookup does not depend on that, so a
+      // theme or Elementor version naming it differently still migrates.
       const items = Object.values(s).find(
         (v) => Array.isArray(v) && v.some((it) => it && (it.tab_title || it.tab_content))
       )
@@ -2833,6 +2835,14 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   const fr = [...walkWidgets(frNodes)].flatMap((w) => widgetToBlocks(w, ctx))
   if (!enNodes) return fr
   const en = [...walkWidgets(enNodes)].flatMap((w) => widgetToBlocks(w, ctx))
+
+  // The merge is positional, so it is only sound when both trees produced the
+  // same block sequence. `toggle` emits two blocks per tab and `liftSpecs` can
+  // emit three per text widget, so a divergence upstream shifts every later
+  // index; if a shifted pair then coincides on type, English text lands on the
+  // WRONG French block. A wrong translation that looks right is worse than no
+  // translation, so on divergence leave English empty and fall back to French.
+  if (en.length !== fr.length) return fr
 
   // Positional merge. Where the trees disagree, the English side stays empty
   // and the reader falls back to French, which is the correct default.
