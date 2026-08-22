@@ -15,7 +15,7 @@
 Every task's requirements implicitly include this section. Values are copied verbatim from the spec.
 
 - **Node 24 LTS**, ESM throughout (`"type": "module"` in both package.json files). Node 20's LTS window has ended, so it receives no further security updates; a new project must not be pinned to an unsupported runtime. Node 24 is the current LTS. Node 26 is Current rather than LTS and is not an appropriate pin for a deployed site. Both `package.json` files declare `"engines": { "node": ">=24" }`, `.nvmrc` pins `24.19.0`, and Docker images use `node:24.19-alpine`, a concrete tag rather than a floating major, so a rebuild cannot silently change the runtime underneath us. Node 24 also supports `require(ESM)` natively, which removes the `sanitize-html`/`htmlparser2` interop failure as a class of problem rather than working around it.
-- **The API sets `app.set('trust proxy', 1)`.** It runs behind Traefik, which adds `X-Forwarded-For`. `express-rate-limit` v7 throws `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` when that header is present while Express does not trust the proxy, which turns every login into a 500 in production while passing every test locally. One hop, because Traefik is the only proxy in front of the API.
+- **The API sets `app.set('trust proxy', 1)`.** It runs behind Traefik, which adds `X-Forwarded-For`. Verified behaviour of `express-rate-limit` 7.5.1: it raises `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` internally, logs it to stderr, and still serves the request, so the symptom is NOT a 500. The real consequence is that `req.ip` stays the proxy's address, so a per-IP limiter degrades into one global bucket and any unauthenticated caller can exhaust the login budget and lock the site's only admin out. One hop, because Traefik is the only proxy in front of the API.
 - **`bootstrap()` runs before the server listens.** It validates `JWT_SECRET` first and throws if it is missing (jwt.sign throws synchronously on a falsy secret, inside an async handler Express 4 will not catch, which under Node 24 terminates the process at first login). It then connects to MongoDB and seeds the admin. Without it the API serves a healthy `/health` while holding no database connection at all.
 - **Test evidence means the `Test Files` line and the exit code, not the test count.** Vitest prints a passing test count even when an entire file fails to load and contributes zero tests. A suite that fails to collect is a failure regardless of how many other tests passed.
 - API listens on port **8080** and exposes **`/health`**.
@@ -1181,9 +1181,15 @@ describe('protected routes', () => {
     expect(res.body.email).toBe('admin@example.com')
   })
 
-  it('survives an X-Forwarded-For header, as sent by Traefik in production', async () => {
-    // Without app.set('trust proxy'), express-rate-limit's validator throws and
-    // this returns 500, which is how the deployed site would behave.
+  it('trusts exactly one proxy hop, so the rate limiter sees real client IPs', () => {
+    // Asserting the status code here would prove nothing: express-rate-limit
+    // swallows its own validation error and serves the request either way. What
+    // actually differs is IP attribution, and with no trust proxy every client
+    // shares one bucket, letting anyone lock the only admin out of login.
+    expect(createApp().get('trust proxy')).toBe(1)
+  })
+
+  it('logs in normally when Traefik has added X-Forwarded-For', async () => {
     const res = await request(app())
       .post('/api/auth/login')
       .set('X-Forwarded-For', '203.0.113.7')
