@@ -14,10 +14,16 @@ export function localize(field, lang) {
   return field[lang] || field.fr || ''
 }
 
+function isPlainObject(value) {
+  if (!value || typeof value !== 'object') return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
 export function resolveDoc(value, lang) {
   if (Array.isArray(value)) return value.map((v) => resolveDoc(v, lang))
   if (isLocalized(value)) return localize(value, lang)
-  if (value && typeof value === 'object' && !(value instanceof Date)) {
+  if (isPlainObject(value)) {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveDoc(v, lang)]))
   }
   return value
