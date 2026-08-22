@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pairByTrid, mapCategory, parseYearLabel } from '../extract.js'
+import { pairByTrid, mapCategory, parseYearLabel, assertRowCount } from '../extract.js'
 
 describe('mapCategory', () => {
   it('maps both language names onto one canonical category', () => {
@@ -53,5 +53,23 @@ describe('pairByTrid', () => {
     const [only] = pairByTrid(rows)
     expect(only.fr.ID).toBe(9)
     expect(only.enOnly).toBe(true)
+  })
+
+  it('throws on a duplicate (trid, language) pair', () => {
+    const rows = [
+      { ID: 1, trid: 10, language_code: 'fr', post_title: 'Porte | 2023', post_name: 'porte' },
+      { ID: 2, trid: 10, language_code: 'fr', post_title: 'Porte bis | 2023', post_name: 'porte-bis' },
+    ]
+    expect(() => pairByTrid(rows)).toThrow(/duplicate fr row for trid 10/i)
+  })
+})
+
+describe('assertRowCount', () => {
+  it('throws when the joined count is short', () => {
+    expect(() => assertRowCount(124, 125, 'published posts')).toThrow(/lost rows/i)
+  })
+
+  it('does not throw when the joined count matches', () => {
+    expect(() => assertRowCount(125, 125, 'published posts')).not.toThrow()
   })
 })
