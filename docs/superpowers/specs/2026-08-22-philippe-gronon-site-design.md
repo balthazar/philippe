@@ -216,7 +216,19 @@ current site has them, and are linked from the footer.
 webp, plus the preserved original), `legacyWpId`, `legacyUrl`, `createdAt`.
 
 Content-hashed filenames mean variants are immutable and can be served with a
-one-year cache header.
+one-year cache header. Every stored path is a pure function of the content hash
+(`<shard>/<hash>-<variant>.webp`, sharded on the hash's first two characters),
+never of the clock, so re-running the migration writes the same bytes to the
+same place instead of orphaning the previous run's files.
+
+The three derived variants are the only files ever served. The original is kept
+byte-exact as an archival master under an `_originals/` prefix that the media
+route refuses: because it is the one file not re-encoded, it still carries its
+own EXIF, and it is not the frontend's to display.
+
+Dimensions are display-true. `sharp().metadata()` reports pre-rotation values
+while the variants are auto-oriented, so an EXIF-rotated photograph would
+otherwise report a swapped aspect ratio and render the wrong placeholder shape.
 
 ### Home
 
@@ -278,8 +290,10 @@ strings for the requested language.
 - Login is rate limited per IP with a single generic failure message for both
   unknown email and wrong password.
 - Uploads: size cap, image mime whitelist, and a mandatory re-encode through
-  sharp, which strips EXIF and neutralizes payloads embedded in image files.
-  Stored filenames come from the content hash, never from the client.
+  sharp for every served variant, which strips EXIF and neutralizes payloads
+  embedded in image files. Stored filenames come from the content hash, never
+  from the client. The unmodified original is retained for archival purposes but
+  is never served, so unvalidated bytes are never handed to a visitor.
 - `helmet`, a JSON body size limit, and CORS restricted to the site origin.
 - Secrets (`MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`) are a
   k8s Secret created out of band, following the documented pattern in
