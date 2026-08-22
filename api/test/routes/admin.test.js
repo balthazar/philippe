@@ -5,6 +5,8 @@ import { loginAgent } from '../helpers/agent.js'
 import { createApp } from '../../src/app.js'
 import { Article } from '../../src/models/Article.js'
 import { Page } from '../../src/models/Page.js'
+import { User } from '../../src/models/User.js'
+import { seedAdmin } from '../../src/lib/seedAdmin.js'
 
 const db = withDb()
 beforeAll(async () => { process.env.JWT_SECRET = 'test-secret'; await db.start() })
@@ -14,6 +16,25 @@ beforeEach(async () => { await Article.deleteMany({}); await Page.deleteMany({})
 describe('admin articles', () => {
   it('requires authentication', async () => {
     expect((await request(createApp()).get('/api/admin/articles')).status).toBe(401)
+  })
+
+  it('rejects an unauthenticated mutation, not just an unauthenticated read', async () => {
+    const res = await request(createApp())
+      .post('/api/admin/articles')
+      .set('X-Requested-With', 'philippe-admin')
+      .send({ category: 'works', title: { fr: 'X' } })
+    expect(res.status).toBe(401)
+  })
+
+  it('rejects an authenticated mutation that omits the CSRF header', async () => {
+    // Built without loginAgent(), whose wrapper always sets the CSRF header:
+    // this test needs a logged-in agent that genuinely omits it.
+    await User.deleteMany({})
+    await seedAdmin({ email: 'admin@example.com', password: 'correct horse battery' })
+    const agent = request.agent(createApp())
+    await agent.post('/api/auth/login').send({ email: 'admin@example.com', password: 'correct horse battery' })
+    const res = await agent.post('/api/admin/articles').send({ category: 'works', title: { fr: 'X' } })
+    expect(res.status).toBe(403)
   })
 
   it('lists drafts alongside published articles', async () => {
