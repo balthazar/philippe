@@ -10,3 +10,6 @@ backup_*.tar
 migrate/data/
 migrate/uploads/
 .superpowers/
+
+# docker-compose.dev.yml volume mounts
+.dev/
