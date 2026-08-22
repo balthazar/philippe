@@ -2976,15 +2976,27 @@ const PAGE_KEY_BY_SLUG = {
   'mentions-legales': 'legal', 'terms-and-conditions': 'legal',
 }
 
-export function resolveBlockImages(blocks = [], byLegacyId) {
+/**
+ * Two very different reasons a reference can fail to resolve, and both must be
+ * visible: the file failed to read (counted as skippedMissingFile), or the id
+ * is referenced but absent from media.json entirely. The second used to vanish
+ * without a count or a log, which is the exact failure this phase exists to
+ * prevent: a photograph disappears from an article and nothing says so.
+ * `unresolved` collects the second kind for reporting.
+ */
+export function resolveBlockImages(blocks = [], byLegacyId, unresolved = new Set()) {
   const out = []
   for (const block of blocks) {
     if (block.type === 'image') {
       const id = byLegacyId.get(block.image?.legacyWpId)
       if (id) out.push({ ...block, image: id })
+      else if (block.image?.legacyWpId) unresolved.add(block.image.legacyWpId)
       continue // a missing file means no block, never a dangling reference
     }
     if (block.type === 'gallery') {
+      for (const i of block.items || []) {
+        if (i.image?.legacyWpId && !byLegacyId.get(i.image.legacyWpId)) unresolved.add(i.image.legacyWpId)
+      }
       const items = (block.items || [])
         .map((i) => ({ ...i, image: byLegacyId.get(i.image?.legacyWpId) }))
         .filter((i) => i.image)
@@ -3054,8 +3066,37 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
     pageCount += 1
   }
 
-  await mongoose.disconnect()
-  return { images: imported, articles: articles.length, pages: pageCount }
+  // The slideshow is defined purely as the featured set, and WordPress had no
+  // equivalent field, so a fresh migration would leave the homepage with no
+  // slides at all. Seed the most recent works ONLY when nothing is featured:
+  // that makes this idempotent and means it can never override the artist's
+  // own curation once they have touched a single checkbox.
+  let featuredSeeded = 0
+  if ((await Article.countDocuments({ featured: true })) === 0) {
+    const recent = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
+      .sort({ yearStart: -1, createdAt: -1 })
+      .limit(8)
+      .select('_id')
+      .lean()
+    if (recent.length) {
+      await Article.updateMany({ _id: { $in: recent.map((a) => a._id) } }, { featured: true })
+      featuredSeeded = recent.length
+    }
+  }
+
+  if (unresolved.size) {
+    console.warn(`UNRESOLVED image references (${unresolved.size}): ${[...unresolved].join(', ')}`)
+  }
+
+  await disconnect()
+  return {
+    images: imported,
+    articles: articles.length,
+    pages: pageCount,
+    unmappedPageSlugs,
+    unresolvedRefs: [...unresolved],
+    featuredSeeded,
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
