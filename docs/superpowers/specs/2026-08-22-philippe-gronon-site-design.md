@@ -170,6 +170,7 @@ absent or empty `en` is the fallback signal.
 | `blocks` | [Block] | Ordered body |
 | `status` | enum | `draft`, `published` |
 | `position` | Number | Manual override within a category; defaults to year descending |
+| `featured` | Boolean | "En avant". One toggle, two effects: the work joins the homepage slideshow and takes a double-width card in the works list |
 | `seoDescription` | localized | |
 | `legacyWpId` | Number | Migration idempotency key, indexed |
 
@@ -183,7 +184,7 @@ A discriminated union stored in order:
 - `text`: `{ value: localized }`, sanitized HTML.
 - `heading`: `{ value: localized, level: 2 | 3 }`.
 - `image`: `{ image: ref, caption: localized, size: 'full' | 'wide' | 'inset' }`.
-- `gallery`: `{ items: [{ image: ref, caption: localized }], columns: 2 | 3 | 4 }`.
+- `gallery`: `{ items: [{ image: ref, caption: localized, span: 1 | 2 }], columns: 2 | 3 | 4 }`.
 - `specs`: `{ items: [{ term: localized, value: localized }] }`, rendered as a
   definition list.
 
@@ -217,8 +218,9 @@ one-year cache header.
 ### Home
 
 A single document holding `slides: [{ image: ref, article: ref | null, caption:
-localized }]`. When the list is empty the API returns the covers of the most
-recent published works, so the homepage is never blank.
+localized }]`, retained as a manual override. In normal operation it is empty and
+the slideshow is exactly the set of articles flagged `featured`, so the artist
+curates it from the article editor rather than from a second screen.
 
 ### User
 
@@ -255,7 +257,6 @@ GET    /api/admin/images
 POST   /api/admin/images        multipart upload
 PATCH  /api/admin/images/:id    alt text
 DELETE /api/admin/images/:id    refused when referenced
-PATCH  /api/admin/home
 ```
 
 Admin responses return raw localized objects (both `fr` and `en`) so the editor
@@ -346,7 +347,8 @@ Structural decisions, in order of impact:
    follow as labelled sections at the foot.
 2. Cards use a uniform aspect ratio with images letterboxed on a neutral
    ground, so the grid reads as a grid. Title and year sit on single lines
-   beneath.
+   beneath. A `featured` work takes a double-width cell, giving the archive
+   hierarchy without breaking alignment.
 3. One type family in two weights on a four-step scale, one container width,
    consistent gutters.
 4. A slim sticky header: wordmark, four nav items, FR/EN toggle. On mobile the
@@ -356,7 +358,12 @@ Structural decisions, in order of impact:
    autoplay disabled under `prefers-reduced-motion`.
 6. Article pages are image-led, captions in a consistent column, `specs` as a
    definition list, prev/next at the foot. Galleries open a keyboard-navigable
-   lightbox.
+   lightbox, and each gallery image carries a `span` of one or two columns.
+
+Image sizing is deliberately two settings and no more: `span` per gallery image,
+and `featured` per article. Both draw from a fixed vocabulary rather than free
+pixel values, so the editor gets real control without reintroducing the ragged
+layout the restructure exists to remove.
 
 Images render with `srcset` from the three variants inside aspect-ratio boxes,
 so nothing shifts during load. Alt text comes from the Image model.
