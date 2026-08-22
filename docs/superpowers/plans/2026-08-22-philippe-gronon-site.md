@@ -1942,6 +1942,17 @@ describe('DELETE /api/admin/images/:id', () => {
     expect(await Image.countDocuments()).toBe(1)
   })
 
+  it('refuses to delete an image used only by a page block', async () => {
+    const agent = await loginAgent()
+    const up = await agent.post('/api/admin/images').attach('file', await png(), 'p.png')
+    await Page.findOneAndUpdate(
+      { key: 'biography' },
+      { key: 'biography', blocks: [{ type: 'image', image: up.body._id, caption: { fr: '' } }] },
+      { upsert: true }
+    )
+    expect((await agent.delete(`/api/admin/images/${up.body._id}`)).status).toBe(409)
+  })
+
   it('deletes an unused image', async () => {
     const agent = await loginAgent()
     const up = await agent.post('/api/admin/images').attach('file', await png(), 'b.png')
@@ -1968,6 +1979,21 @@ describe('GET /media', () => {
     const up = await agent.post('/api/admin/images').attach('file', await png(), 'd.png')
     const res = await request(createApp()).get(`/media/${up.body.variants.original.path}`)
     expect(res.status).toBe(404)
+  })
+
+  it('refuses an archival original requested with a percent-encoded prefix', async () => {
+    const agent = await loginAgent()
+    const up = await agent.post('/api/admin/images').attach('file', await png(), 'e.png')
+    // %5F is '_'. A raw-string check on req.path misses this while
+    // express.static decodes it and serves the file.
+    const encoded = up.body.variants.original.path.replace(/^_/, '%5F')
+    expect((await request(createApp()).get(`/media/${encoded}`)).status).toBe(404)
+  })
+
+  it('still serves a derived variant, so the guard has not over-blocked', async () => {
+    const agent = await loginAgent()
+    const up = await agent.post('/api/admin/images').attach('file', await png(), 'f.png')
+    expect((await request(createApp()).get(`/media/${up.body.variants.thumb.path}`)).status).toBe(200)
   })
 })
 ```
@@ -2014,7 +2040,13 @@ export const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, 
 ```js
 // api/src/middleware/errors.js
 export function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
-  const status = err.status || (err.name === 'ValidationError' ? 400 : err.code === 11000 ? 409 : 500)
+  // Multer and Mongoose both signal client mistakes through error shapes that
+  // carry no `status`, so without these they are logged and reported as server
+  // crashes: an oversized upload and a malformed id are not 500s.
+  const status =
+    err.status ||
+    (err.name === 'MulterError' ? (err.code === 'LIMIT_FILE_SIZE' ? 413 : 400) : null) ||
+    (err.name === 'ValidationError' || err.name === 'CastError' ? 400 : err.code === 11000 ? 409 : 500)
   if (status === 500) console.error(err)
   res.status(status).json({ error: status === 500 ? 'internal error' : err.message })
 }
@@ -2024,15 +2056,32 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
 // api/src/routes/media.js
 import { Router } from 'express'
 import express from 'express'
+import { resolve, sep } from 'node:path'
 import { ORIGINALS_PREFIX } from '../lib/imagePipeline.js'
 
 export function mediaRouter(mediaRoot = process.env.MEDIA_ROOT || '/data/media') {
   const router = Router()
-  // Archival masters are kept on disk but never served: they are the only
-  // files that are not re-encoded, so they still carry their original metadata.
-  router.use((req, res, next) =>
-    req.path.split('/').includes(ORIGINALS_PREFIX) ? res.status(404).end() : next()
-  )
+  const originalsDir = resolve(mediaRoot, ORIGINALS_PREFIX)
+
+  // Archival masters are kept on disk but never served: they are the only files
+  // that are not re-encoded, so they still carry their original metadata.
+  //
+  // The check runs on the RESOLVED filesystem path, not on the request string.
+  // `req.path` is not percent-decoded, but express.static decodes before
+  // touching disk, so a raw-string segment check is bypassed by requesting
+  // `%5Foriginals/...` — verified: the literal path 404s while the encoded one
+  // returned 200 and served the file.
+  router.use((req, res, next) => {
+    let decoded
+    try {
+      decoded = decodeURIComponent(req.path)
+    } catch {
+      return res.status(400).end() // malformed percent sequence
+    }
+    const target = resolve(mediaRoot, '.' + decoded)
+    if (target === originalsDir || target.startsWith(originalsDir + sep)) return res.status(404).end()
+    next()
+  })
   // Filenames are content hashes, so a given path's bytes never change.
   router.use(
     express.static(mediaRoot, {
@@ -2092,9 +2141,13 @@ adminRouter.delete('/images/:id', async (req, res, next) => {
   try {
     const { id } = req.params
     // Deleting a referenced image would leave holes in the archive, so refuse.
-    const used = await Article.exists({
-      $or: [{ cover: id }, { 'blocks.image': id }, { 'blocks.items.image': id }],
-    })
+    // Pages reuse the same blockSchema, so `biography` and the other content
+    // pages can hold image and gallery blocks too. Checking only articles would
+    // let an image referenced solely by a page be deleted, leaving a hole.
+    // Page has no `cover` field, so do not query one.
+    const used =
+      (await Article.exists({ $or: [{ cover: id }, { 'blocks.image': id }, { 'blocks.items.image': id }] })) ||
+      (await Page.exists({ $or: [{ 'blocks.image': id }, { 'blocks.items.image': id }] }))
     if (used) return res.status(409).json({ error: 'image is in use' })
     const image = await Image.findById(id)
     if (!image) return res.status(404).json({ error: 'not found' })
