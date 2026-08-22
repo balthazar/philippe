@@ -86,6 +86,23 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
     const importAll = process.env.MIGRATE_ALL_MEDIA === '1'
     const referenced = collectReferencedIds(articles, pages)
 
+    // A referenced id can fail to resolve for two very different reasons,
+    // and they must be reported differently: the id IS in media.json but its
+    // file failed to read (skippedMissingFile, below), versus the id is
+    // referenced by an article/page but has NO entry in media.json at all.
+    // The second case never enters the media loop below, so without this
+    // precomputed diff it would resolve to a dropped block / null cover with
+    // nothing anywhere saying so - exactly the silent-skip this phase exists
+    // to prevent. There are zero such ids in the current dataset, but the
+    // migration re-runs at cutover against data that may have changed.
+    const mediaIds = new Set(media.map((item) => item.legacyWpId))
+    const noMediaEntryIds = [...referenced].filter((id) => !mediaIds.has(id))
+    if (noMediaEntryIds.length) {
+      console.error(
+        `referenced media id(s) with no entry in media.json at all, block/cover will be dropped: ${noMediaEntryIds.join(', ')}`
+      )
+    }
+
     const byLegacyId = new Map()
     let imported = 0
     let skippedUnreferenced = 0
@@ -134,7 +151,7 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
       imported += 1
     }
     console.log(
-      `media: imported ${imported} (${dedupedByContent} deduped by content), skipped as unreferenced ${skippedUnreferenced}, skipped (file missing) ${skippedMissingFile}`
+      `media: imported ${imported} (${dedupedByContent} deduped by content), skipped as unreferenced ${skippedUnreferenced}, skipped (file missing) ${skippedMissingFile}, skipped (no media.json entry) ${noMediaEntryIds.length}`
     )
 
     for (const article of articles) {
@@ -157,10 +174,12 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
     }
 
     let pageCount = 0
+    const unmappedPageSlugs = []
     for (const page of pages) {
       const key = PAGE_KEY_BY_SLUG[page.sourceSlug]
       if (!key || !PAGE_KEYS.includes(key)) {
         console.warn(`unmapped page slug, skipped: ${page.sourceSlug}`)
+        unmappedPageSlugs.push(page.sourceSlug)
         continue
       }
       await Page.findOneAndUpdate(
@@ -176,8 +195,10 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
       imagesDedupedByContent: dedupedByContent,
       imagesSkippedUnreferenced: skippedUnreferenced,
       imagesSkippedMissingFile: skippedMissingFile,
+      unresolvedRefs: { count: noMediaEntryIds.length, ids: noMediaEntryIds },
       articles: articles.length,
       pages: pageCount,
+      unmappedPageSlugs,
     }
   } finally {
     await disconnect()

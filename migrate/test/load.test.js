@@ -161,6 +161,8 @@ describe('loadAll', () => {
     expect(result.imagesSkippedMissingFile).toBe(1) // legacyWpId 5
     expect(result.articles).toBe(1)
     expect(result.pages).toBe(1) // 'not-a-real-page' has no mapping and is skipped
+    expect(result.unmappedPageSlugs).toEqual(['not-a-real-page'])
+    expect(result.unresolvedRefs).toEqual({ count: 0, ids: [] })
 
     await connect(mongod.getUri(), dbName)
     try {
@@ -264,6 +266,45 @@ describe('loadAll', () => {
       const onlyImage = await Image.findOne({ legacyWpId: 10 })
       expect(String(article.cover)).toBe(String(onlyImage._id))
       expect(String(article.blocks[0].image)).toBe(String(onlyImage._id))
+    } finally {
+      await disconnect()
+    }
+  }, 60_000)
+
+  it('counts and reports a referenced legacy id that has no entry in media.json at all, rather than silently dropping it', async () => {
+    // Different failure mode from the "file missing on disk" case above: here
+    // the id never even appears in media.json, so it would never enter the
+    // media loop at all. Without an explicit precomputed diff this resolves
+    // to a dropped block / null cover with nothing anywhere saying so.
+    const media = [] // legacyWpId 42 is referenced below but has no entry here
+    const articles = [
+      {
+        legacyWpId: 4001,
+        category: 'works',
+        status: 'published',
+        slug: { fr: 'ghost-ref', en: 'ghost-ref-en' },
+        title: { fr: 'Ghost Ref', en: 'Ghost Ref' },
+        yearLabel: { fr: '2022', en: '2022' },
+        yearStart: 2022,
+        yearEnd: 2022,
+        coverLegacyId: 42,
+        blocks: [{ type: 'image', image: { legacyWpId: 42 }, caption: { fr: '', en: '' }, size: 'wide' }],
+      },
+    ]
+    await writeFile(join(dataDir, 'media.json'), JSON.stringify(media))
+    await writeFile(join(dataDir, 'articles.json'), JSON.stringify(articles))
+    await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+
+    const dbName = `test-${counter++}`
+    const result = await loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName })
+
+    expect(result.unresolvedRefs).toEqual({ count: 1, ids: [42] })
+
+    await connect(mongod.getUri(), dbName)
+    try {
+      const article = await Article.findOne({ legacyWpId: 4001 })
+      expect(article.cover).toBeNull()
+      expect(article.blocks).toHaveLength(0) // the sole image block referenced the ghost id and was dropped
     } finally {
       await disconnect()
     }
