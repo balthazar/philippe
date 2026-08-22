@@ -15,6 +15,8 @@
 Every task's requirements implicitly include this section. Values are copied verbatim from the spec.
 
 - **Node 24 LTS**, ESM throughout (`"type": "module"` in both package.json files). Node 20's LTS window has ended, so it receives no further security updates; a new project must not be pinned to an unsupported runtime. Node 24 is the current LTS. Node 26 is Current rather than LTS and is not an appropriate pin for a deployed site. Both `package.json` files declare `"engines": { "node": ">=24" }`, `.nvmrc` pins `24.19.0`, and Docker images use `node:24.19-alpine`, a concrete tag rather than a floating major, so a rebuild cannot silently change the runtime underneath us. Node 24 also supports `require(ESM)` natively, which removes the `sanitize-html`/`htmlparser2` interop failure as a class of problem rather than working around it.
+- **The API sets `app.set('trust proxy', 1)`.** It runs behind Traefik, which adds `X-Forwarded-For`. `express-rate-limit` v7 throws `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` when that header is present while Express does not trust the proxy, which turns every login into a 500 in production while passing every test locally. One hop, because Traefik is the only proxy in front of the API.
+- **`bootstrap()` runs before the server listens.** It validates `JWT_SECRET` first and throws if it is missing (jwt.sign throws synchronously on a falsy secret, inside an async handler Express 4 will not catch, which under Node 24 terminates the process at first login). It then connects to MongoDB and seeds the admin. Without it the API serves a healthy `/health` while holding no database connection at all.
 - **Test evidence means the `Test Files` line and the exit code, not the test count.** Vitest prints a passing test count even when an entire file fails to load and contributes zero tests. A suite that fails to collect is a failure regardless of how many other tests passed.
 - API listens on port **8080** and exposes **`/health`**.
 - Categories are exactly: `works`, `exhibitions`, `editions`, `public-orders`.
@@ -39,7 +41,8 @@ Every task's requirements implicitly include this section. Values are copied ver
 
 | File | Responsible for |
 |---|---|
-| `server.js` | App assembly, middleware order, route mounting |
+| `server.js` | Process entry: awaits `bootstrap()`, then listens |
+| `bootstrap.js` | Config validation, database connection, admin seeding |
 | `db.js` | Mongoose connection and admin seeding |
 | `lib/localize.js` | Localized field schema and `localize`/`resolveDoc` readers |
 | `lib/slug.js` | `slugify`, uniqueness suffixing |
@@ -1095,9 +1098,9 @@ git commit -m "feat(api): add featured flag and gallery column/span sizing"
 ### Task 6: Authentication
 
 **Files:**
-- Create: `api/src/routes/auth.js`, `api/src/middleware/auth.js`, `api/src/lib/seedAdmin.js`
-- Modify: `api/src/app.js` (mount the router)
-- Test: `api/test/routes/auth.test.js`
+- Create: `api/src/routes/auth.js`, `api/src/middleware/auth.js`, `api/src/lib/seedAdmin.js`, `api/src/bootstrap.js`
+- Modify: `api/src/app.js` (mount the router, trust the proxy), `api/src/server.js` (await bootstrap)
+- Test: `api/test/routes/auth.test.js`, `api/test/bootstrap.test.js`
 
 **Interfaces:**
 - Consumes: `User` (Task 3), `createApp` (Task 1).
@@ -1176,6 +1179,17 @@ describe('protected routes', () => {
     const res = await agent.get('/api/auth/me')
     expect(res.status).toBe(200)
     expect(res.body.email).toBe('admin@example.com')
+  })
+
+  it('survives an X-Forwarded-For header, as sent by Traefik in production', async () => {
+    // Without app.set('trust proxy'), express-rate-limit's validator throws and
+    // this returns 500, which is how the deployed site would behave.
+    const res = await request(app())
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.7')
+      .send({ email: 'admin@example.com', password: 'correct horse battery' })
+    expect(res.status).toBe(200)
+    expect(res.headers['set-cookie'][0]).toMatch(/philippe_token=/)
   })
 
   it('rejects a mutation missing the CSRF header', async () => {
@@ -1302,13 +1316,59 @@ authRouter.post('/password', requireAuth, requireCsrfHeader, async (req, res) =>
 })
 ```
 
-Mount it in `api/src/app.js`, after `cookieParser()`:
+Mount it in `api/src/app.js`, after `cookieParser()`, and trust the single proxy hop:
 
 ```js
 import { authRouter } from './routes/auth.js'
 // ...
+// Traefik sets X-Forwarded-For. Without this, express-rate-limit's validator
+// throws on every login in production while every local test still passes.
+app.set('trust proxy', 1)
 app.use('/api/auth', authRouter)
 ```
+
+Then the startup path, which nothing else in the plan provides:
+
+```js
+// api/src/bootstrap.js
+import { connect } from './db.js'
+import { seedAdmin } from './lib/seedAdmin.js'
+
+/**
+ * Runs before the server listens. Config is validated FIRST, before any I/O:
+ * jwt.sign throws synchronously on a falsy secret, from inside an async handler
+ * Express 4 does not catch, which on Node 24 takes the process down at the first
+ * login attempt. Better to refuse to start.
+ */
+export async function bootstrap() {
+  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required')
+  await connect()
+  await seedAdmin({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD })
+}
+```
+
+```js
+// api/src/server.js
+import { bootstrap } from './bootstrap.js'
+import { createApp } from './app.js'
+
+export function startServer(port = Number(process.env.PORT || 8080)) {
+  return createApp().listen(port, () => console.log(`api listening on ${port}`))
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  bootstrap()
+    .then(() => startServer())
+    .catch((err) => {
+      console.error('startup failed:', err.message)
+      process.exit(1)
+    })
+}
+```
+
+The `JWT_SECRET` check lives in `bootstrap()` and not in `createApp()` on purpose:
+test files call `createApp()` without setting a secret, and making the app
+constructor throw would break them for no benefit.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
