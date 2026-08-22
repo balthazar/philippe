@@ -2114,7 +2114,7 @@ In `api/src/app.js`, mount `app.use('/media', mediaRouter())` before the API rou
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd api && npm test -- media`
-Expected: PASS, 7 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Run the whole API suite and commit**
 
