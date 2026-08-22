@@ -2,6 +2,7 @@ import express from 'express'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { authRouter } from './routes/auth.js'
+import { adminRouter } from './routes/admin.js'
 import { publicRouter } from './routes/public.js'
 
 export function createApp() {
@@ -12,6 +13,7 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }))
   app.use(cookieParser())
   app.use('/api/auth', authRouter)
+  app.use('/api/admin', adminRouter)
   app.use('/api', publicRouter)
   app.get('/health', (req, res) => res.json({ status: 'ok' }))
   return app
