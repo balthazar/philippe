@@ -2499,8 +2499,9 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
 
     // Surfaced, not buried: an article with no French version is legitimate but
     // rare, and a human should see which ones they are on every run.
-    const enOnly = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
-    return { articles: articles.length, pages: pages.length, media: media.length, enOnly }
+    const enOnlySlugs = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
+    if (enOnlySlugs.length) console.log(`English-only articles (${enOnlySlugs.length}):`, enOnlySlugs.join(', '))
+    return { articles: articles.length, pages: pages.length, media: media.length, enOnlySlugs }
   } finally {
     // The designed behaviour of this function is to throw; leaving the pool
     // open on that path hangs the process.
@@ -2509,10 +2510,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  extractAll().then(({ enOnly, ...counts }) => {
-    console.log('extracted', counts)
-    console.log(`English-only articles (${enOnly.length}):`, enOnly.join(', ') || 'none')
-  })
+  extractAll().then((counts) => console.log('extracted', counts))
 }
 ```
 
@@ -2598,6 +2596,19 @@ describe('mapElementorToBlocks', () => {
     expect(mapElementorToBlocks(chrome, null, {})).toEqual([])
   })
 
+  it('keeps a global widget by mapping its cached settings, rather than dropping it', () => {
+    // The archive holds exactly one, in a published article, carrying a credit line.
+    const g = widget('global', { editor: '<p>Crédit photo</p>', templateID: '19881' })
+    expect(mapElementorToBlocks([g], null, {})).toEqual([
+      { type: 'text', value: { fr: '<p>Crédit photo</p>', en: '' } },
+    ])
+  })
+
+  it('throws on a global widget whose content cannot be inferred', () => {
+    const g = widget('global', { templateID: '19881' })
+    expect(() => mapElementorToBlocks([g], null, { postId: 17185 })).toThrow(/no inferable content/)
+  })
+
   it('throws on an unknown widget rather than silently dropping content', () => {
     expect(() => mapElementorToBlocks([widget('countdown', {})], null, { postId: 42 })).toThrow(/countdown.*42/)
   })
@@ -2651,7 +2662,12 @@ const OPTIONS = {
 }
 const clean = (html) => (html ? sanitizeHtml(html, OPTIONS) : '')
 
-const DROP = new Set(['spacer', 'the7_nav-menu', 'post-navigation', 'global'])
+// `global` is deliberately NOT here. Elementor global widgets keep their
+// canonical copy in an elementor_library template and cache the rendered
+// settings inline. This archive has exactly one, in a PUBLISHED article, and it
+// carries a photo credit line. Dropping it would lose that silently, which is
+// precisely the failure mode this phase exists to prevent.
+const DROP = new Set(['spacer', 'the7_nav-menu', 'post-navigation'])
 
 export function* walkWidgets(nodes = []) {
   for (const node of nodes || []) {
@@ -2709,6 +2725,18 @@ function widgetToBlocks(widget, ctx) {
       return ids.length
         ? [{ type: 'gallery', columns: 3, items: ids.map((id) => ({ image: { legacyWpId: id }, caption: { fr: '', en: '' } })) }]
         : []
+    }
+    case 'global': {
+      // Infer the underlying widget from the cached inline settings rather than
+      // resolving templateID, which needs a second query for the same payload.
+      // If nothing recognisable is there, throw rather than drop it.
+      if (typeof s.editor === 'string') return widgetToBlocks({ ...widget, widgetType: 'text-editor' }, ctx)
+      if (typeof s.title === 'string') return widgetToBlocks({ ...widget, widgetType: 'heading' }, ctx)
+      if (s.image?.id) return widgetToBlocks({ ...widget, widgetType: 'image' }, ctx)
+      throw new Error(
+        `global widget in post ${ctx.postId} (templateID ${s.templateID ?? 'unknown'}) has no inferable content; ` +
+        `inspect it and add an explicit mapping rather than dropping it`
+      )
     }
     default:
       if (DROP.has(widget.widgetType)) return []
