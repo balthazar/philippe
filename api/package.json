@@ -13,7 +13,8 @@
     "mongoose": "^8.6.0",
     "helmet": "^7.1.0",
     "cookie-parser": "^1.4.6",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "sanitize-html": "^2.13.0"
   },
   "devDependencies": {
     "vitest": "^2.0.5",
