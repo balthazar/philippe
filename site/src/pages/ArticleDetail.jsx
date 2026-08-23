@@ -7,6 +7,8 @@ import { routeFor } from '@/routes.js'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 import { splitArticleLayout } from '@/lib/articleLayout.js'
+import { usePageTitle } from '@/lib/usePageTitle.js'
+import { articlePageTitle } from '@/lib/pageTitle.js'
 
 /**
  * The public API always resolves `slug` to the requested language and never
@@ -43,6 +45,12 @@ export function ArticleDetail({ onTranslatedPath }) {
   const { data: translatedPath } = usePageData(`translatedPath:${slug}:${lang}`, () =>
     apiGet(`/articles/${slug}`, { lang: otherLang }).then((data) => routeFor('article', otherLang, data.slug))
   )
+
+  // Coordinator feedback (task 27): the prerender already gets this right
+  // in the raw HTML; this is what keeps it right after hydration and on
+  // every later client-side navigation between articles, using the exact
+  // same formatter prerender/index.js's headFor() does.
+  usePageTitle(article && articlePageTitle(article.title, article.yearLabel))
 
   useEffect(() => {
     onTranslatedPath?.(translatedPath ?? null)

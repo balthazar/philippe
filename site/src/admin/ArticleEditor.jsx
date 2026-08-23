@@ -159,7 +159,11 @@ export function ArticleEditor() {
     : "Cet article est un brouillon : pas encore de page publique."
 
   return (
-    <div className="admin-editor-layout">
+    // Client feedback, round 2: the preview column sits flush against the
+    // page's right edge now (.admin-preview-layout), unlike the centred,
+    // width-capped .admin-editor-layout the "index" screens (Articles,
+    // Pages, Images) still use.
+    <div className="admin-preview-layout">
       <form className="admin-editor" onSubmit={save}>
         {/*
           Client feedback: the title shown here was redundant with the

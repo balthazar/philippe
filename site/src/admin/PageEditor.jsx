@@ -82,10 +82,11 @@ export function PageEditor() {
   if (loading) return null
 
   return (
-    // Same container ArticleEditor uses (task 26): .admin-editor-layout owns
-    // the page's horizontal padding so every child of .admin-editor aligns
-    // to the same edge by default.
-    <div className="admin-editor-layout">
+    // Same container ArticleEditor uses. Client feedback, round 2:
+    // .admin-preview-layout, not .admin-editor-layout -- the preview
+    // column sits flush against the page's right edge now, unlike the
+    // centred, width-capped container the "index" screens still use.
+    <div className="admin-preview-layout">
       <form className="admin-editor" onSubmit={save}>
         <div className="admin-toolbar">
           <h1>{PAGE_LABELS[key] || key}</h1>

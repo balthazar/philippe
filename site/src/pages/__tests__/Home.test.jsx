@@ -43,4 +43,14 @@ describe('Home', () => {
     renderHome()
     await waitFor(() => expect(screen.getByRole('region', { name: /diaporama/i })).toBeInTheDocument())
   })
+
+  // Coordinator feedback (task 27): the prerender computed the right
+  // <title> but nothing set document.title at runtime. Unconditional here
+  // (unlike every other route): the home title never depends on fetched
+  // data, matching headFor()'s own home special case.
+  it('sets document.title to the bare site name, even before the fetch resolves', () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(() => new Promise(() => {}))
+    renderHome()
+    expect(document.title).toBe('Philippe Gronon')
+  })
 })

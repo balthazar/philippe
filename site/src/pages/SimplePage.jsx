@@ -3,6 +3,8 @@ import { useLang } from '@/lang.jsx'
 import { usePageData } from '@/preload.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
+import { usePageTitle } from '@/lib/usePageTitle.js'
+import { staticPageTitle } from '@/lib/pageTitle.js'
 
 // Backs biography, contact, bibliography, links and legal. Fetches
 // /pages/:key and renders the title plus BlockRenderer. The title is placed
@@ -12,6 +14,13 @@ import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 export function SimplePage({ pageKey }) {
   const { lang } = useLang()
   const { data: page } = usePageData(`page:${pageKey}:${lang}`, () => apiGet(`/pages/${pageKey}`, { lang }))
+
+  // Coordinator feedback (task 27): keeps the tab title right after
+  // hydration and on every later client-side navigation, using the exact
+  // same formatter prerender/index.js's headFor() does. Called before the
+  // loading early-return below (Rules of Hooks); falsy while `page` hasn't
+  // loaded yet, which usePageTitle treats as "leave the previous title".
+  usePageTitle(page && staticPageTitle(page.title))
 
   // Task 26, correction to B4: reserve the page's minimum height while
   // loading instead of rendering nothing, so the footer never rides up.

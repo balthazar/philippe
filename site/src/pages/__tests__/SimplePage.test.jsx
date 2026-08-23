@@ -36,6 +36,14 @@ describe('SimplePage', () => {
     expect(container.querySelector('main')).not.toHaveAttribute('aria-busy')
   })
 
+  // Coordinator feedback (task 27): the page's own title, suffixed with the
+  // site name -- the same format headFor() uses for a static page.
+  it('sets document.title from the page title once loaded', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ key: 'biography', title: 'Biographie', blocks: [] })
+    render(<MemoryRouter><LangProvider><SimplePage pageKey="biography" /></LangProvider></MemoryRouter>)
+    await waitFor(() => expect(document.title).toBe('Biographie | Philippe Gronon'))
+  })
+
   // Task 26, part B3: /contact is reduced, through the migration, to a
   // single block (the mailto). Centred generically, keyed to block count,
   // not to pageKey === 'contact' -- so any simple page reduced to one

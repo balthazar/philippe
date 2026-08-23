@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { SEGMENTS, routeFor } from '../src/routes.js'
+import { SITE_NAME, HOME_TITLE, articlePageTitle, staticPageTitle } from '../src/lib/pageTitle.js'
 
 // 8080 is the in-cluster port production uses (Traefik ingress routes /api
 // there). Locally the API runs on 8090 (site/vite.config.js's dev proxy
@@ -43,7 +44,7 @@ export function collectRoutes({ articles, pageKeys }) {
   return [...new Set(routes)]
 }
 
-const SITE_NAME = 'Philippe Gronon'
+// SITE_NAME imported from src/lib/pageTitle.js (shared with the runtime).
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
 const routeLang = (route) => (route === '/en' || route.startsWith('/en/') ? 'en' : 'fr')
 
@@ -89,7 +90,7 @@ export function headFor(route, content, site = SITE) {
   if (match) {
     const title = localize(match.title, lang)
     const year = localize(match.yearLabel, lang)
-    tags.push(`<title>${esc(year ? `${title}, ${year}` : title)} | ${SITE_NAME}</title>`)
+    tags.push(`<title>${esc(articlePageTitle(title, year))}</title>`)
     description = localize(match.seoDescription, lang)
 
     // Task 27, Part A: articles live at the root now, so their hreflang
@@ -112,14 +113,14 @@ export function headFor(route, content, site = SITE) {
     // "<page title> | Philippe Gronon" -- every other route gets the
     // suffixed form.
     if (pageKey === 'home') {
-      tags.push(`<title>${SITE_NAME}</title>`)
+      tags.push(`<title>${esc(HOME_TITLE)}</title>`)
       description = page ? localize(page.seoDescription, lang) : ''
     } else if (page) {
       const title = localize(page.title, lang)
-      tags.push(`<title>${esc(title)} | ${SITE_NAME}</title>`)
+      tags.push(`<title>${esc(staticPageTitle(title))}</title>`)
       description = localize(page.seoDescription, lang)
     } else {
-      tags.push(`<title>${SITE_NAME}</title>`)
+      tags.push(`<title>${esc(HOME_TITLE)}</title>`)
     }
   }
 
@@ -184,8 +185,18 @@ const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
 // <html lang> test on this project passed for the wrong reason because it
 // read a shared `document` that state bled into between cases. This has no
 // such shared, mutable state to bleed.
+// Strips any <title> already in the template (index.html now carries its
+// own default, so there is a sensible value before React mounts -- see
+// index.html itself) before a caller injects its own. Without this, the
+// route-specific title `head`/`extra` carries would be a SECOND <title> in
+// <head>, and per the DOM/HTML spec `document.title` -- and what a crawler
+// that never runs JS indexes -- reads the FIRST <title> in the document,
+// not the last. That would silently make the generic default win over the
+// real, per-route title in the raw HTML on every page.
+const stripExistingTitle = (html) => html.replace(/<title>[^<]*<\/title>\s*/i, '')
+
 export function pageHtml(route, template, head, bodyHtml, preload = {}) {
-  return template
+  return stripExistingTitle(template)
     .replace(/<html lang="[^"]*"/, `<html lang="${routeLang(route)}"`)
     .replace('</head>', `${head}\n</head>`)
     .replace('<div id="root"></div>', `<div id="root">${bodyHtml}</div>`)
@@ -200,7 +211,7 @@ export function pageHtml(route, template, head, bodyHtml, preload = {}) {
 // Controller correction 3: noindex here, on top of robots.txt's Disallow,
 // since a Disallow alone doesn't guarantee a linked-to page stays unindexed.
 export function adminPageHtml(template) {
-  return template.replace('</head>', `<title>Admin | ${SITE_NAME}</title>\n<meta name="robots" content="noindex">\n</head>`)
+  return stripExistingTitle(template).replace('</head>', `<title>Admin | ${SITE_NAME}</title>\n<meta name="robots" content="noindex">\n</head>`)
 }
 
 async function fetchJson(path) {

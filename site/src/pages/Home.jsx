@@ -4,6 +4,8 @@ import { usePageData } from '@/preload.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 import { Slideshow } from '@/components/Slideshow.jsx'
+import { usePageTitle } from '@/lib/usePageTitle.js'
+import { HOME_TITLE } from '@/lib/pageTitle.js'
 
 export function Home() {
   const { lang } = useLang()
@@ -11,6 +13,12 @@ export function Home() {
     const [home, page] = await Promise.all([apiGet('/home', { lang }), apiGet('/pages/home', { lang })])
     return { slides: home.slides, intro: page }
   })
+
+  // Coordinator feedback (task 27): unconditional (unlike every other
+  // route's title), matching headFor()'s own home special case -- the home
+  // route's title never depends on fetched data, so it doesn't wait for
+  // `state` to resolve.
+  usePageTitle(HOME_TITLE)
 
   return (
     <main>

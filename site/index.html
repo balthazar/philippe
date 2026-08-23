@@ -3,6 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Coordinator feedback (task 27): a sensible value before React
+         mounts (the dev server, and any build that skips the prerender,
+         never had one otherwise). Kept in sync by hand with HOME_TITLE in
+         src/lib/pageTitle.js, since a static HTML file can't import a JS
+         constant -- prerender/index.js's pageHtml() replaces this with the
+         real per-route title on every prerendered page (see
+         stripExistingTitle there for why it's a replace, not an append),
+         and usePageTitle() does the same at runtime after hydration. -->
+    <title>Philippe Gronon</title>
     <!-- Client feedback (task 27): the artist's own PG mark, already copied
          into public/ for the admin nav, is the obvious source for a
          favicon -- no new asset needed. -->

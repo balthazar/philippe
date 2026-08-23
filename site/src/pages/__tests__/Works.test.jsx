@@ -43,6 +43,13 @@ describe('Works page', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: /porte/i })).toHaveAttribute('href', '/porte'))
   })
 
+  // Coordinator feedback (task 27): the section's own title, from the same
+  // /pages/works response headFor() reads at build time.
+  it('sets document.title from the /pages/works title', async () => {
+    render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
+    await waitFor(() => expect(document.title).toBe('Œuvres | Philippe Gronon'))
+  })
+
   // Task 26, correction to B4: Works previously had no loading guard at
   // all, so it painted an empty grid immediately, indistinguishable from a
   // genuinely empty category -- both looked like nothing, and the footer

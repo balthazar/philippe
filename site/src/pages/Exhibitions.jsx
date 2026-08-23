@@ -4,6 +4,8 @@ import { usePageData } from '@/preload.jsx'
 import { ArticleGrid } from '@/components/ArticleGrid.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
+import { usePageTitle } from '@/lib/usePageTitle.js'
+import { staticPageTitle } from '@/lib/pageTitle.js'
 
 // Works.jsx without the extra category sections: a flat grid, newest first.
 // The API already sorts /articles by position asc, yearStart desc,
@@ -17,6 +19,9 @@ export function Exhibitions() {
     ])
     return { items: exhibitions.items, intro }
   })
+
+  // Coordinator feedback (task 27): same reasoning as Works.jsx.
+  usePageTitle(data?.intro?.title && staticPageTitle(data.intro.title))
 
   // Task 26, correction to B4: see the identical guard in Works.jsx -- a
   // still-loading page reserves space and renders no grid; a loaded but

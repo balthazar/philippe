@@ -332,18 +332,37 @@
    ~1100px. The wider absence of responsive design in this project is a
    separate, already-scheduled piece of work -- this is the one contained
    exception. */
+/* The shared page container for the three "index" screens (Articles,
+   Pages, Images -- via .admin-index-content, client feedback item 3):
+   centred, capped, padded on both sides. NOT used by the two editor
+   forms' own layout any more -- see .admin-preview-layout below, which
+   diverged from this once the preview column needed to sit flush against
+   the page's right edge instead of being centred with this. */
 .admin-editor-layout {
   display: flex;
   align-items: flex-start;
   gap: 2.5rem;
   max-width: 1400px;
   margin: 0 auto;
-  /* Client feedback: no bottom padding -- it stopped the preview column
-     (now sticky through --admin-nav-height, above) from reaching the
-     bottom of the page. .admin-editor keeps its own bottom clearance
-     below, for a different reason (the sticky save bar), unaffected by
-     this row's own padding. */
   padding: 0 1.5rem;
+}
+
+/* ArticleEditor/PageEditor's own row: form + live preview. Client
+   feedback, round 2: the client pointed at the gap on the right of the
+   screen and confirmed he wants the preview column flush against the
+   page's right edge -- this reverses an earlier instruction to keep that
+   gap, not a decision of ours. No `max-width` or right-hand
+   padding/margin to fight that: .admin-preview-pane (flex: 1 1 420px, no
+   cap of its own) is what stretches to reach it. .admin-editor keeps its
+   own 640px max-width below, so the FORM doesn't also stretch on a wide
+   viewport, only the preview column does. Left padding only, for the
+   form's own left edge -- unlike .admin-editor-layout above, this is
+   deliberately NOT centred or width-capped as a row. */
+.admin-preview-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 2.5rem;
+  padding-left: 1.5rem;
 }
 
 .admin-editor {
@@ -354,17 +373,15 @@
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
-  /* Clearance so the sticky save bar below never covers the last block's
-     controls when scrolled all the way down (client feedback item 2).
-     Kept: .admin-editor-actions sticks to `bottom: 0` of the page's own
-     scroll (this column is normal document flow, not its own scrolling
-     container, and nothing between them sets overflow), which this
-     column's own bottom padding is what's still budgeting for -- the
-     .admin-editor-layout bottom padding removed above is a different rule
-     entirely (it only ever affected where the ROW's own box ended, not
-     where the sticky bar unsticks within this column), so removing that
-     one doesn't touch the reason this one exists. */
-  padding-bottom: 4.5rem;
+  /* Client feedback, round 2: confirmed doing nothing useful, removed.
+     .admin-editor-actions's containing block for `position: sticky` is
+     THIS column, so its stuck range is bounded by this column's own box --
+     it can only ever stick up to the point where this column's bottom
+     edge reaches the viewport bottom, which is exactly when it settles
+     into its normal-flow position as this column's last child. There is
+     no gap in that handoff for it to (dis)cover anything in, with or
+     without trailing padding here; nothing else in this column relies on
+     it either. */
 }
 
 .admin-editor .admin-toolbar {
@@ -614,12 +631,11 @@
    rendered article/page sits clear of the panel's own frame instead of
    flush against it -- the preview is a picture of a white page, and a real
    page has margins.
-   Client feedback (item 4): this is INTERNAL padding, inside the white
-   pane, fixing gaps that showed the page behind it while scrolling -- it is
-   not the same thing as the pane's own OUTER right-hand edge, which still
-   sits inset from the row's true right edge by .admin-editor-layout's own
-   padding + this pane's flex-basis (unchanged, and deliberately not
-   stretched flush to the page). */
+   Client feedback, round 2: this is INTERNAL padding, inside the white
+   pane, fixing gaps that showed the page behind it while scrolling -- a
+   different thing from the pane's own OUTER right-hand edge (now flush
+   against the page's right edge, .admin-preview-layout above), and
+   unaffected by that change. */
 .admin-preview-scroll {
   overflow-y: auto;
   padding: 1.25rem 1.5rem;
@@ -650,7 +666,8 @@
 }
 
 @media (max-width: 1100px) {
-  .admin-editor-layout {
+  .admin-editor-layout,
+  .admin-preview-layout {
     flex-direction: column;
   }
 

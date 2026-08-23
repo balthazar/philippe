@@ -4,6 +4,8 @@ import { usePageData } from '@/preload.jsx'
 import { ArticleGrid } from '@/components/ArticleGrid.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
+import { usePageTitle } from '@/lib/usePageTitle.js'
+import { staticPageTitle } from '@/lib/pageTitle.js'
 
 const SECTION_LABELS = {
   editions: { fr: 'Éditions', en: 'Editions' },
@@ -21,6 +23,11 @@ export function Works() {
     ])
     return { works: works.items, editions: editions.items, 'public-orders': orders.items, intro }
   })
+
+  // Coordinator feedback (task 27): `data.intro` is the same /pages/works
+  // response headFor() reads content.pages.works.title from at build time,
+  // so this is the same title, just fetched at request time instead.
+  usePageTitle(data?.intro?.title && staticPageTitle(data.intro.title))
 
   // Task 26, correction to B4: this page previously had no loading guard at
   // all, painting an empty grid immediately -- indistinguishable from a

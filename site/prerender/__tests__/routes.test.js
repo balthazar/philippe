@@ -420,4 +420,21 @@ describe('pageHtml', () => {
     // it, even though ">" itself is left alone.
     expect(out).toContain('\\u003c/script>\\u003cscript>alert(1)')
   })
+
+  // Coordinator feedback: index.html now carries its own default <title>
+  // (so there is a sensible value before React mounts, and on a build that
+  // skips the prerender). Without stripping it first, the route-specific
+  // <title> in `head` would be a SECOND <title> tag appended later in
+  // <head> -- and per the DOM/HTML spec, `document.title` (and what a
+  // crawler that doesn't execute JS indexes) reads the FIRST <title> in the
+  // document, not the last. That would silently un-fix every per-route
+  // title this project prerenders, since the generic default would always
+  // win over the real one in the raw HTML.
+  it('replaces an existing <title> in the template rather than adding a second one', () => {
+    const templateWithTitle = '<!doctype html><html lang="xx"><head><title>Philippe Gronon</title></head><body><div id="root"></div></body></html>'
+    const out = pageHtml('/oeuvres/porte', templateWithTitle, '<title>Porte, 2023 | Philippe Gronon</title>', '<p>hi</p>')
+    expect(out.match(/<title>/g)).toHaveLength(1)
+    expect(out).toContain('<title>Porte, 2023 | Philippe Gronon</title>')
+    expect(out).not.toContain('<title>Philippe Gronon</title>')
+  })
 })

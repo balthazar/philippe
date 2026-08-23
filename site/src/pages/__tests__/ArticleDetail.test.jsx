@@ -44,6 +44,20 @@ describe('ArticleDetail', () => {
     expect(container.querySelector('main')).not.toHaveAttribute('aria-busy')
   })
 
+  // Coordinator feedback (task 27): the exact same format headFor() uses
+  // for an article's prerendered <title> -- title, year, site name.
+  it('sets document.title with the title and year once loaded', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ slug: 'porte', title: 'Porte', yearLabel: '2023', blocks: [] })
+    renderAt('/oeuvres/porte')
+    await waitFor(() => expect(document.title).toBe('Porte, 2023 | Philippe Gronon'))
+  })
+
+  it('omits the year from document.title when the article has none', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ slug: 'porte', title: 'Porte', blocks: [] })
+    renderAt('/oeuvres/porte')
+    await waitFor(() => expect(document.title).toBe('Porte | Philippe Gronon'))
+  })
+
   it('still renders the reserved-height main, not busy, on a 404', async () => {
     vi.spyOn(api, 'apiGet').mockRejectedValue(Object.assign(new Error('nope'), { status: 404 }))
     const { container } = renderAt('/oeuvres/inconnu')

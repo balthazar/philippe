@@ -24,6 +24,12 @@ describe('Exhibitions page', () => {
     await waitFor(() => expect(screen.getByText(/retro/i)).toBeInTheDocument())
   })
 
+  // Coordinator feedback (task 27): same reasoning as Works.jsx.
+  it('sets document.title from the /pages/exhibitions title', async () => {
+    render(<MemoryRouter><LangProvider><Exhibitions /></LangProvider></MemoryRouter>)
+    await waitFor(() => expect(document.title).toBe('Expositions | Philippe Gronon'))
+  })
+
   // Task 26, correction to B4: same guard as Works -- no loading state
   // before this rendered an empty grid immediately, indistinguishable from
   // a genuinely empty category.
