@@ -10,8 +10,9 @@
   /* Two families, split once here and inherited everywhere. Chrome (nav,
      wordmark, FR/EN, captions, section/heading labels) reads in Libre
      Franklin; running body copy defaults to Didact Gothic. Both are
-     self-hosted via @fontsource (see main.jsx) rather than the Google
-     Fonts CDN, so no visitor request ever leaves this origin. */
+     self-hosted (see design/fonts.css, files copied from @fontsource into
+     public/fonts/) rather than the Google Fonts CDN, so no visitor request
+     ever leaves this origin. */
   --font-chrome: "Libre Franklin", sans-serif;
   --font-body: "Didact Gothic", sans-serif;
 
@@ -29,6 +30,17 @@
 
   --container: 1440px;
   --gutter: clamp(1rem, 4vw, 3rem);
+
+  /* Client-specified header geometry: a fixed 80px height with everything
+     vertically centred inside it, and 60px of horizontal padding. Named
+     here (rather than left as bare px in the rule) so the sticky
+     .category-section heading offset below can reference the real header
+     height instead of a hand-measured guess. --page-gutter is currently
+     used only by the header; the main .container still uses --gutter, its
+     own separate clamp, until the client confirms whether the page as a
+     whole should move to this 60px figure too. */
+  --header-height: 5rem;
+  --page-gutter: 3.75rem;
 
   /* Chosen against the real archive: tall enough that the tallest works
      (thermometers, portholes, aspect ~0.86) aren't cramped, short enough

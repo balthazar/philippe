@@ -50,7 +50,8 @@ picture {
   align-items: center;
   gap: var(--space-3);
   background: var(--paper);
-  padding: var(--space-2) var(--gutter);
+  height: var(--header-height);
+  padding-inline: var(--page-gutter);
   line-height: 1;
   /* Set once here, on the container, so every piece of header text
      (wordmark, nav links, FR/EN) inherits the same size/weight/family
@@ -153,8 +154,9 @@ picture {
 
 .category-section h2 {
   position: sticky;
-  top: 3rem; /* matches .site-header's rendered height (48px) so the
-                sticky heading clears it instead of sitting underneath */
+  top: var(--header-height); /* clears the sticky header exactly, since the
+                                 header's height is now a fixed, named token
+                                 rather than an emergent/hand-measured value */
   z-index: 5;
   margin: 0 0 var(--space-2);
   padding: var(--space-1) 0;
