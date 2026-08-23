@@ -225,6 +225,60 @@ picture {
   color: var(--ink-soft);
 }
 
+/* Homepage slideshow */
+
+.slideshow {
+  position: relative;
+  margin: var(--space-3) 0 var(--space-4);
+  text-align: center;
+}
+
+/* Natural aspect, no background panel behind the image: the client
+   explicitly rejected a tinted/grey letterbox on the works page, and the
+   same rule applies here. max-height keeps a tall image from pushing the
+   caption and controls off-screen without ever cropping or masking it. */
+.slideshow img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+}
+
+.slide-caption {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-s);
+  color: var(--ink-soft);
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.slideshow-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-family: var(--font-chrome);
+  font-size: var(--text-s);
+  color: var(--ink-soft);
+  letter-spacing: 0.06em;
+}
+
+.slideshow-controls button {
+  border: 0;
+  background: none;
+  padding: var(--space-1);
+  color: var(--ink);
+  font-size: var(--text-l);
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* Article page */
 
 .article-header {

@@ -4,6 +4,7 @@ import { useLang } from './lang.jsx'
 import { SEGMENTS } from './routes.js'
 import { Header } from '@/components/Header.jsx'
 import { Footer } from '@/components/Footer.jsx'
+import { Home } from '@/pages/Home.jsx'
 import { Works } from '@/pages/Works.jsx'
 import { ArticleDetail } from '@/pages/ArticleDetail.jsx'
 
@@ -33,7 +34,7 @@ function localizedRoutes(lang, onTranslatedPath) {
   const s = (key) => SEGMENTS[key][lang]
   return (
     <>
-      <Route index element={<ScaffoldPage label="Home" />} />
+      <Route index element={<Home />} />
       <Route path={s('works')} element={<Works />} />
       <Route
         path={`${s('works')}/:slug`}
