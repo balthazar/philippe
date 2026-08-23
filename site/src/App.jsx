@@ -58,11 +58,11 @@ function PublicLayout({ translatedPath }) {
   const isHome = pathname === '/' || pathname === '/en'
 
   return (
-    <>
+    <div className="site-shell">
       <Header translatedPath={translatedPath} />
       <Outlet />
       {!isHome && <Footer />}
-    </>
+    </div>
   )
 }
 

@@ -1,14 +1,37 @@
 import { useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
 import { usePageData } from '@/preload.jsx'
 import { routeFor } from '@/routes.js'
 import { Container } from '@/components/Container.jsx'
-import { BlockRenderer } from '@/components/BlockRenderer.jsx'
-import { splitArticleLayout } from '@/lib/articleLayout.js'
+import { ArticleBody } from '@/components/ArticleBody.jsx'
+import { ExhibitionsChrome } from '@/components/ExhibitionsChrome.jsx'
+import { sortExhibitionsByYear } from '@/lib/exhibitionsOrder.js'
 import { usePageTitle } from '@/lib/usePageTitle.js'
 import { articlePageTitle } from '@/lib/pageTitle.js'
+
+/**
+ * Task 28, part 3: the exhibitions timeline is persistent chrome for the
+ * whole section, not just the /expositions index -- every exhibition
+ * article page shows the same year list, with its own year marked current.
+ * A separate component (rather than a conditional hook call inside
+ * ArticleDetail itself) because the timeline's own fetch must only ever run
+ * for an exhibition article: React's rules of hooks forbid calling a hook
+ * conditionally in the component that owns it, but a child component that is
+ * only ever mounted for exhibitions can call its own hooks unconditionally.
+ */
+function ExhibitionArticle({ article, lang }) {
+  const { data: items } = usePageData(`exhibitionsTimeline:${lang}`, () =>
+    apiGet('/articles', { category: 'exhibitions', lang }).then((res) => sortExhibitionsByYear(res.items))
+  )
+  // `items` starts null while the timeline list is still loading -- the
+  // article's own content (already loaded, or this component would not be
+  // mounted yet) renders immediately regardless, with the timeline column
+  // filling in a moment later, rather than blanking the whole page for that
+  // one extra request.
+  return <ExhibitionsChrome items={items || []} article={article} />
+}
 
 /**
  * The public API always resolves `slug` to the requested language and never
@@ -37,7 +60,7 @@ import { articlePageTitle } from '@/lib/pageTitle.js'
  */
 export function ArticleDetail({ onTranslatedPath }) {
   const { slug } = useParams()
-  const { lang, otherLang, href } = useLang()
+  const { lang, otherLang } = useLang()
   const { data: article, error } = usePageData(`article:${slug}:${lang}`, () =>
     apiGet(`/articles/${slug}`, { lang })
   )
@@ -74,44 +97,13 @@ export function ArticleDetail({ onTranslatedPath }) {
     return <Container as="main" className="page-main" aria-busy="true" />
   }
 
-  // Task 26, part B2: text left, gallery right on desktop, stacked as
-  // title, subtitle, then gallery on mobile. Only a clean text-then-media
-  // article (the works shape) splits into two columns; see
-  // articleLayout.js for why an interleaved one (a handful of
-  // multi-exhibition-per-year pages) falls back to a single column.
-  const { text, media, twoColumn } = splitArticleLayout(article.blocks)
-
   return (
     <Container as="main" className="page-main">
-      <article>
-        <header className="article-header">
-          <h1>{article.title}</h1>
-          {article.subtitle && <p className="article-subtitle">{article.subtitle}</p>}
-          {article.yearLabel && <p className="article-year">{article.yearLabel}</p>}
-        </header>
-
-        {twoColumn ? (
-          <div className="article-layout">
-            <div className="article-text-col"><BlockRenderer blocks={text} /></div>
-            <div className="article-media-col"><BlockRenderer blocks={media} /></div>
-          </div>
-        ) : (
-          <BlockRenderer blocks={article.blocks} />
-        )}
-
-        <nav className="article-pager" aria-label={lang === 'fr' ? 'Navigation entre œuvres' : 'Article navigation'}>
-          {article.prev && (
-            <Link to={href('article', article.prev.slug)} rel="prev">
-              {lang === 'fr' ? 'Précédent' : 'Previous'}
-            </Link>
-          )}
-          {article.next && (
-            <Link to={href('article', article.next.slug)} rel="next">
-              {lang === 'fr' ? 'Suivant' : 'Next'}
-            </Link>
-          )}
-        </nav>
-      </article>
+      {article.category === 'exhibitions' ? (
+        <ExhibitionArticle article={article} lang={lang} />
+      ) : (
+        <article><ArticleBody article={article} /></article>
+      )}
     </Container>
   )
 }

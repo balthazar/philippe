@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import * as api from '@/api.js'
 import Admin from '../Admin.jsx'
 
 beforeEach(() => vi.restoreAllMocks())
 
-function renderAdmin() {
+function renderAdmin(initialEntries = ['/admin']) {
   return render(
-    <MemoryRouter initialEntries={['/admin']}>
+    <MemoryRouter initialEntries={initialEntries}>
       <Routes>
         <Route path="/admin/*" element={<Admin />} />
       </Routes>
@@ -42,5 +43,77 @@ describe('Admin nav', () => {
     expect(mark).toHaveAttribute('href', '/')
     expect(mark).not.toHaveAttribute('target')
     expect(mark).not.toHaveAttribute('rel')
+  })
+})
+
+// Task 28, client feedback: leaving the editor with unsaved changes must be
+// blocked at the points that actually leave it -- the admin nav's own
+// links, which stay on screen across every admin route. Not a browser
+// confirm(): an in-page prompt, consistent with ConfirmDelete.
+describe('Admin nav unsaved-changes guard', () => {
+  const ARTICLE = {
+    _id: 'a1',
+    title: { fr: 'Titre', en: '' },
+    yearLabel: { fr: '', en: '' },
+    slug: { fr: 'titre', en: '' },
+    category: 'works',
+    yearStart: '',
+    yearEnd: '',
+    cover: null,
+    blocks: [],
+    status: 'draft',
+  }
+
+  beforeEach(() => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/auth/me') return { email: 'philippe.gronon@me.com' }
+      if (path === '/admin/articles/a1') return ARTICLE
+      return { items: [], total: 0 }
+    })
+  })
+
+  it('navigates immediately when there are no unsaved changes', async () => {
+    renderAdmin(['/admin/articles/a1'])
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('link', { name: 'Articles' }))
+    expect(screen.queryByText(/non enregistrées/)).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByDisplayValue('Titre')).not.toBeInTheDocument())
+  })
+
+  it('prompts before an Articles/Pages/Images nav click when changes are unsaved, and stays put on Annuler', async () => {
+    renderAdmin(['/admin/articles/a1'])
+    const titleInput = await screen.findByDisplayValue('Titre')
+    await userEvent.type(titleInput, ' modifié')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Pages' }))
+    expect(screen.getByText('Modifications non enregistrées. Quitter quand même ?')).toBeInTheDocument()
+    // Still on the editor -- the nav click was intercepted, not followed.
+    expect(screen.getByDisplayValue(/Titre/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+    expect(screen.queryByText(/non enregistrées/)).not.toBeInTheDocument()
+    expect(screen.getByDisplayValue(/Titre/)).toBeInTheDocument()
+  })
+
+  it('navigates only after confirming Quitter', async () => {
+    renderAdmin(['/admin/articles/a1'])
+    const titleInput = await screen.findByDisplayValue('Titre')
+    await userEvent.type(titleInput, ' modifié')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Images' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Quitter' }))
+    await waitFor(() => expect(screen.queryByDisplayValue(/Titre/)).not.toBeInTheDocument())
+  })
+
+  it('guards the Déconnexion button the same way', async () => {
+    renderAdmin(['/admin/articles/a1'])
+    const titleInput = await screen.findByDisplayValue('Titre')
+    await userEvent.type(titleInput, ' modifié')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Déconnexion' }))
+    expect(screen.getByText('Modifications non enregistrées. Quitter quand même ?')).toBeInTheDocument()
+    // Still authenticated -- logout was intercepted, not called.
+    expect(screen.getByDisplayValue(/Titre/)).toBeInTheDocument()
   })
 })

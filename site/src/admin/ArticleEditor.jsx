@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiGet, apiSend } from '@/api.js'
 import { routeFor } from '@/routes.js'
@@ -8,6 +8,7 @@ import { BlockEditor } from './BlockEditor.jsx'
 import { ArticlePreview } from './ArticlePreview.jsx'
 import { ExternalLinkIcon } from './icons.jsx'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
+import { countUnsavedChanges } from './unsavedChanges.js'
 
 const STATUS_LABELS = { draft: 'Brouillon', published: 'Publié' }
 
@@ -34,12 +35,19 @@ const EMPTY_ARTICLE = {
   status: 'draft',
 }
 
-export function ArticleEditor() {
+export function ArticleEditor({ onUnsavedCountChange } = {}) {
   const { id } = useParams()
   const navigate = useNavigate()
   const onSessionExpired = useSessionExpired()
 
   const [article, setArticle] = useState(EMPTY_ARTICLE)
+  // Task 28: the snapshot `article` is compared against to count unsaved
+  // changes -- set once the article loads, and again after every
+  // successful save (create or update), never touched by `update()`
+  // itself. `null` until a real snapshot exists (a brand-new, unsaved
+  // article has nothing to diff against yet, so its count is 0 -- see
+  // countUnsavedChanges' own `!saved` guard).
+  const [lastSaved, setLastSaved] = useState(id ? null : EMPTY_ARTICLE)
   const [lang, setLang] = useState('fr')
   const [loading, setLoading] = useState(Boolean(id))
   const [saving, setSaving] = useState(false)
@@ -48,11 +56,40 @@ export function ArticleEditor() {
   const [statusBusy, setStatusBusy] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
+  const unsavedCount = useMemo(() => countUnsavedChanges(article, lastSaved), [article, lastSaved])
+
+  // Covers closing the tab, reloading, and navigating to a typed/external
+  // URL -- the only cases a plain <BrowserRouter> app (no data router, so
+  // no useBlocker) can guard at the browser level at all. In-app
+  // navigation (the admin nav's own links) is guarded separately, in
+  // Admin.jsx, via onUnsavedCountChange below; browser back/forward is
+  // NOT covered by either (see the task report).
+  useEffect(() => {
+    if (!unsavedCount) return undefined
+    const handler = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [unsavedCount])
+
+  // Mirrors ArticleDetail's onTranslatedPath wiring in App.jsx: a live
+  // value reported up to an ancestor (here, Admin.jsx's nav) that only
+  // this mounted child actually knows, cleared on unmount so a stale count
+  // never survives into whatever admin route is visited next.
+  useEffect(() => {
+    onUnsavedCountChange?.(unsavedCount)
+    return () => onUnsavedCountChange?.(0)
+  }, [unsavedCount, onUnsavedCountChange])
+
   useEffect(() => {
     if (!id) return
     let cancelled = false
     apiGet(`/admin/articles/${id}`)
-      .then((data) => { if (!cancelled) { setArticle(data); setLoading(false) } })
+      .then((data) => {
+        if (cancelled) return
+        setArticle(data)
+        setLastSaved(data)
+        setLoading(false)
+      })
       .catch((err) => {
         if (cancelled) return
         setLoading(false)
@@ -90,12 +127,14 @@ export function ArticleEditor() {
       if (id) {
         const updated = await apiSend('PATCH', `/admin/articles/${id}`, payload)
         setArticle(updated)
+        setLastSaved(updated)
       } else {
         const created = await apiSend('POST', '/admin/articles', payload)
         // Swap to the edit route for the article that now exists, so a
         // second save PATCHes it instead of creating a duplicate.
         navigate(`/admin/articles/${created._id}`, { replace: true })
         setArticle(created)
+        setLastSaved(created)
       }
       setSaved(true)
     } catch (err) {
@@ -118,6 +157,11 @@ export function ArticleEditor() {
     try {
       const updated = await apiSend('PATCH', `/admin/articles/${id}`, { status })
       setArticle((prev) => ({ ...prev, status: updated.status }))
+      // Already persisted by this PATCH, not a pending edit: without this,
+      // the unsaved-changes count would read "1" for `status` immediately
+      // after publishing/unpublishing, even though nothing is actually
+      // unsaved.
+      setLastSaved((prev) => (prev ? { ...prev, status: updated.status } : prev))
     } catch (err) {
       if (err?.status === 401) onSessionExpired()
       else setError("Impossible de changer le statut de cet article.")
@@ -256,6 +300,15 @@ export function ArticleEditor() {
 
         <div className="admin-editor-actions">
           <button type="submit" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+          {/* Task 28, client feedback: a count of pending edits beside
+              Enregistrer -- see unsavedChanges.js for exactly what counts
+              as one. Not shown at all at 0, the same way {saved} below only
+              shows right after a save; a 0 badge would just be noise. */}
+          {unsavedCount > 0 && (
+            <span className="unsaved-count">
+              {unsavedCount} modification{unsavedCount > 1 ? 's' : ''} non enregistrée{unsavedCount > 1 ? 's' : ''}
+            </span>
+          )}
           {saved && <span className="save-confirmation">Enregistré</span>}
           {id && (
             <span className="admin-editor-delete">

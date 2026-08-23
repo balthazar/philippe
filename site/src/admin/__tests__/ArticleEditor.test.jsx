@@ -218,3 +218,86 @@ describe('ArticleEditor publish and delete', () => {
     expect(send).toHaveBeenCalledWith('DELETE', '/admin/articles/a1')
   })
 })
+
+// Task 28, client feedback: (a) a count of pending edits beside
+// Enregistrer, (b) leaving the page while any exist gets blocked.
+describe('ArticleEditor unsaved changes', () => {
+  it('shows no count when nothing has changed since load', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+    expect(screen.queryByText(/non enregistrée/)).not.toBeInTheDocument()
+  })
+
+  it('counts an edited field and updates as more fields change', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
+    renderEditor()
+    const titleInput = await screen.findByDisplayValue('Titre')
+
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, 'Nouveau titre')
+    expect(await screen.findByText('1 modification non enregistrée')).toBeInTheDocument()
+
+    const slugInput = screen.getByDisplayValue('titre')
+    await userEvent.clear(slugInput)
+    await userEvent.type(slugInput, 'nouveau-titre')
+    expect(await screen.findByText('2 modifications non enregistrées')).toBeInTheDocument()
+  })
+
+  it('clears the count back to 0 after a successful save', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
+    vi.spyOn(api, 'apiSend').mockResolvedValue({ ...ARTICLE, title: { fr: 'Nouveau titre', en: '' } })
+    renderEditor()
+    const titleInput = await screen.findByDisplayValue('Titre')
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, 'Nouveau titre')
+    await screen.findByText(/non enregistrée/)
+
+    await userEvent.click(screen.getByRole('button', { name: /enregistrer/i }))
+    await waitFor(() => expect(screen.queryByText(/non enregistrée/)).not.toBeInTheDocument())
+  })
+
+  it('does not count publishing/unpublishing itself as an unsaved change', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, status: 'draft' })
+    vi.spyOn(api, 'apiSend').mockResolvedValue({ ...ARTICLE, status: 'published' })
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Publier' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Dépublier' })).toBeInTheDocument())
+    expect(screen.queryByText(/non enregistrée/)).not.toBeInTheDocument()
+  })
+
+  it('registers a beforeunload handler only while changes are unsaved', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    renderEditor()
+    const titleInput = await screen.findByDisplayValue('Titre')
+    expect(addSpy).not.toHaveBeenCalledWith('beforeunload', expect.any(Function))
+
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, 'x')
+    await waitFor(() => expect(addSpy).toHaveBeenCalledWith('beforeunload', expect.any(Function)))
+  })
+
+  it('reports its live unsaved count up via onUnsavedCountChange, clearing it on unmount', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
+    const onUnsavedCountChange = vi.fn()
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/admin/articles/a1']}>
+        <Routes>
+          <Route path="/admin/articles/:id" element={<ArticleEditor onUnsavedCountChange={onUnsavedCountChange} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    const titleInput = await screen.findByDisplayValue('Titre')
+    onUnsavedCountChange.mockClear()
+
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, 'x')
+    await waitFor(() => expect(onUnsavedCountChange).toHaveBeenLastCalledWith(1))
+
+    unmount()
+    expect(onUnsavedCountChange).toHaveBeenLastCalledWith(0)
+  })
+})

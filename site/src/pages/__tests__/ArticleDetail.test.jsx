@@ -114,4 +114,89 @@ describe('ArticleDetail', () => {
     expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
     expect(screen.getByText('Deux')).toBeInTheDocument()
   })
+
+  // Task 28, part 1: the client found the previous/next pager ugly and
+  // wants it gone. The API still computes prev/next (left in place on
+  // purpose -- see api/src/routes/public.js), so the fixture below
+  // deliberately includes both to prove removal isn't just "the fixture
+  // never had a sibling".
+  it('renders no article pager, even when the article has prev/next siblings', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      slug: 'porte', title: 'Porte', blocks: [],
+      prev: { slug: 'avant', title: 'Avant' },
+      next: { slug: 'apres', title: 'Après' },
+    })
+    const { container } = renderAt('/oeuvres/porte')
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument())
+    expect(container.querySelector('.article-pager')).not.toBeInTheDocument()
+    expect(screen.queryByText(/précédent/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/suivant/i)).not.toBeInTheDocument()
+  })
+
+  // Task 28, part 2: the client's reference shows the gallery's top edge
+  // level with the top of the title. The header used to render entirely
+  // above the two-column grid (a sibling, not a grid item), which is
+  // exactly what put the gallery a header's-height below the title instead
+  // of level with it -- broken by moving the header back out of
+  // `.article-layout` (the regression this guards against).
+  it('renders the header as the first item inside the two-column grid, not above it', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      slug: 'chassis', title: 'Châssis', blocks: [
+        { type: 'text', value: '<p>Description</p>' },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    const { container } = renderAt('/oeuvres/chassis')
+    await waitFor(() => expect(container.querySelector('.article-layout')).toBeInTheDocument())
+    const layout = container.querySelector('.article-layout')
+    expect(layout.querySelector(':scope > .article-header')).toBeInTheDocument()
+    expect(layout.querySelector(':scope > .article-header h1')).toHaveTextContent('Châssis')
+  })
+
+  // Task 28, part 3: the exhibitions timeline is persistent chrome for the
+  // whole section, not a one-off index widget -- an exhibition article's
+  // own page shows the same year list, with its own year marked current.
+  describe('exhibition articles', () => {
+    const mockExhibitionApi = () =>
+      vi.spyOn(api, 'apiGet').mockImplementation((path, params = {}) => {
+        if (path === '/articles/2023') {
+          return Promise.resolve({ slug: '2023', title: '2023', category: 'exhibitions', blocks: [] })
+        }
+        if (path === '/articles') {
+          expect(params.category).toBe('exhibitions')
+          return Promise.resolve({
+            items: [
+              { _id: '1', slug: '2024', title: '2024' },
+              { _id: '2', slug: '2023', title: '2023' },
+              { _id: '3', slug: '1989', title: '1989' },
+            ],
+            total: 3,
+          })
+        }
+        return Promise.reject(Object.assign(new Error('unexpected path'), { status: 404 }))
+      })
+
+    it('wraps an exhibition article in the timeline, with its own year current', async () => {
+      mockExhibitionApi()
+      renderAt('/oeuvres/2023')
+      // The nav itself renders as soon as the article loads, with an empty
+      // item list until the timeline's own (separate) fetch resolves --
+      // waiting on the nav's mere presence would be a race against that
+      // second fetch. Wait on the actual link instead.
+      const current = await screen.findByRole('link', { name: '2023' })
+      expect(current).toHaveAttribute('aria-current', 'true')
+      expect(current).toHaveAttribute('href', '/2023')
+
+      const other = screen.getByRole('link', { name: '2024' })
+      expect(other).not.toHaveAttribute('aria-current')
+      expect(other).toHaveAttribute('href', '/2024')
+    })
+
+    it('does not fetch the exhibitions timeline for a non-exhibition (works) article', async () => {
+      const spy = vi.spyOn(api, 'apiGet').mockResolvedValue({ slug: 'porte', title: 'Porte', blocks: [] })
+      renderAt('/oeuvres/porte')
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument())
+      expect(spy).not.toHaveBeenCalledWith('/articles', expect.anything())
+    })
+  })
 })

@@ -89,6 +89,35 @@ describe('App routing', () => {
     expect(screen.getByRole('contentinfo')).toBeInTheDocument()
   })
 
+  // Client feedback: a short page (e.g. /contact, reduced to one mailto
+  // block) must never scroll -- header + main + footer together fit exactly
+  // one viewport. `.page-main`'s own min-height used to reserve
+  // 100dvh-header-height for itself alone, and the footer then added its
+  // own height ON TOP of that, overflowing past 100dvh. `.site-shell`
+  // (mirroring the admin bundle's own `.admin` flex column -- see
+  // admin.css) is what fixes this in general, not as a contact-page
+  // special case: it wraps header/main/footer as a flex column with
+  // min-height: 100dvh, and .page-main's flex: 1 0 auto is what lets it
+  // absorb exactly the slack left after the header and footer's own
+  // natural heights -- never more, never less.
+  it('wraps header, main and footer in a single flex shell that fits one viewport', async () => {
+    const { container } = renderAt('/biographie')
+    await waitFor(() => expect(screen.getByText('Né en 1964')).toBeInTheDocument())
+    const shell = container.querySelector('.site-shell')
+    expect(shell).toBeInTheDocument()
+    expect(shell.querySelector(':scope > header')).toBeInTheDocument()
+    expect(shell.querySelector(':scope > main')).toBeInTheDocument()
+    expect(shell.querySelector(':scope > footer')).toBeInTheDocument()
+  })
+
+  it('keeps the flex shell on the homepage too, footer just omitted', async () => {
+    const { container } = renderAt('/')
+    await waitFor(() => expect(container.querySelector('.site-shell')).toBeInTheDocument())
+    const shell = container.querySelector('.site-shell')
+    expect(shell.querySelector(':scope > header')).toBeInTheDocument()
+    expect(shell.querySelector(':scope > footer')).not.toBeInTheDocument()
+  })
+
   // Task 20 controller correction 2: /admin must reach the admin shell, not
   // the public 404, and it must never carry the public <Header>/<Footer>.
   it('renders the admin login at /admin, without the public header', async () => {

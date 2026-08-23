@@ -189,16 +189,35 @@ picture {
   margin: 0;
 }
 
-/* Every public page's <main> reserves at least a full viewport below the
-   header (task 26, correction to B4): the flash the client saw on every
-   page, not just the homepage, was never about content height -- it was
-   the page collapsing to nothing between mount and the fetch resolving, so
-   the footer rode up near the top and then jumped down once data landed.
-   Applied unconditionally (loading or loaded), so a short, loaded page
-   (the reduced /contact, for one) also keeps the footer off the fold
-   instead of the fix only holding during the fetch. */
+/* Client feedback: header + main + footer together must fit exactly one
+   viewport when content is short (e.g. /contact, reduced to one mailto
+   block) -- the page must never scroll for that. `.page-main`'s own
+   min-height: calc(100dvh - var(--header-height)) alone was not enough: it
+   reserved that full height for <main> BY ITSELF, and the footer then
+   added its own height on top, overflowing past 100dvh. `.site-shell`
+   mirrors the admin bundle's own `.admin` flex column (see admin.css,
+   which solved this exact problem first): header and footer take their
+   natural (flex: 0 0 auto, the flex shorthand's own default) height, and
+   `.page-main`'s flex: 1 0 auto below is what lets <main> absorb exactly
+   whatever space is left -- never more, never less. A long page's content
+   still grows main past that share and the page scrolls normally; only a
+   short page is held to exactly one viewport. */
+.site-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* Task 26, correction to B4: the flash the client saw on every page, not
+   just the homepage, was never about content height -- it was the page
+   collapsing to nothing between mount and the fetch resolving, so the
+   footer rode up near the top and then jumped down once data landed.
+   flex: 1 0 auto (not a min-height) is what keeps this holding
+   unconditionally (loading or loaded) without the overflow above: while
+   loading, an aria-busy <main> with no other content still gets the same
+   share of .site-shell's height as a loaded one would. */
 .page-main {
-  min-height: calc(100dvh - var(--header-height));
+  flex: 1 0 auto;
 }
 
 /* A simple page reduced to a single block (task 26, part B3: /contact) is
@@ -501,60 +520,207 @@ picture {
   letter-spacing: 0.06em;
 }
 
-/* Text left, gallery right (task 26, part B2). A real responsive pass for
-   this one page: single column by default (mobile), with the media column
-   pulled ahead of the text column via `order` so the stacked reading order
-   is title, subtitle, then gallery, description below -- not a fixed-width
-   layout with one grudging breakpoint. Only rendered at all when
+/* Text left, gallery right, TOP-ALIGNED with the title (task 28, part 2 --
+   corrects task 26/B2, where the header sat above the grid entirely, so the
+   gallery started a header's-height below the title instead of level with
+   it). grid-template-areas, not `order`: the header is now a grid item too
+   (the first row of the text column), so its top edge and the gallery's top
+   edge share the same grid line. Areas -- not `order` -- are also what let
+   the SAME markup restack differently on mobile (title, subtitle, THEN
+   gallery, THEN prose -- not simply the desktop columns collapsing in
+   source order) without touching the DOM. Only rendered at all when
    splitArticleLayout (site/src/lib/articleLayout.js) finds a clean
    text-then-media shape; otherwise the article falls back to the plain
    single-column BlockRenderer pass this replaces. */
 .article-layout {
   display: grid;
   grid-template-columns: 1fr;
+  grid-template-areas:
+    'header'
+    'media'
+    'text';
   gap: var(--space-4);
   align-items: start;
+  margin-top: var(--space-4);
+}
+
+/* Inside the grid the header's own spacing comes entirely from `gap` above
+   (shared with every other row/column gap in this layout) -- its standalone
+   margin (used when an article falls back to the single-column path below)
+   would otherwise sit the header's TEXT below the top of its grid cell,
+   throwing off the top-alignment with the gallery this rule exists for. */
+.article-layout .article-header {
+  margin: 0;
+}
+
+.article-text-col {
+  grid-area: text;
 }
 
 .article-media-col {
-  order: -1;
+  grid-area: media;
 }
 
 @media (min-width: 768px) {
   .article-layout {
     /* Roughly half and half, per the brief -- `gap` itself (the same
        --gutter used everywhere else content sits side by side) is what
-       keeps the two columns from reading as exactly 50/50 hairline-tight. */
+       keeps the two columns from reading as exactly 50/50 hairline-tight.
+       `media` spans both rows of column 2, so its top edge lines up with
+       `header`'s row (row 1) regardless of how tall `text` (row 2) is. */
     grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      'header media'
+      'text   media';
     gap: var(--gutter);
   }
+}
 
-  .article-text-col,
-  .article-media-col {
-    /* Side by side now, so DOM order (text, then media) is the visual
-       order too: text left, gallery right. */
-    order: 0;
+/* Exhibitions timeline (task 28, part 3). Persistent chrome for the whole
+   exhibitions section -- the /expositions index and every individual
+   exhibition article page render this exact structure (see
+   ExhibitionsChrome.jsx), so it lives here rather than as one-off styling
+   for either page.
+
+   Below the desktop breakpoint the year list is a single horizontally
+   scrolling row: 25 years stacked the full height of a phone screen would
+   push the actual content (the point of the page) below the fold entirely.
+   From 768px it becomes a sticky column, scrolling independently of the
+   page within the viewport height left under the header, so a year near
+   the end of a 25-item list is never more than a short local scroll away
+   -- the page itself never has to scroll past the whole list to reach the
+   content on the right. Either way, ExhibitionsTimeline.jsx also scrolls
+   the current year into view on mount, so it is reachable without hunting
+   even on first paint. */
+.exhibitions-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: start;
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .exhibitions-layout {
+    grid-template-columns: 14rem 1fr;
+    gap: var(--gutter);
   }
 }
 
-.article-pager {
+.exhibitions-timeline ol {
   display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: var(--space-4) 0 var(--space-5);
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 var(--space-1);
+  list-style: none;
+  overflow-x: auto;
 }
 
-.article-pager a {
+@media (min-width: 768px) {
+  .exhibitions-timeline {
+    position: sticky;
+    top: var(--header-height);
+    max-height: calc(100dvh - var(--header-height));
+    overflow-y: auto;
+  }
+
+  .exhibitions-timeline ol {
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    overflow-x: visible;
+  }
+}
+
+.exhibitions-timeline a {
+  display: inline-block;
+  padding: var(--space-1) 0;
   font-family: var(--font-chrome);
-  font-size: var(--text-s);
-  text-decoration: none;
+  font-size: var(--text-m);
   color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.article-pager a[rel='next'] {
-  margin-left: auto;
+.exhibitions-timeline a:hover,
+.exhibitions-timeline a:focus-visible,
+.exhibitions-timeline a[aria-current='true'] {
+  color: var(--ink);
+}
+
+/* Marked by weight, not colour alone (client requirement): the resting
+   colour above is shared with plain :hover/:focus, so weight is what a
+   colour-blind visitor -- or the print/no-colour case -- still reads as
+   "this one is current". 700 is the same bold this codebase already uses
+   for emphasis elsewhere (.block-heading, .category-section h2), not a new
+   invented weight. */
+.exhibitions-timeline a[aria-current='true'] {
+  font-weight: 700;
+}
+
+/* Dock-style magnification on hover/focus: the target year grows, its
+   immediate neighbours grow slightly less, falling off with distance --
+   :hover for the target, the adjacent-sibling combinator for the next one,
+   :has(+ :hover) for the previous one. `:focus-within` alongside `:hover`
+   on every rule is what gives keyboard focus the identical emphasis, not a
+   lesser one, and transform (never width/font-size/padding) is what keeps
+   the effect from reflowing the column or shifting a neighbouring link out
+   from under the pointer mid-click. Purely additive: every year stays a
+   real, always-clickable link at its unmagnified size with no hover or
+   focus at all.
+
+   Client feedback, round 1: the transform used to be applied to the <li>,
+   not the <a> -- and .exhibitions-timeline ol's flex column stretches each
+   <li> (align-items: stretch, the flex default) to the FULL 14rem column
+   width, not just its text's own width. Scaling that full-width box by
+   1.35 grew it to ~19rem, ~5rem wider than the column, and
+   .exhibitions-timeline's own overflow-y: auto makes the horizontal axis a
+   clipping context too (the CSS overflow spec computes overflow-x to
+   'auto' as well whenever overflow-y is anything other than 'visible' and
+   overflow-x was left unset) -- so the excess got clipped and the years
+   read as sliced rather than magnified.
+
+   Fixed two ways together: the transform now targets the <a> itself
+   (inline-block, sized to its own text -- "2024" is a few rem wide, not
+   14rem, so scaling it by 1.35 stays comfortably inside the column), and
+   transform-origin: left anchors that growth at the text's own left edge
+   so it only ever reaches rightward, never left. Verified in-browser
+   (getBoundingClientRect against the column's own rect at hover), not just
+   reasoned about -- see the task report. */
+.exhibitions-timeline a {
+  transform-origin: left center;
+  transition: transform 150ms ease;
+}
+
+.exhibitions-timeline li:hover > a,
+.exhibitions-timeline li:focus-within > a {
+  transform: scale(1.35);
+}
+
+.exhibitions-timeline li:hover + li > a,
+.exhibitions-timeline li:focus-within + li > a,
+.exhibitions-timeline li:has(+ li:hover) > a,
+.exhibitions-timeline li:has(+ li:focus-within) > a {
+  transform: scale(1.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exhibitions-timeline a {
+    transition: none;
+  }
+
+  .exhibitions-timeline li:hover > a,
+  .exhibitions-timeline li:focus-within > a,
+  .exhibitions-timeline li:hover + li > a,
+  .exhibitions-timeline li:focus-within + li > a,
+  .exhibitions-timeline li:has(+ li:hover) > a,
+  .exhibitions-timeline li:has(+ li:focus-within) > a {
+    transform: none;
+  }
+}
+
+.exhibitions-content .article-header {
+  margin-top: 0;
 }
 
 /* Blocks */

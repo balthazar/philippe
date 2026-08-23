@@ -564,6 +564,30 @@
   font-size: 0.9rem;
 }
 
+/* Task 28, client feedback: pending-edit count beside Enregistrer. --muted
+   (not --danger): this is informational, not an error state -- nothing is
+   wrong yet, it just hasn't been saved. */
+.unsaved-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Task 28, client feedback: the in-app "leave with unsaved changes?"
+   prompt in the admin nav, styled the same as .confirm-delete/
+   .confirm-delete-prompt so it reads as the same family of in-page
+   confirmation rather than a new pattern. */
+.unsaved-nav-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.75rem;
+}
+
+.unsaved-nav-confirm-prompt {
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
 /* Preview pane. Task 27, Part C2: `top: 1.5rem` (with a shorter max-height
    below it) used to leave the sticky panel's own top edge 1.5rem below the
    viewport top and its bottom short of the viewport bottom -- both gaps
