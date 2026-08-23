@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { collectRoutes, headFor, pageHtml, mergeArticleLists, preloadFor, checkFloor } from '../index.js'
+import { collectRoutes, headFor, pageHtml, mergeArticleLists, preloadFor, checkFloor, unreachableApiOutcome } from '../index.js'
 
 // Controller correction 4: a reachable API answering 200 with an (almost)
 // empty list is not caught by main()'s try/catch around fetchArticles /
@@ -22,6 +22,34 @@ describe('checkFloor', () => {
 
   it('does not trip on ordinary growth or shrinkage of the archive', () => {
     expect(checkFloor({ articleCount: 40, routeCount: 90 })).toBeNull()
+  })
+})
+
+// Fix round 1: the API-unreachable path used to always skip and exit 0 (a
+// missing API "must not break the deploy"), which is exactly backwards for
+// a CI deploy where the API is briefly down, mid-rollout, or its Service
+// isn't resolving yet -- that build would go green and ship a contentless
+// SPA shell to production with nobody the wiser. Pins both branches: fails
+// closed by default, and only skips when PRERENDER_OPTIONAL is explicitly
+// set (the local, no-API build-verification case from this task's Step 4).
+describe('unreachableApiOutcome', () => {
+  it('fails closed by default: no PRERENDER_OPTIONAL means a non-zero exit', () => {
+    const outcome = unreachableApiOutcome('http://unreachable/api', new Error('fetch failed'), undefined)
+    expect(outcome.exitCode).toBe(1)
+    expect(outcome.message).toMatch(/aborted/)
+    expect(outcome.message).toContain('http://unreachable/api')
+  })
+
+  it('also fails closed on an explicitly falsy opt-in (empty string)', () => {
+    const outcome = unreachableApiOutcome('http://unreachable/api', new Error('fetch failed'), '')
+    expect(outcome.exitCode).toBe(1)
+  })
+
+  it('skips and exits 0 only when PRERENDER_OPTIONAL is explicitly set', () => {
+    const outcome = unreachableApiOutcome('http://unreachable/api', new Error('fetch failed'), '1')
+    expect(outcome.exitCode).toBe(0)
+    expect(outcome.message).toMatch(/skipped/)
+    expect(outcome.message).toContain('http://unreachable/api')
   })
 })
 

@@ -252,6 +252,25 @@ export function checkFloor({ articleCount, routeCount, articleFloor = 10, routeF
   return null
 }
 
+// Fix round 1: decides how to react to a fetch failure against the API,
+// extracted as a pure function so both branches are unit-testable without
+// mocking fs/network. Fails closed by default: a CI build where the API is
+// briefly down, mid-rollout, or its Service isn't resolving yet must not
+// silently ship a contentless SPA shell to production (the checkFloor guard
+// above only fires when the API *did* respond, so it cannot catch this).
+// PRERENDER_OPTIONAL is an explicit, opt-in escape hatch for local build
+// verification only (Step 4 of this task's brief: proving the image builds
+// with no API available at all) -- it must never be set in the production
+// Dockerfile path or the deploy workflow, or this guard is defeated exactly
+// where it matters most. `optIn` is whatever process.env.PRERENDER_OPTIONAL
+// held at call time; any truthy string opts in, unset/'' stays fail-closed.
+export function unreachableApiOutcome(apiUrl, err, optIn) {
+  if (optIn) {
+    return { exitCode: 0, level: 'warn', message: `prerender skipped, API unreachable at ${apiUrl}: ${err.message}` }
+  }
+  return { exitCode: 1, level: 'error', message: `prerender aborted: API unreachable at ${apiUrl}: ${err.message}. Set PRERENDER_OPTIONAL=1 to allow a no-API local build.` }
+}
+
 async function fetchPages() {
   const pages = {}
   await Promise.all(
@@ -274,8 +293,9 @@ async function main() {
     const [articles, pages] = await Promise.all([fetchArticles(), fetchPages()])
     content = { articles, pages }
   } catch (err) {
-    // A missing API must not break the deploy: ship the SPA shell and move on.
-    console.warn(`prerender skipped, API unreachable at ${API}: ${err.message}`)
+    const outcome = unreachableApiOutcome(API, err, process.env.PRERENDER_OPTIONAL)
+    console[outcome.level](outcome.message)
+    process.exitCode = outcome.exitCode
     return
   }
 
