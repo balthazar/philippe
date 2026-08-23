@@ -10,6 +10,18 @@ function Probe({ fetcher }) {
   return <span>{data ? data.title : 'loading'}</span>
 }
 
+// Renders whatever key it is given, so a rerender can change the key the way
+// a client-side navigation between two articles does, and records what each
+// render actually SAW. Asserting on the final DOM cannot catch the bug this
+// pins: rerender() wraps in act(), which flushes effects before any assertion
+// runs, so an effect-only reset has already corrected the DOM by then. The
+// bad frame is only visible from inside render.
+function KeyedProbe({ pageKey, fetcher, seen }) {
+  const { data } = usePageData(pageKey, fetcher)
+  seen.push([pageKey, data ? data.title : 'none'])
+  return <span data-testid="out">{data ? data.title : 'none'}</span>
+}
+
 describe('usePageData', () => {
   it('uses preloaded data without fetching', async () => {
     const fetcher = vi.fn()
@@ -20,6 +32,32 @@ describe('usePageData', () => {
     )
     expect(screen.getByText('preloaded')).toBeInTheDocument()
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  // React commits the render following a key change before effects run, so
+  // resetting only in an effect hands the caller the PREVIOUS key's data for
+  // one extra render. That briefly painted one article's language-toggle href
+  // onto the next article's page during client-side navigation.
+  // React commits the render following a key change before effects run, so
+  // resetting only in an effect hands the caller the PREVIOUS key's data for
+  // one extra render. That briefly painted one article's language-toggle href
+  // onto the next article's page during client-side navigation.
+  it('never returns the previous key\'s data after the key changes', async () => {
+    const fetcher = vi.fn(async () => ({ title: 'fetched-b' }))
+    const seen = []
+    const tree = (pageKey) => (
+      <PreloadProvider value={{ 'article:a': { title: 'A' } }}>
+        <KeyedProbe pageKey={pageKey} fetcher={fetcher} seen={seen} />
+      </PreloadProvider>
+    )
+    const { rerender } = render(tree('article:a'))
+    expect(seen).toContainEqual(['article:a', 'A'])
+
+    rerender(tree('article:b'))
+    await waitFor(() => expect(screen.getByTestId('out')).toHaveTextContent('fetched-b'))
+
+    // No render under key b ever saw key a's data, not even for one frame.
+    expect(seen.filter(([k]) => k === 'article:b').map(([, title]) => title)).not.toContain('A')
   })
 
   it('fetches when nothing is preloaded', async () => {

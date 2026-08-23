@@ -14,33 +14,42 @@ export function PreloadProvider({ value, children }) {
  *
  * Today prerender/index.js only preloads one thing this way: an article
  * page's own-language <-> other-language translatedPath (Fix round 1, Task
- * 22; read via usePreloadedValue() below, by Header, not usePageData --
+ * 22; read via usePreloaded() below, by Header, not usePageData --
  * see preloadFor() there for why). Preloading full page content (article
  * bodies, archive listings) the same way remains a deliberate follow-up,
  * not done here.
  */
 export function usePageData(key, fetcher) {
   const preloaded = useContext(PreloadContext)
-  const [data, setData] = useState(preloaded[key] ?? null)
-  const [error, setError] = useState(null)
+  const [state, setState] = useState(() => ({ key, data: preloaded[key] ?? null, error: null }))
+
+  // Derived synchronously on a key change instead of waiting for the effect
+  // below to reset it. React commits the render that follows a key change
+  // BEFORE effects run, so holding data in plain state hands every consumer
+  // the previous key's value for one extra render. That is not theoretical:
+  // navigating from one article to another briefly painted the previous
+  // article's language-toggle href onto the new article's page. Resetting
+  // here also clears a stale error, so a slug change from one that 404s to
+  // one that exists no longer stays stuck on "not found".
+  const current = state.key === key
+    ? state
+    : { key, data: preloaded[key] ?? null, error: null }
 
   useEffect(() => {
     if (preloaded[key] !== undefined) {
-      setData(preloaded[key])
-      setError(null)
+      setState({ key, data: preloaded[key], error: null })
       return undefined
     }
     let cancelled = false
-    setData(null)
-    setError(null)
+    setState({ key, data: null, error: null })
     fetcher()
-      .then((result) => { if (!cancelled) setData(result) })
-      .catch((err) => { if (!cancelled) setError(err) })
+      .then((result) => { if (!cancelled) setState({ key, data: result, error: null }) })
+      .catch((err) => { if (!cancelled) setState({ key, data: null, error: err }) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
-  return { data, error, loading: !data && !error }
+  return { data: current.data, error: current.error, loading: !current.data && !current.error }
 }
 
 /**

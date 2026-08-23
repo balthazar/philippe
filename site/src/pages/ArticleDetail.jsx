@@ -43,10 +43,10 @@ export function ArticleDetail({ routeKey, onTranslatedPath }) {
     return () => onTranslatedPath?.(null)
   }, [translatedPath, onTranslatedPath])
 
-  // `article` is checked before `error`: usePageData does not clear a stale
-  // error from a previous key when a later fetch for a new key succeeds, so
-  // checking data first is what keeps a slug change from one that 404s to
-  // one that exists from getting stuck showing "not found".
+  // `article` is checked before `error` as belt and braces. usePageData now
+  // resets both synchronously on a key change, so a stale error from a
+  // previous slug can no longer survive into a new one; this ordering simply
+  // costs nothing and keeps the success path the one that wins.
   if (!article) {
     if (error?.status === 404) {
       return (
