@@ -1,35 +1,23 @@
 import { useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { useLang } from './lang.jsx'
 import { SEGMENTS } from './routes.js'
 import { Header } from '@/components/Header.jsx'
 import { Footer } from '@/components/Footer.jsx'
 import { Home } from '@/pages/Home.jsx'
 import { Works } from '@/pages/Works.jsx'
+import { Exhibitions } from '@/pages/Exhibitions.jsx'
 import { ArticleDetail } from '@/pages/ArticleDetail.jsx'
+import { SimplePage } from '@/pages/SimplePage.jsx'
+import { NotFound } from '@/pages/NotFound.jsx'
 
-// Scaffold only (Task 14/15). Task 15 adds the chrome (Header/Footer) around
-// this route table so it can be verified in the browser; Tasks 16-19 add the
-// real pages and replace the route table wholesale. Kept intentionally
-// minimal so it never imports a page component that doesn't exist yet.
+// The complete public route table (Task 19). Admin is out of scope here;
+// Task 20 adds it, under its own /admin/* route, once src/admin/ exists.
 //
-// The 'works' route below is wired to the real Works page (Task 16) purely
-// so it can be checked in a browser against the live API. Task 19 rewrites
-// this route table wholesale.
-
-function ScaffoldPage({ label }) {
-  const { lang } = useLang()
-  return (
-    <p>
-      {label} ({lang})
-    </p>
-  )
-}
-
-// `onTranslatedPath` is threaded through only so this scaffold can verify,
-// in the browser, that an article page steers the header's language toggle
-// to its own counterpart. Task 19 rewrites this route table wholesale and
-// owns the real version of this wiring.
+// `onTranslatedPath` is threaded from each ArticleDetail route up to
+// `<Header>` (as `translatedPath`) so that on an article page the FR/EN
+// toggle points at that article's own counterpart slug rather than at the
+// bare translated section. See Header.jsx's counterpartPath() for the
+// fallback this wiring overrides.
 function localizedRoutes(lang, onTranslatedPath) {
   const s = (key) => SEGMENTS[key][lang]
   return (
@@ -40,16 +28,16 @@ function localizedRoutes(lang, onTranslatedPath) {
         path={`${s('works')}/:slug`}
         element={<ArticleDetail routeKey="works" onTranslatedPath={onTranslatedPath} />}
       />
-      <Route path={s('exhibitions')} element={<ScaffoldPage label="Exhibitions" />} />
+      <Route path={s('exhibitions')} element={<Exhibitions />} />
       <Route
         path={`${s('exhibitions')}/:slug`}
         element={<ArticleDetail routeKey="exhibitions" onTranslatedPath={onTranslatedPath} />}
       />
-      <Route path={s('biography')} element={<ScaffoldPage label="Biography" />} />
-      <Route path={s('contact')} element={<ScaffoldPage label="Contact" />} />
-      <Route path={s('bibliography')} element={<ScaffoldPage label="Bibliography" />} />
-      <Route path={s('links')} element={<ScaffoldPage label="Links" />} />
-      <Route path={s('legal')} element={<ScaffoldPage label="Legal" />} />
+      <Route path={s('biography')} element={<SimplePage pageKey="biography" />} />
+      <Route path={s('contact')} element={<SimplePage pageKey="contact" />} />
+      <Route path={s('bibliography')} element={<SimplePage pageKey="bibliography" />} />
+      <Route path={s('links')} element={<SimplePage pageKey="links" />} />
+      <Route path={s('legal')} element={<SimplePage pageKey="legal" />} />
     </>
   )
 }
@@ -62,7 +50,7 @@ export default function App() {
       <Routes>
         <Route path="/">{localizedRoutes('fr', setTranslatedPath)}</Route>
         <Route path="/en">{localizedRoutes('en', setTranslatedPath)}</Route>
-        <Route path="*" element={<p>404</p>} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
     </>
