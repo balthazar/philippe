@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { useLang } from './lib/lang.jsx'
 import { SEGMENTS } from './lib/routes.js'
 import { Header } from './public-site/components/Header.jsx'
 import { Footer } from './public-site/components/Footer.jsx'
 import { Works } from './public-site/pages/Works.jsx'
+import { ArticleDetail } from './public-site/pages/ArticleDetail.jsx'
 
 // Scaffold only (Task 14/15). Task 15 adds the chrome (Header/Footer) around
 // this route table so it can be verified in the browser; Tasks 16-19 add the
@@ -23,13 +25,25 @@ function ScaffoldPage({ label }) {
   )
 }
 
-function localizedRoutes(lang) {
+// `onTranslatedPath` is threaded through only so this scaffold can verify,
+// in the browser, that an article page steers the header's language toggle
+// to its own counterpart. Task 19 rewrites this route table wholesale and
+// owns the real version of this wiring.
+function localizedRoutes(lang, onTranslatedPath) {
   const s = (key) => SEGMENTS[key][lang]
   return (
     <>
       <Route index element={<ScaffoldPage label="Home" />} />
       <Route path={s('works')} element={<Works />} />
+      <Route
+        path={`${s('works')}/:slug`}
+        element={<ArticleDetail routeKey="works" onTranslatedPath={onTranslatedPath} />}
+      />
       <Route path={s('exhibitions')} element={<ScaffoldPage label="Exhibitions" />} />
+      <Route
+        path={`${s('exhibitions')}/:slug`}
+        element={<ArticleDetail routeKey="exhibitions" onTranslatedPath={onTranslatedPath} />}
+      />
       <Route path={s('biography')} element={<ScaffoldPage label="Biography" />} />
       <Route path={s('contact')} element={<ScaffoldPage label="Contact" />} />
       <Route path={s('bibliography')} element={<ScaffoldPage label="Bibliography" />} />
@@ -40,12 +54,13 @@ function localizedRoutes(lang) {
 }
 
 export default function App() {
+  const [translatedPath, setTranslatedPath] = useState(null)
   return (
     <>
-      <Header />
+      <Header translatedPath={translatedPath} />
       <Routes>
-        <Route path="/">{localizedRoutes('fr')}</Route>
-        <Route path="/en">{localizedRoutes('en')}</Route>
+        <Route path="/">{localizedRoutes('fr', setTranslatedPath)}</Route>
+        <Route path="/en">{localizedRoutes('en', setTranslatedPath)}</Route>
         <Route path="*" element={<p>404</p>} />
       </Routes>
       <Footer />
