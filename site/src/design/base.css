@@ -227,28 +227,43 @@ picture {
 
 /* Homepage slideshow */
 
+/* Full bleed by default: a plain block with no horizontal margin/padding,
+   rendered outside the gutter .container in Home.jsx, so it naturally
+   spans the full body width. Deliberately not width: 100vw, since 100vw
+   includes the scrollbar's own width, which on a desktop browser with a
+   visible scrollbar overflows the body horizontally and adds a spurious
+   scrollbar at the bottom of the page. */
 .slideshow {
   position: relative;
-  margin: var(--space-3) 0 var(--space-4);
+  margin: 0 0 var(--space-4);
   text-align: center;
 }
 
 /* Natural aspect, no background panel behind the image: the client
    explicitly rejected a tinted/grey letterbox on the works page, and the
-   same rule applies here. max-height keeps a tall image from pushing the
-   caption and controls off-screen without ever cropping or masking it. */
+   same rule applies here. object-fit: contain plus the max-width/max-height
+   pair below keep the whole image visible, uncropped, on plain white,
+   whether the work is very wide (a blackboard, aspect ~1.7) or tall and
+   narrow (a thermometer, aspect ~0.86) -- see --slide-max-height in
+   tokens.css for how the height cap was chosen. */
 .slideshow img {
   display: block;
   margin: 0 auto;
   max-width: 100%;
-  max-height: 70vh;
+  max-height: var(--slide-max-height);
   width: auto;
   height: auto;
+  object-fit: contain;
 }
 
+/* The caption and controls stay readable and centered under the image
+   rather than stretching to the full-bleed viewport edge: padding-inline
+   matches the page gutter used everywhere else, so a long caption wraps
+   the same distance from the edge as body copy does on every other page. */
 .slide-caption {
   display: inline-block;
   margin-top: var(--space-2);
+  padding-inline: var(--page-gutter);
   font-family: var(--font-chrome);
   font-size: var(--text-s);
   color: var(--ink-soft);

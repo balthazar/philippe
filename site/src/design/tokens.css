@@ -47,4 +47,19 @@
      photographs rather than specks in a lot of white. No background: this
      only aligns caption baselines across a row, it is not a letterbox. */
   --card-frame-height: 18rem;
+
+  /* Full-bleed homepage slideshow: the image spans the viewport width, so
+     only height needs a cap. Checked against the real works archive (GET
+     /api/articles?category=works): cover aspect ratios (width/height) run
+     from ~0.86 (Observatoires, the tallest) to ~1.72 (the widest,
+     Bibliothèque de l'Assemblée nationale de France's blackboard-like
+     catalogue), the same range --card-frame-height above was chosen
+     against. min() caps two ways: 68dvh leaves room, below a 100dvh
+     viewport, for the header, the caption, and the prev/count/next
+     controls without scrolling; 42rem (672px) stops the image from
+     ballooning on very tall/4K screens where 68dvh alone would still be
+     enormous. dvh rather than vh: vh is locked to the initial viewport and
+     does not shrink when a mobile browser's address bar is on-screen,
+     which can leave the controls just below the fold. */
+  --slide-max-height: min(68dvh, 42rem);
 }
