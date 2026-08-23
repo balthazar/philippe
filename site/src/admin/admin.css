@@ -1,0 +1,125 @@
+/* Admin bundle only: imported from Admin.jsx, which App.jsx loads lazily.
+   Never imported from a public page, so this never ships in the public
+   bundle (Task 20 controller correction 6). Deliberately self-contained
+   (no dependency on design/tokens.css) so the admin chunk doesn't pull the
+   public design system in either. */
+
+.admin {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: #1a1a1a;
+  min-height: 100vh;
+  background: #f7f7f5;
+}
+
+.admin-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: #1a1a1a;
+}
+
+.admin-nav a,
+.admin-nav button {
+  color: #f7f7f5;
+  text-decoration: none;
+  font-size: 0.95rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.admin-nav button {
+  margin-left: auto;
+}
+
+.admin-login {
+  max-width: 320px;
+  margin: 4rem auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-login label {
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.admin-login input {
+  padding: 0.5rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.admin-login button {
+  margin-top: 1rem;
+  padding: 0.6rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.admin-login [role='alert'] {
+  color: #b00020;
+  font-size: 0.9rem;
+}
+
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+}
+
+.admin-article-group {
+  padding: 0 1.5rem 1.5rem;
+}
+
+.admin-article-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.admin-article-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  border: 1px solid #e2e2e0;
+  border-radius: 4px;
+  margin-bottom: 0.4rem;
+}
+
+.admin-article-row a {
+  flex: 1;
+  color: #1a1a1a;
+  text-decoration: none;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: #999;
+}
+
+.status-badge {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  background: #eee;
+}
+
+.status-badge.status-published {
+  background: #dff3e3;
+  color: #1e6b34;
+}
+
+.status-badge.status-draft {
+  background: #f0e6d2;
+  color: #8a5a00;
+}

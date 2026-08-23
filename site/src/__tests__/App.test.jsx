@@ -54,4 +54,14 @@ describe('App routing', () => {
       expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/works/door-en')
     )
   })
+
+  // Task 20 controller correction 2: /admin must reach the admin shell, not
+  // the public 404, and it must never carry the public <Header>/<Footer>.
+  it('renders the admin login at /admin, without the public header', async () => {
+    vi.spyOn(api, 'apiGet').mockRejectedValue(Object.assign(new Error('nope'), { status: 401 }))
+    renderAt('/admin')
+    await waitFor(() => expect(screen.getByLabelText(/mot de passe/i)).toBeInTheDocument())
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /404/ })).not.toBeInTheDocument()
+  })
 })
