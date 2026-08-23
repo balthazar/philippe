@@ -1,0 +1,39 @@
+/* Self-hosted @font-face declarations, pointing at public/fonts/. Vite
+   copies public/ verbatim (no filename hashing), so these paths are stable
+   in both dev and production builds, which lets index.html preload the
+   exact same URLs the browser will actually request.
+
+   Only the weights and subsets this site uses: Libre Franklin 400 (article
+   headings, captions, figure captions) and 700 (header: wordmark, nav,
+   FR/EN, plus .category-section/.block-heading), Didact Gothic 400 (body
+   copy). Only the latin subset: French and English text stays inside
+   U+0000-00FF/U+0152-0153, which that subset alone covers.
+
+   Files are copied from @fontsource/libre-franklin and @fontsource/didact-gothic
+   (kept as dependencies as the versioned source for these files) rather than
+   importing their CSS, so the URLs resolve to our own stable /fonts/ paths
+   instead of /node_modules/... dev-only paths that don't exist in a build. */
+
+@font-face {
+  font-family: 'Libre Franklin';
+  src: url('/fonts/libre-franklin-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Libre Franklin';
+  src: url('/fonts/libre-franklin-latin-700-normal.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Didact Gothic';
+  src: url('/fonts/didact-gothic-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

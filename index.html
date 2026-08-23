@@ -8,12 +8,17 @@
          flash. Only the "latin" subset: French and English text stays inside
          U+0000-00FF/U+0152-0153, which that subset alone covers, so this is
          also the one subset the browser actually fetches (verified via
-         network panel; the other subset files it never requests). -->
+         network panel; the other subset files it never requests).
+         Paths point at public/fonts/, which Vite copies verbatim (no
+         filename hashing), so the same URL resolves in dev and in a
+         production build; the design/fonts.css @font-face rules point at
+         the same files. crossorigin is required even though these are
+         same-origin requests, or font preloads are fetched twice. -->
     <link
       rel="preload"
       as="font"
       type="font/woff2"
-      href="/node_modules/@fontsource/libre-franklin/files/libre-franklin-latin-400-normal.woff2"
+      href="/fonts/libre-franklin-latin-400-normal.woff2"
       crossorigin
     />
     <!-- 700: the header (wordmark, nav, FR/EN) renders at this weight, and
@@ -22,14 +27,14 @@
       rel="preload"
       as="font"
       type="font/woff2"
-      href="/node_modules/@fontsource/libre-franklin/files/libre-franklin-latin-700-normal.woff2"
+      href="/fonts/libre-franklin-latin-700-normal.woff2"
       crossorigin
     />
     <link
       rel="preload"
       as="font"
       type="font/woff2"
-      href="/node_modules/@fontsource/didact-gothic/files/didact-gothic-latin-400-normal.woff2"
+      href="/fonts/didact-gothic-latin-400-normal.woff2"
       crossorigin
     />
   </head>

@@ -3,13 +3,13 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { LangProvider } from './lib/lang.jsx'
 import App from './App.jsx'
-// Libre Franklin needs both weights: captions, section/article headings and
-// figure captions render at regular 400, while the header (wordmark, nav,
-// FR/EN) and .category-section/.block-heading render at 700 per spec. Body
-// copy (Didact Gothic) stays at regular 400 throughout.
-import '@fontsource/libre-franklin/400.css'
-import '@fontsource/libre-franklin/700.css'
-import '@fontsource/didact-gothic/400.css'
+// Font faces (Libre Franklin 400/700, Didact Gothic 400) are declared in
+// design/fonts.css, imported from base.css, pointing at the self-hosted
+// files in public/fonts/ rather than @fontsource's CSS. Those stable paths
+// are what index.html preloads; @fontsource's own CSS resolves to
+// /node_modules/... paths that only exist in dev, not in a production
+// build. The @fontsource packages remain dependencies as the versioned
+// source the files in public/fonts/ were copied from.
 import './design/base.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
