@@ -15,7 +15,10 @@ body {
 body {
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-sans);
+  /* Body copy is most of the site's text, so it's the default; chrome
+     elements (nav, wordmark, FR/EN, captions, section/heading labels)
+     override to --font-chrome individually below. */
+  font-family: var(--font-body);
   font-size: var(--text-m);
   font-weight: 400;
   line-height: 1.6;
@@ -48,29 +51,36 @@ picture {
   background: var(--paper);
   padding: var(--space-2) var(--gutter);
   line-height: 1;
+  /* Set once here, on the container, so every piece of header text
+     (wordmark, nav links, FR/EN) inherits the same size/weight/family
+     rather than repeating it per element, where one selector can be missed.
+     Only letter-spacing (the wordmark tracks wider than nav/lang-switch)
+     and color (active vs inactive state) vary below. */
+  font-family: var(--font-chrome);
+  font-size: var(--text-l);
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .site-header .wordmark {
-  font-size: var(--text-l);
-  font-weight: 400;
   text-decoration: none;
   white-space: nowrap;
-  text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
+/* Wordmark alone on the left; nav and the language toggle are pushed into
+   one group on the right by this margin-left: auto (it absorbs all the free
+   space before `nav`, so `nav` and everything after it in source order,
+   i.e. .lang-switch, move to the right edge together). */
 .site-header nav {
   display: flex;
   gap: var(--space-3);
-  margin-left: var(--space-4);
-  margin-right: auto;
+  margin-left: auto;
 }
 
 .site-header nav a {
-  font-size: var(--text-s);
   text-decoration: none;
   color: var(--ink-soft);
-  text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
@@ -78,11 +88,17 @@ picture {
   color: var(--ink);
 }
 
+/* The only separator in the header: a single rule between Contact and FR/EN,
+   drawn as a border rather than a literal "|" character so it is not
+   announced by screen readers or selectable as text. */
 .site-header .lang-switch {
   display: flex;
+  align-items: center;
   gap: var(--space-1);
-  font-size: var(--text-s);
-  text-transform: uppercase;
+  /* .site-header's own `gap` already spaces this away from `nav`; this
+     padding is only to keep FR/EN clear of the border it sits against. */
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--rule);
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
@@ -141,6 +157,7 @@ picture {
   margin: 0 0 var(--space-2);
   padding: var(--space-1) 0;
   background: var(--paper);
+  font-family: var(--font-chrome);
   font-size: var(--text-l);
   font-weight: 700;
   text-transform: uppercase;
@@ -179,6 +196,7 @@ picture {
 }
 
 .card-caption {
+  font-family: var(--font-chrome);
   font-size: var(--text-s);
   line-height: 1.4;
   text-align: center;
@@ -200,6 +218,7 @@ picture {
 }
 
 .article-year {
+  font-family: var(--font-chrome);
   margin: var(--space-1) 0 0;
   font-size: var(--text-s);
   color: var(--ink-soft);
@@ -215,6 +234,7 @@ picture {
 }
 
 .article-pager a {
+  font-family: var(--font-chrome);
   font-size: var(--text-s);
   text-decoration: none;
   color: var(--ink-soft);
@@ -238,6 +258,7 @@ picture {
 }
 
 .block-heading {
+  font-family: var(--font-chrome);
   max-width: 42rem;
   margin: var(--space-3) 0 var(--space-2);
   font-size: var(--text-l);
@@ -283,6 +304,7 @@ picture {
 }
 
 .block-image figcaption {
+  font-family: var(--font-chrome);
   margin-top: var(--space-1);
   font-size: var(--text-s);
   color: var(--ink-soft);
@@ -313,6 +335,7 @@ picture {
 }
 
 .block-gallery .caption {
+  font-family: var(--font-chrome);
   font-size: var(--text-s);
   color: var(--ink-soft);
 }

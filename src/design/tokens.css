@@ -4,7 +4,13 @@
   --paper: #fff;
   --rule: #d9d4cc;
 
-  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  /* Two families, split once here and inherited everywhere. Chrome (nav,
+     wordmark, FR/EN, captions, section/heading labels) reads in Libre
+     Franklin; running body copy defaults to Didact Gothic. Both are
+     self-hosted via @fontsource (see main.jsx) rather than the Google
+     Fonts CDN, so no visitor request ever leaves this origin. */
+  --font-chrome: "Libre Franklin", sans-serif;
+  --font-body: "Didact Gothic", sans-serif;
 
   /* Four steps, nothing between. */
   --text-s: 0.6875rem;
