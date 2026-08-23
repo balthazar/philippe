@@ -1,14 +1,14 @@
 import { Router } from 'express'
-import { Article } from '../models/Article.js'
-import { Page } from '../models/Page.js'
+import { Article } from '#models/Article.js'
+import { Page } from '#models/Page.js'
 // Registered for its side effect only: `cover` and `blocks.image` populate
 // paths on Article/Page both ref 'Image', and nothing else in the process
 // loads this model, so without this import mongoose.populate() throws
 // MissingSchemaError (an unhandled rejection that hangs the request).
 import '../models/Image.js'
-import { resolveDoc } from '../lib/localize.js'
-import { CATEGORIES, PAGE_KEYS } from '../lib/constants.js'
-import { asyncHandler } from '../middleware/asyncHandler.js'
+import { resolveDoc } from '#lib/localize.js'
+import { CATEGORIES, PAGE_KEYS } from '#lib/constants.js'
+import { asyncHandler } from '#middleware/asyncHandler.js'
 
 export const publicRouter = Router()
 

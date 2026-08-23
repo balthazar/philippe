@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import rateLimit from 'express-rate-limit'
-import { User } from '../models/User.js'
-import { COOKIE_NAME, signToken, cookieOptions, requireAuth, requireCsrfHeader } from '../middleware/auth.js'
-import { asyncHandler } from '../middleware/asyncHandler.js'
+import { User } from '#models/User.js'
+import { COOKIE_NAME, signToken, cookieOptions, requireAuth, requireCsrfHeader } from '#middleware/auth.js'
+import { asyncHandler } from '#middleware/asyncHandler.js'
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

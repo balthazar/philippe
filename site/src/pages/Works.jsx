@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { apiGet } from '../../lib/api.js'
-import { useLang } from '../../lib/lang.jsx'
-import { ArticleGrid } from '../components/ArticleGrid.jsx'
-import { Container } from '../components/Container.jsx'
-import { BlockRenderer } from '../components/BlockRenderer.jsx'
+import { apiGet } from '@/api.js'
+import { useLang } from '@/lang.jsx'
+import { ArticleGrid } from '@/components/ArticleGrid.jsx'
+import { Container } from '@/components/Container.jsx'
+import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 
 const SECTION_LABELS = {
   editions: { fr: 'Éditions', en: 'Editions' },

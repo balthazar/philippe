@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken'
-import { User } from '../models/User.js'
+import { User } from '#models/User.js'
 
 export const COOKIE_NAME = 'philippe_token'
 export const CSRF_HEADER = 'x-requested-with'

@@ -5,6 +5,12 @@
   "engines": {
     "node": ">=24"
   },
+  "imports": {
+    "#models/*": "./src/models/*",
+    "#lib/*": "./src/lib/*",
+    "#middleware/*": "./src/middleware/*",
+    "#routes/*": "./src/routes/*"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",

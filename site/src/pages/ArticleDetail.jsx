@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { apiGet } from '../../lib/api.js'
-import { useLang } from '../../lib/lang.jsx'
-import { routeFor } from '../../lib/routes.js'
-import { Container } from '../components/Container.jsx'
-import { BlockRenderer } from '../components/BlockRenderer.jsx'
+import { apiGet } from '@/api.js'
+import { useLang } from '@/lang.jsx'
+import { routeFor } from '@/routes.js'
+import { Container } from '@/components/Container.jsx'
+import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 
 /**
  * The public API always resolves `slug` to the requested language and never

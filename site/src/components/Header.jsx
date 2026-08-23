@@ -1,6 +1,6 @@
 import { NavLink, Link, useLocation } from 'react-router-dom'
-import { useLang } from '../../lib/lang.jsx'
-import { routeFor, SEGMENTS } from '../../lib/routes.js'
+import { useLang } from '@/lang.jsx'
+import { routeFor, SEGMENTS } from '@/routes.js'
 
 const NAV = [
   { key: 'works', fr: 'Œuvres', en: 'Works' },

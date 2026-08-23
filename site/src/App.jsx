@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { useLang } from './lib/lang.jsx'
-import { SEGMENTS } from './lib/routes.js'
-import { Header } from './public-site/components/Header.jsx'
-import { Footer } from './public-site/components/Footer.jsx'
-import { Works } from './public-site/pages/Works.jsx'
-import { ArticleDetail } from './public-site/pages/ArticleDetail.jsx'
+import { useLang } from './lang.jsx'
+import { SEGMENTS } from './routes.js'
+import { Header } from '@/components/Header.jsx'
+import { Footer } from '@/components/Footer.jsx'
+import { Works } from '@/pages/Works.jsx'
+import { ArticleDetail } from '@/pages/ArticleDetail.jsx'
 
 // Scaffold only (Task 14/15). Task 15 adds the chrome (Header/Footer) around
 // this route table so it can be verified in the browser; Tasks 16-19 add the

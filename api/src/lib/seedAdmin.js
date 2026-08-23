@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { User } from '../models/User.js'
+import { User } from '#models/User.js'
 
 /** Creates the first admin only when the collection is empty. Never overwrites. */
 export async function seedAdmin({ email, password }) {

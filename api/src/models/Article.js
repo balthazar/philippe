@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
-import { localizedField } from '../lib/localize.js'
-import { CATEGORIES, BLOCK_TYPES } from '../lib/constants.js'
+import { localizedField } from '#lib/localize.js'
+import { CATEGORIES, BLOCK_TYPES } from '#lib/constants.js'
 
 const blockSchema = new mongoose.Schema(
   {

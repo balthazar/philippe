@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useLang } from '../../lib/lang.jsx'
+import { useLang } from '@/lang.jsx'
 
 const mediaSrc = (variant) => (variant?.path ? `/media/${variant.path}` : '')
 

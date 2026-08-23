@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
-import { localizedField } from '../lib/localize.js'
-import { PAGE_KEYS } from '../lib/constants.js'
+import { localizedField } from '#lib/localize.js'
+import { PAGE_KEYS } from '#lib/constants.js'
 import { blockSchema } from './Article.js'
 
 const pageSchema = new mongoose.Schema(

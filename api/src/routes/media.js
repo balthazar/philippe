@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import express from 'express'
 import { resolve, sep } from 'node:path'
-import { ORIGINALS_PREFIX } from '../lib/imagePipeline.js'
+import { ORIGINALS_PREFIX } from '#lib/imagePipeline.js'
 
 export function mediaRouter(mediaRoot = process.env.MEDIA_ROOT || '/data/media') {
   const router = Router()

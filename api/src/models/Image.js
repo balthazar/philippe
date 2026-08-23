@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { localizedField } from '../lib/localize.js'
+import { localizedField } from '#lib/localize.js'
 
 const variantSchema = new mongoose.Schema(
   { path: String, width: Number, height: Number, bytes: Number },

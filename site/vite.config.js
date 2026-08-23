@@ -1,8 +1,14 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
     proxy: {
       // Dev only. In production nginx serves the bundle and the Traefik ingress
@@ -14,7 +20,11 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    setupFiles: './src/setupTests.js',
+    // The package ships a ./vitest export (see its package.json "exports"
+    // map) that is the jest-dom matchers with no other setup baggage, so it
+    // can be pointed at directly instead of a one-line src/setupTests.js
+    // that just re-exported it.
+    setupFiles: ['@testing-library/jest-dom/vitest'],
     globals: true,
     // Scoped to this app's own tests: without this, vitest run from the repo
     // root also discovers api/test/** (node-only, needs mongodb-memory-server)
