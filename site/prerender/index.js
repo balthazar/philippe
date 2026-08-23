@@ -26,7 +26,14 @@ export function collectRoutes({ articles, pageKeys }) {
   for (const a of articles) {
     const section = a.category === 'exhibitions' ? 'exhibitions' : 'works'
     if (a.slug?.fr) routes.push(`/${SEGMENTS[section].fr}/${a.slug.fr}`)
-    if (a.slug?.en) routes.push(`/en/${SEGMENTS[section].en}/${a.slug.en}`)
+    // Slug is the one localized field that didn't already follow the
+    // `en || fr` rule every other field on this project uses (client
+    // feedback, task 25): a blank English slug used to skip the English
+    // route entirely, so the article existed with no static EN page and no
+    // hreflang for it, reachable only by typing the French slug under /en/
+    // by hand (the public API's $or slug lookup already resolves that).
+    const enSlug = a.slug?.en || a.slug?.fr
+    if (enSlug) routes.push(`/en/${SEGMENTS[section].en}/${enSlug}`)
   }
   return [...new Set(routes)]
 }
@@ -86,8 +93,11 @@ export function headFor(route, content, site = SITE) {
       const fr = `${site}/${SEGMENTS[section].fr}/${match.slug.fr}`
       tags.push(`<link rel="alternate" hreflang="fr" href="${fr}">`)
     }
-    if (match.slug?.en) {
-      const en = `${site}/en/${SEGMENTS[section].en}/${match.slug.en}`
+    // Same `en || fr` fallback as collectRoutes above, so the hreflang
+    // alternate always agrees with which routes actually got prerendered.
+    const enSlug = match.slug?.en || match.slug?.fr
+    if (enSlug) {
+      const en = `${site}/en/${SEGMENTS[section].en}/${enSlug}`
       tags.push(`<link rel="alternate" hreflang="en" href="${en}">`)
     }
     const cover = match.cover?.variants?.medium?.path
@@ -133,8 +143,16 @@ export function preloadFor(route, content) {
 
   const section = sectionFor(match.category)
   const otherLang = lang === 'fr' ? 'en' : 'fr'
-  const ownSlug = match.slug?.[lang]
-  const otherSlug = match.slug?.[otherLang]
+  // Same `en || fr` fallback as collectRoutes/headFor above: when the
+  // English slug is blank, the EN route collectRoutes actually generated
+  // uses the French slug string in the URL, so `ownSlug` has to match that
+  // real URL segment (what ArticleDetail's useParams().slug will actually
+  // be) rather than the blank raw field -- otherwise this key would never
+  // match the one ArticleDetail looks up, silently dropping the preload for
+  // exactly the route this fix exists for.
+  const resolveSlug = (l) => match.slug?.[l] || match.slug?.fr
+  const ownSlug = resolveSlug(lang)
+  const otherSlug = resolveSlug(otherLang)
   if (!ownSlug || !otherSlug) return {}
 
   return { [`translatedPath:${section}:${ownSlug}:${lang}`]: routeFor(section, otherLang, otherSlug) }

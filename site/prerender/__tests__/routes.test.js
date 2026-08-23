@@ -67,10 +67,16 @@ describe('collectRoutes', () => {
     expect(routes).toContain('/en/biography')
   })
 
-  it('skips the English article route when there is no English slug', () => {
+  // Client feedback (task 25): reversed from the prior behaviour, which
+  // skipped the English route entirely when the English slug was blank.
+  // Slug is a localized field like any other and should follow the same
+  // `en || fr` fallback the rest of the content model uses -- a blank
+  // English slug must still get an English page, built from the French
+  // slug, not silently disappear from the site and its sitemap.
+  it('builds the English article route from the French slug when the English slug is blank', () => {
     const routes = collectRoutes({ articles: [{ category: 'works', slug: { fr: 'nouveau-2024', en: '' } }], pageKeys: [] })
     expect(routes).toContain('/oeuvres/nouveau-2024')
-    expect(routes.filter((r) => r.startsWith('/en/works/'))).toEqual([])
+    expect(routes).toContain('/en/works/nouveau-2024')
   })
 
   // Fix round 1: a real, live-data bug. "Identical fr/en slug" was being
@@ -150,6 +156,22 @@ describe('headFor', () => {
 
   it('emits an Open Graph image pointing at the cover', () => {
     expect(headFor('/oeuvres/porte', content, site)).toContain('content="https://example.org/media/2023/abc-medium.webp"')
+  })
+
+  // Client feedback (task 25): the hreflang alternate must agree with the
+  // route collectRoutes actually generates for a blank English slug (built
+  // from the French slug), not simply omit the alternate.
+  it('falls back to the French slug for the English hreflang alternate when the English slug is blank', () => {
+    const withBlankEnSlug = {
+      articles: [{
+        category: 'works',
+        slug: { fr: 'nouveau-2024', en: '' },
+        title: { fr: 'Nouveau', en: '' },
+        yearLabel: { fr: '2024', en: '' },
+      }],
+    }
+    const head = headFor('/oeuvres/nouveau-2024', withBlankEnSlug, site)
+    expect(head).toContain('hreflang="en" href="https://example.org/en/works/nouveau-2024"')
   })
 
   it('titles a non-article route without crashing', () => {

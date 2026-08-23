@@ -11,7 +11,14 @@ export const SEGMENTS = {
 
 export function routeFor(key, lang, slug) {
   const segment = SEGMENTS[key]?.[lang] ?? ''
-  const parts = [lang === 'en' ? 'en' : null, segment || null, slug || null].filter(Boolean)
+  // `slug` can be a resolved string (most callers) or the raw `{fr, en}`
+  // localized field. Slug is the one localized field on this project that
+  // did NOT already follow the `en || fr` rule every other field uses --
+  // an empty English slug used to build `/en/<section>` (the section
+  // listing) instead of an article page. Resolving it the same way here
+  // means every caller gets the fallback for free.
+  const resolvedSlug = slug && typeof slug === 'object' ? slug[lang] || slug.fr : slug
+  const parts = [lang === 'en' ? 'en' : null, segment || null, resolvedSlug || null].filter(Boolean)
   return `/${parts.join('/')}`
 }
 

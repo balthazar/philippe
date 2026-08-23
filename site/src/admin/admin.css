@@ -2,26 +2,65 @@
    Never imported from a public page, so this never ships in the public
    bundle (Task 20 controller correction 6). Deliberately self-contained
    (no dependency on design/tokens.css) so the admin chunk doesn't pull the
-   public design system in either. */
+   public design system in either -- these values are the admin's own, not
+   an import of the public site's tokens. */
 
 .admin {
+  --ink: #3b3e35;
+  --muted: #6b6e65;
+  --line: #dedcd4;
+  --surface: #f7f7f5;
+  --danger: #b00020;
+  --confirm: #1e6b34;
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  color: #1a1a1a;
-  min-height: 100vh;
-  background: #f7f7f5;
+  color: var(--ink);
+  /* Flex column of exactly the nav (flex: 0 0 auto) and .admin-content
+     (flex: 1): nav + content together are exactly one viewport tall,
+     instead of this min-height stacking on top of the nav's own height and
+     overflowing by that amount. `dvh` rather than `vh` for the same reason
+     the public slideshow uses it: `vh` locks to the initial viewport and
+     doesn't shrink when a mobile browser's address bar appears. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--surface);
+}
+
+.admin-content {
+  flex: 1;
+}
+
+/* Visually hidden but still reachable by assistive tech: used for a few
+   labels (e.g. the per-gap block-insert select) whose purpose is obvious
+   visually from context but needs an explicit accessible name. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .admin-nav {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 1.5rem;
   padding: 1rem 1.5rem;
-  background: #1a1a1a;
+  background: var(--ink);
 }
 
 .admin-nav a,
 .admin-nav button {
-  color: #f7f7f5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--surface);
   text-decoration: none;
   font-size: 0.95rem;
   background: none;
@@ -33,6 +72,17 @@
 
 .admin-nav button {
   margin-left: auto;
+}
+
+.admin-nav-mark {
+  display: inline-flex;
+  align-items: center;
+}
+
+.admin-nav-mark img {
+  display: block;
+  height: 1.5rem;
+  width: auto;
 }
 
 .admin-login {
@@ -52,7 +102,8 @@
 .admin-login input {
   padding: 0.5rem;
   font-size: 1rem;
-  border: 1px solid #ccc;
+  background: #fff;
+  border: 1px solid var(--line);
   border-radius: 4px;
 }
 
@@ -64,7 +115,7 @@
 }
 
 .admin-login [role='alert'] {
-  color: #b00020;
+  color: var(--danger);
   font-size: 0.9rem;
 }
 
@@ -91,20 +142,36 @@
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
   background: #fff;
-  border: 1px solid #e2e2e0;
+  border: 1px solid var(--line);
   border-radius: 4px;
   margin-bottom: 0.4rem;
 }
 
 .admin-article-row a {
   flex: 1;
-  color: #1a1a1a;
+  color: var(--ink);
   text-decoration: none;
+}
+
+/* Drag feedback (task 25, client feedback item 1): a lifted state on the
+   row being dragged, and a clear insertion line on whichever edge of the
+   hovered row the dragged row will actually land on -- box-shadow rather
+   than a border, so the indicator doesn't shift layout. */
+.admin-article-row.is-dragging {
+  opacity: 0.5;
+}
+
+.admin-article-row.drop-indicator-before {
+  box-shadow: 0 -3px 0 0 var(--ink);
+}
+
+.admin-article-row.drop-indicator-after {
+  box-shadow: 0 3px 0 0 var(--ink);
 }
 
 .drag-handle {
   cursor: grab;
-  color: #999;
+  color: var(--muted);
 }
 
 .status-badge {
@@ -116,7 +183,7 @@
 
 .status-badge.status-published {
   background: #dff3e3;
-  color: #1e6b34;
+  color: var(--confirm);
 }
 
 .status-badge.status-draft {
@@ -128,13 +195,38 @@
   margin: 0 1.5rem 1rem;
   padding: 0.6rem 0.9rem;
   background: #fdeaea;
-  color: #b00020;
+  color: var(--danger);
   border-radius: 4px;
   font-size: 0.9rem;
 }
 
 .admin-not-found {
   padding: 2rem 1.5rem;
+}
+
+/* Pages index (task 25, section 6) */
+.admin-pages-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 420px;
+}
+
+.admin-pages-list a {
+  display: block;
+  padding: 0.7rem 0.9rem;
+  color: var(--ink);
+  text-decoration: none;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.admin-pages-list a:hover {
+  border-color: var(--ink);
 }
 
 /* Shared: FR/EN content toggle (Task 21). This is per-field CONTENT, not the
@@ -147,7 +239,7 @@
 
 .lang-toggle button {
   padding: 0.3rem 0.8rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-radius: 4px;
   background: #fff;
   cursor: pointer;
@@ -155,18 +247,36 @@
 }
 
 .lang-toggle button.active {
-  background: #1a1a1a;
+  background: var(--ink);
   color: #fff;
-  border-color: #1a1a1a;
+  border-color: var(--ink);
+}
+
+/* Editor + live preview (task 25, section 1). Editor left, preview right,
+   on wide viewports; a single deliberate breakpoint stacks them below
+   ~1100px. The wider absence of responsive design in this project is a
+   separate, already-scheduled piece of work -- this is the one contained
+   exception. */
+.admin-editor-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 2.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1.5rem 3rem;
 }
 
 .admin-editor {
-  max-width: 780px;
-  margin: 0 auto 3rem;
-  padding: 0 1.5rem;
+  flex: 1 1 480px;
+  max-width: 640px;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+  /* Clearance so the sticky save bar below never covers the last block's
+     controls when scrolled all the way down (client feedback item 2). */
+  padding-bottom: 4.5rem;
 }
 
 .admin-editor .admin-toolbar {
@@ -175,7 +285,7 @@
 
 .admin-editor > label {
   font-size: 0.8rem;
-  color: #555;
+  color: var(--muted);
   margin-bottom: -0.4rem;
 }
 
@@ -183,8 +293,10 @@
 .admin-editor input[type='number'] {
   padding: 0.45rem;
   font-size: 0.95rem;
-  border: 1px solid #ccc;
+  background: #fff;
+  border: 1px solid var(--line);
   border-radius: 4px;
+  color: var(--ink);
 }
 
 .year-sort-fields {
@@ -193,28 +305,200 @@
   gap: 0.6rem;
 }
 
+/* Flatter content sections (client feedback item 7): no boxed border or grey
+   fill, just a light rule between sections instead. */
 .admin-editor fieldset {
-  border: 1px solid #e2e2e0;
-  border-radius: 6px;
-  padding: 1rem;
-  background: #fff;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 1.25rem 0 0;
+  margin: 0;
+  background: none;
 }
 
+.admin-editor fieldset legend {
+  padding: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Save bar sticks to the bottom of the viewport so it stays reachable on a
+   long article (client feedback item 2), without covering the last block's
+   controls (the editor's own padding-bottom above provides that
+   clearance). z-index keeps it above the preview column rather than under
+   it if the two ever visually overlap (e.g. the stacked layout below the
+   breakpoint). */
 .admin-editor-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  padding: 0.9rem 0;
+  background: var(--surface);
 }
 
 .admin-editor-actions button {
   padding: 0.6rem 1.2rem;
   font-size: 0.95rem;
   cursor: pointer;
+  background: var(--ink);
+  color: #fff;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+}
+
+.admin-editor-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.admin-editor-delete {
+  margin-left: auto;
+}
+
+.admin-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.admin-status-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-status-control button {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* Destructive actions (task 25, client feedback item 3): text buttons, not
+   icons -- these are one-off controls in prose-like admin chrome, not a
+   dense toolbar, so a plain red label reads clearer than another icon. */
+.button-danger {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+  color: var(--danger);
+  background: #fff;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.button-danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.confirm-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.confirm-delete-prompt {
+  font-size: 0.85rem;
+  color: var(--ink);
 }
 
 .save-confirmation {
-  color: #1e6b34;
+  color: var(--confirm);
   font-size: 0.9rem;
+}
+
+/* Preview pane */
+.admin-preview-pane {
+  flex: 1 1 420px;
+  min-width: 0;
+  position: sticky;
+  top: 1.5rem;
+  align-self: flex-start;
+  max-height: calc(100dvh - 3rem);
+  display: flex;
+  flex-direction: column;
+  padding-top: 1.5rem;
+}
+
+.admin-preview-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.admin-preview-header h2 {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0;
+}
+
+.admin-preview-live-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-preview-live-link.is-disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.admin-preview-scroll {
+  overflow-y: auto;
+  padding: 1.25rem 0;
+}
+
+.article-preview {
+  max-width: 640px;
+}
+
+.article-preview-cover {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  margin-bottom: 1.25rem;
+  border-radius: 4px;
+}
+
+.article-preview-cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  background: #fff;
+  border: 1px dashed var(--line);
+}
+
+@media (max-width: 1100px) {
+  .admin-editor-layout {
+    flex-direction: column;
+  }
+
+  .admin-preview-pane {
+    position: static;
+    max-height: none;
+    width: 100%;
+  }
 }
 
 /* LocalizedInput */
@@ -227,30 +511,32 @@
 
 .localized-input label {
   font-size: 0.8rem;
-  color: #555;
+  color: var(--muted);
 }
 
 .localized-input input,
 .localized-input textarea {
   padding: 0.5rem;
   font-size: 0.95rem;
-  border: 1px solid #ccc;
+  background: #fff;
+  border: 1px solid var(--line);
   border-radius: 4px;
   font-family: inherit;
+  color: var(--ink);
 }
 
 .localized-input.is-overridden input,
 .localized-input.is-overridden textarea {
-  border-color: #1a1a1a;
+  border-color: var(--ink);
 }
 
 .localized-input .revert-button {
   align-self: flex-start;
   font-size: 0.75rem;
   padding: 0.2rem 0.5rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-radius: 3px;
-  background: #f7f7f5;
+  background: #fff;
   cursor: pointer;
 }
 
@@ -258,22 +544,128 @@
 .block-editor {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
 }
 
-.block-editor-block {
-  border: 1px solid #e2e2e0;
-  border-radius: 6px;
-  padding: 0.9rem;
-  background: #fbfbfa;
+.block-editor-item {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
-.block-actions {
+/* Slim and out of the way until it's wanted (client feedback item 5: an
+   insert point before every block, including the very first, so a new
+   block can land at any position without repeated "Monter" clicks). */
+.block-insert-point {
   display: flex;
+  justify-content: center;
+  padding: 0.35rem 0;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.block-insert-point:hover,
+.block-insert-point:focus-within {
+  opacity: 1;
+}
+
+.block-insert-select {
+  font-size: 0.78rem;
+  padding: 0.15rem 0.4rem;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+/* Flattened (client feedback item 7): no boxed border or grey fill, a light
+   rule between blocks instead. */
+.block-editor-block {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.block-editor-item:last-child .block-editor-block {
+  border-bottom: 0;
+  margin-bottom: 0;
+}
+
+.block-editor-block.is-dragging {
+  opacity: 0.5;
+}
+
+/* Same drop-feedback treatment as .admin-article-row above (task 25, client
+   feedback item 1). */
+.block-editor-block.drop-indicator-before {
+  box-shadow: 0 -3px 0 0 var(--ink);
+}
+
+.block-editor-block.drop-indicator-after {
+  box-shadow: 0 3px 0 0 var(--ink);
+}
+
+/* Icons sit inside the legend, on the same line as the type name (client
+   correction, task 25 item 1): type name left, move/delete icons right. */
+.block-editor-legend {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.block-drag-handle {
+  cursor: grab;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.block-type-label {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.8rem;
+}
+
+.block-editor-controls {
+  display: flex;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+
+.block-editor-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.block-editor-controls button:hover:not(:disabled) {
+  background: #fff;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.block-editor-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* The one destructive control gets a distinct colour (task 25, section 3). */
+.block-editor-controls button.icon-button-danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .specs-row {
@@ -304,30 +696,41 @@
 
 /* RichText */
 .rich-text {
-  border: 1px solid #ccc;
+  background: #fff;
+  border: 1px solid var(--line);
   border-radius: 4px;
   overflow: hidden;
 }
 
 .rich-text-toolbar {
   display: flex;
-  gap: 0.3rem;
-  padding: 0.4rem;
-  background: #f0f0ee;
-  border-bottom: 1px solid #ccc;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  background: none;
+  border-bottom: 1px solid var(--line);
 }
 
 .rich-text-toolbar button {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  color: var(--muted);
   border: 1px solid transparent;
   border-radius: 3px;
   background: none;
   cursor: pointer;
 }
 
+.rich-text-toolbar button:hover {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
 .rich-text-toolbar button.active {
-  background: #1a1a1a;
+  background: var(--ink);
   color: #fff;
 }
 
@@ -360,16 +763,16 @@
 }
 
 .image-picker-empty {
-  color: #888;
+  color: var(--muted);
   font-size: 0.85rem;
 }
 
 .image-picker-library {
   margin-top: 0.6rem;
   padding: 0.75rem;
-  border: 1px solid #e2e2e0;
-  border-radius: 4px;
   background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
 }
 
 .image-picker-grid {
@@ -390,7 +793,7 @@
 }
 
 .image-picker-grid button.selected {
-  border-color: #1a1a1a;
+  border-color: var(--ink);
 }
 
 .image-picker-grid img {
@@ -423,10 +826,10 @@
 }
 
 .media-library-item {
-  border: 1px solid #e2e2e0;
+  background: #fff;
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.75rem;
-  background: #fff;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -446,7 +849,7 @@
 
 .button.image-picker-upload {
   padding: 0.5rem 1rem;
-  background: #1a1a1a;
+  background: var(--ink);
   color: #fff;
   border-radius: 4px;
   cursor: pointer;

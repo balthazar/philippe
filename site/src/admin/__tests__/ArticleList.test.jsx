@@ -54,6 +54,23 @@ describe('ArticleList', () => {
     await waitFor(() => expect(screen.getByText('Brouillon')).toBeInTheDocument())
   })
 
+  // Task 25, client feedback item 3: DELETE existed on the API with no UI
+  // calling it. Confirms the row's delete is gated behind ConfirmDelete's
+  // in-page prompt and removes the row only once confirmed.
+  it('deletes an article from its row only after confirming', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0]], total: 1 })
+    const send = vi.spyOn(api, 'apiSend').mockResolvedValue({ ok: true })
+    renderList()
+
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    expect(send).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmer' }))
+    expect(send).toHaveBeenCalledWith('DELETE', '/admin/articles/1')
+    await waitFor(() => expect(screen.queryByText('Porte')).not.toBeInTheDocument())
+  })
+
   // A banner from one failed action used to stay on screen through every
   // later success, telling the artist something was broken long after it
   // had stopped being.
@@ -95,6 +112,32 @@ describe('ArticleList', () => {
     await waitFor(() =>
       expect(send).toHaveBeenCalledWith('POST', '/admin/articles/reorder', { ids: ['2', '1'] })
     )
+  })
+
+  // Task 25, client feedback item 1: dragging gave no sign of where a row
+  // would land. The dragged row gets a "lifted" state and the hovered row
+  // gets an edge indicator, so the resulting order is visible mid-drag, not
+  // just after dropping.
+  it('shows a lifted state on the dragged row and a drop-indicator on the hovered row', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0], ITEMS[1]], total: 2 })
+    renderList()
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+
+    const rows = screen.getAllByRole('listitem')
+    const dataTransfer = { setData: vi.fn(), getData: vi.fn() }
+
+    fireEvent.dragStart(rows[0], { dataTransfer })
+    expect(rows[0]).toHaveClass('is-dragging')
+
+    // Dragging the first row down onto the second: it will land after the
+    // second (reorderCategory's splice-out/splice-in), so the indicator
+    // shows on the second row's trailing edge.
+    fireEvent.dragOver(rows[1], { dataTransfer })
+    expect(rows[1]).toHaveClass('drop-indicator-after')
+
+    fireEvent.dragEnd(rows[0], { dataTransfer })
+    expect(rows[0]).not.toHaveClass('is-dragging')
+    expect(rows[1]).not.toHaveClass('drop-indicator-after')
   })
 
   it('shows an error and stops loading when the initial fetch fails for a non-401 reason', async () => {

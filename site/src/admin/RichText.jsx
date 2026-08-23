@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
+import { BoldIcon, ItalicIcon, BulletListIcon, OrderedListIcon, BlockquoteIcon, LinkIcon } from './icons.jsx'
 
 /**
  * Stored HTML from a `text` block is sanitized server-side on write against
@@ -78,12 +79,19 @@ export function RichText({ value, onChange }) {
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }
 
+  // Every entry here corresponds to a mark/node the schema above actually
+  // allows (bold, italic, bullet list, ordered list, blockquote, link) and
+  // no others: a button for heading, code, a code block, a horizontal rule
+  // or strikethrough would let the artist apply something that looks
+  // accepted in the editor and is then silently stripped by the server on
+  // save. See the file-level comment for why those extensions are disabled
+  // in the schema itself, not just left out of this toolbar.
   const buttons = [
-    { name: 'bold', label: 'Gras', run: () => editor.chain().focus().toggleBold().run() },
-    { name: 'italic', label: 'Italique', run: () => editor.chain().focus().toggleItalic().run() },
-    { name: 'bulletList', label: 'Liste à puces', run: () => editor.chain().focus().toggleBulletList().run() },
-    { name: 'orderedList', label: 'Liste numérotée', run: () => editor.chain().focus().toggleOrderedList().run() },
-    { name: 'blockquote', label: 'Citation', run: () => editor.chain().focus().toggleBlockquote().run() },
+    { name: 'bold', label: 'Gras', Icon: BoldIcon, run: () => editor.chain().focus().toggleBold().run() },
+    { name: 'italic', label: 'Italique', Icon: ItalicIcon, run: () => editor.chain().focus().toggleItalic().run() },
+    { name: 'bulletList', label: 'Liste à puces', Icon: BulletListIcon, run: () => editor.chain().focus().toggleBulletList().run() },
+    { name: 'orderedList', label: 'Liste numérotée', Icon: OrderedListIcon, run: () => editor.chain().focus().toggleOrderedList().run() },
+    { name: 'blockquote', label: 'Citation', Icon: BlockquoteIcon, run: () => editor.chain().focus().toggleBlockquote().run() },
   ]
 
   return (
@@ -94,13 +102,15 @@ export function RichText({ value, onChange }) {
             key={b.name}
             type="button"
             className={editor.isActive(b.name) ? 'active' : ''}
+            aria-label={b.label}
+            title={b.label}
             onClick={b.run}
           >
-            {b.label}
+            <b.Icon />
           </button>
         ))}
-        <button type="button" className={editor.isActive('link') ? 'active' : ''} onClick={setLink}>
-          Lien
+        <button type="button" className={editor.isActive('link') ? 'active' : ''} aria-label="Lien" title="Lien" onClick={setLink}>
+          <LinkIcon />
         </button>
       </div>
       <EditorContent editor={editor} className="rich-text-content" />

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { apiGet, apiSend, apiUpload } from '@/api.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
+import { ConfirmDelete } from './ConfirmDelete.jsx'
 
 const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.variants.thumb.path}` : '')
 
@@ -103,7 +104,13 @@ export function MediaLibrary() {
             <LocalizedInput label="Texte alternatif" lang={lang} value={image.alt} onChange={(alt) => setAlt(image._id, alt)} />
             <div className="media-library-actions">
               <button type="button" onClick={() => saveAlt(image)}>Enregistrer</button>
-              <button type="button" onClick={() => remove(image)}>Supprimer</button>
+              {/*
+                In-page confirmation, not window.confirm() (task 25, client
+                feedback item 3): one unconfirmed click here used to also
+                destroy the archival original under _originals/, alongside
+                every derived variant.
+              */}
+              <ConfirmDelete label={image.alt?.fr || image.filename} onConfirm={() => remove(image)} />
             </div>
             {rowErrors[image._id] && <p role="alert" className="admin-error">{rowErrors[image._id]}</p>}
           </li>

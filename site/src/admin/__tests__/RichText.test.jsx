@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { RichText } from '../RichText.jsx'
 
 /**
@@ -71,5 +71,23 @@ describe('RichText', () => {
     const doc = container.querySelector('.ProseMirror')
     expect(doc).toBeTruthy()
     expect(doc.getAttribute('contenteditable')).toBe('true')
+  })
+
+  // Task 25, section 4: the toolbar became icon-only buttons. Covers exactly
+  // the marks the schema permits (bold, italic, bullet list, ordered list,
+  // blockquote, link) and, per the accessibility rule, checks aria-label and
+  // title as explicit attributes -- a title-only button would still resolve
+  // to the same accessible name via the browser's title fallback, so the
+  // accessible-name query alone couldn't prove aria-label is actually set.
+  it('gives every toolbar button both an aria-label and a title, for exactly the allowed marks', () => {
+    render(<RichText value="" onChange={() => {}} />)
+    const expected = ['Gras', 'Italique', 'Liste à puces', 'Liste numérotée', 'Citation', 'Lien']
+    const toolbar = screen.getByRole('toolbar')
+    const buttons = within(toolbar).getAllByRole('button')
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(expected)
+    for (const button of buttons) {
+      const label = button.getAttribute('aria-label')
+      expect(button).toHaveAttribute('title', label)
+    }
   })
 })

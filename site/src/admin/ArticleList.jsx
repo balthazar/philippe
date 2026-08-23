@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGet, apiSend } from '@/api.js'
 import { useSessionExpired } from './session.js'
+import { ConfirmDelete } from './ConfirmDelete.jsx'
 
 // Order categories are grouped and displayed in. Matches api/src/lib/constants.js
 // CATEGORIES; duplicated here (rather than imported) because the admin is a
@@ -37,6 +38,10 @@ export function ArticleList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dragId, setDragId] = useState(null)
+  // Task 25, client feedback item 1: the artist was dragging blind, with no
+  // sign of where a row would land. Tracks which row is currently hovered
+  // during a drag so a drop-indicator line can render on the correct edge.
+  const [dragOverId, setDragOverId] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -59,6 +64,20 @@ export function ArticleList() {
     return () => { cancelled = true }
   }, [onSessionExpired])
 
+  // Task 25, client feedback item 3: DELETE existed on the API with nothing
+  // in the UI calling it. ConfirmDelete gates the actual call behind an
+  // in-page confirmation naming the article, never a browser confirm().
+  const deleteArticle = useCallback(async (article) => {
+    setError('')
+    try {
+      await apiSend('DELETE', `/admin/articles/${article._id}`)
+      setArticles((prev) => prev.filter((a) => a._id !== article._id))
+    } catch (err) {
+      if (err?.status === 401) onSessionExpired()
+      else setError('Impossible de supprimer cet article.')
+    }
+  }, [onSessionExpired])
+
   const togglePublish = useCallback(async (article) => {
     const status = article.status === 'published' ? 'draft' : 'published'
     // Clear any banner from a previous failure first. Without this the alert
@@ -78,6 +97,7 @@ export function ArticleList() {
     if (!dragId || dragId === targetId) return
     const dragged = dragId
     setDragId(null)
+    setDragOverId(null)
 
     // Computed from the current `articles` state directly (not via a
     // setArticles updater): the reorder POST below is a side effect, and a
@@ -126,18 +146,39 @@ export function ArticleList() {
         <section key={category} className="admin-article-group">
           <h2>{CATEGORY_LABELS[category] || category}</h2>
           <ul>
-            {items.map((article) => (
+            {items.map((article) => {
+              // Same splice-out/splice-in reorder algorithm as
+              // reorderCategory: dragging downward lands the dragged row
+              // after the hovered one, dragging upward lands it before --
+              // the indicator shows exactly that edge, so what the artist
+              // sees during the drag matches what actually happens on drop.
+              const dragIndex = items.findIndex((a) => a._id === dragId)
+              const hoverIndex = items.findIndex((a) => a._id === article._id)
+              const showIndicator = dragId && dragOverId === article._id && dragId !== article._id
+              const indicatorSide = showIndicator ? (dragIndex < hoverIndex ? 'after' : 'before') : null
+
+              return (
               <li
                 key={article._id}
                 draggable
                 onDragStart={() => setDragId(article._id)}
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragOverId(article._id)
+                }}
                 onDrop={(e) => {
                   e.preventDefault()
                   reorderCategory(category, article._id)
                 }}
-                onDragEnd={() => setDragId(null)}
-                className="admin-article-row"
+                onDragEnd={() => {
+                  setDragId(null)
+                  setDragOverId(null)
+                }}
+                className={[
+                  'admin-article-row',
+                  dragId === article._id ? 'is-dragging' : '',
+                  indicatorSide ? `drop-indicator-${indicatorSide}` : '',
+                ].filter(Boolean).join(' ')}
               >
                 <span className="drag-handle" aria-hidden="true">⠿</span>
                 <Link to={`/admin/articles/${article._id}`}>{article.title?.fr}</Link>
@@ -147,8 +188,10 @@ export function ArticleList() {
                 <button type="button" onClick={() => togglePublish(article)}>
                   {article.status === 'published' ? 'Dépublier' : 'Publier'}
                 </button>
+                <ConfirmDelete label={article.title?.fr} onConfirm={() => deleteArticle(article)} />
               </li>
-            ))}
+              )
+            })}
           </ul>
         </section>
       ))}

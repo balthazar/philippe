@@ -5,8 +5,9 @@ import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { BlockEditor } from './BlockEditor.jsx'
 
-// Matches api/src/lib/constants.js PAGE_KEYS.
-const PAGE_LABELS = {
+// Matches api/src/lib/constants.js PAGE_KEYS. Exported so PagesIndex.jsx
+// (task 25, section 6) can list all eight without duplicating this table.
+export const PAGE_LABELS = {
   home: 'Accueil',
   works: 'Œuvres (intro)',
   exhibitions: 'Expositions (intro)',
@@ -83,7 +84,7 @@ export function PageEditor() {
     <form className="admin-editor" onSubmit={save}>
       <div className="admin-toolbar">
         <h1>{PAGE_LABELS[key] || key}</h1>
-        <Link to="/admin">Retour aux articles</Link>
+        <Link to="/admin/pages">Retour aux pages</Link>
       </div>
 
       <div className="lang-toggle" role="group" aria-label="Langue du contenu">

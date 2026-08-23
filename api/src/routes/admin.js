@@ -71,14 +71,23 @@ adminRouter.patch('/articles/:id', asyncHandler(async (req, res, next) => {
     const update = { ...req.body }
     if (update.blocks) update.blocks = cleanBlocks(update.blocks)
     if (update.slug) update.slug = await ensureSlug(update, req.params.id)
-    const article = await Article.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true }).lean()
+    // Populated the same way GET /articles/:id is: without this, `.lean()`
+    // returns `cover` and the image refs as bare ids, and the client (which
+    // reads `article.cover?._id`) silently writes `cover: null` on its next
+    // save (task 25, section 0).
+    const article = await Article.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
+      .populate('cover')
+      .populate('blocks.image')
+      .populate('blocks.items.image')
+      .lean()
     if (!article) return res.status(404).json({ error: 'not found' })
     res.json(article)
   } catch (err) { next(err) }
 }))
 
 adminRouter.delete('/articles/:id', asyncHandler(async (req, res) => {
-  await Article.findByIdAndDelete(req.params.id)
+  const deleted = await Article.findByIdAndDelete(req.params.id)
+  if (!deleted) return res.status(404).json({ error: 'not found' })
   res.json({ ok: true })
 }))
 
@@ -90,7 +99,15 @@ adminRouter.post('/articles/reorder', asyncHandler(async (req, res) => {
 
 adminRouter.get('/pages/:key', asyncHandler(async (req, res) => {
   if (!PAGE_KEYS.includes(req.params.key)) return res.status(400).json({ error: 'unknown page' })
-  const page = (await Page.findOne({ key: req.params.key }).lean()) || { key: req.params.key, blocks: [] }
+  // Same populate calls as GET /articles/:id: without them, every
+  // block.image here is a bare id, so PageEditor's thumbnails don't render
+  // and its gallery merge (comparing image._id) matches the wrong item.
+  // The biography page carries image blocks from the migration, so this
+  // affects live content (task 25, section 7).
+  const page = (await Page.findOne({ key: req.params.key }).populate('blocks.image').populate('blocks.items.image').lean()) || {
+    key: req.params.key,
+    blocks: [],
+  }
   res.json(page)
 }))
 
