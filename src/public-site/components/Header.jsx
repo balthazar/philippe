@@ -21,6 +21,8 @@ function counterpartPath(pathname, lang, otherLang) {
   return key ? routeFor(key, otherLang, slug) : routeFor('home', otherLang)
 }
 
+const LANG_CODES = ['fr', 'en']
+
 export function Header({ translatedPath }) {
   const { lang, otherLang, href } = useLang()
   const { pathname } = useLocation()
@@ -34,9 +36,19 @@ export function Header({ translatedPath }) {
           <NavLink key={item.key} to={href(item.key)}>{item[lang]}</NavLink>
         ))}
       </nav>
-      <Link to={toggleHref} className="lang-toggle" hrefLang={otherLang}>
-        {otherLang === 'en' ? 'English' : 'Français'}
-      </Link>
+      <div className="lang-switch" aria-label={lang === 'fr' ? 'Changer de langue' : 'Change language'}>
+        {LANG_CODES.map((code) =>
+          code === lang ? (
+            <span key={code} className="lang-code active" aria-current="true">
+              {code.toUpperCase()}
+            </span>
+          ) : (
+            <Link key={code} to={toggleHref} className="lang-code" hrefLang={code}>
+              {code.toUpperCase()}
+            </Link>
+          )
+        )}
+      </div>
     </header>
   )
 }

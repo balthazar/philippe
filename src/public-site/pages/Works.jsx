@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiGet } from '../../lib/api.js'
 import { useLang } from '../../lib/lang.jsx'
-import { groupByDecade } from '../../lib/groupByDecade.js'
 import { ArticleGrid } from '../components/ArticleGrid.jsx'
 import { Container } from '../components/Container.jsx'
 import { BlockRenderer } from '../components/BlockRenderer.jsx'
@@ -35,12 +34,7 @@ export function Works() {
         <section className="page-intro"><BlockRenderer blocks={state.intro.blocks} /></section>
       )}
 
-      {groupByDecade(state.works).map((group) => (
-        <section key={group.decade ?? 'undated'} className="decade">
-          {group.label && <h2 className="decade-heading">{group.label}</h2>}
-          <ArticleGrid items={group.items} routeKey="works" />
-        </section>
-      ))}
+      <ArticleGrid items={state.works} routeKey="works" />
 
       {['editions', 'public-orders'].map((key) =>
         state[key].length ? (

@@ -33,9 +33,15 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: 'Works' })).toHaveAttribute('href', '/en/works')
   })
 
-  it('offers a toggle to the other language', () => {
+  it('shows both language codes with the current one marked active', () => {
     renderAt('/oeuvres')
-    expect(screen.getByRole('link', { name: /english/i })).toHaveAttribute('href', '/en/works')
+    expect(screen.getByText('FR')).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByText('EN').closest('a')).not.toBeNull()
+  })
+
+  it('links the inactive language to the counterpart path', () => {
+    renderAt('/oeuvres')
+    expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/works')
   })
 
   it('sets the document language to match the route', () => {
@@ -59,7 +65,7 @@ describe('Header', () => {
       </MemoryRouter>
     )
     expect(document.documentElement.lang).toBe('fr')
-    await user.click(screen.getByRole('link', { name: /english/i }))
+    await user.click(screen.getByRole('link', { name: 'EN' }))
     expect(document.documentElement.lang).toBe('en')
   })
 })

@@ -24,8 +24,10 @@ export function ArticleCard({ article, routeKey = 'works' }) {
           />
         )}
       </div>
-      <span className="card-title">{article.title}</span>
-      {article.yearLabel && <span className="card-year">{article.yearLabel}</span>}
+      <span className="card-caption">
+        {article.title}
+        {article.yearLabel ? ` | ${article.yearLabel}` : ''}
+      </span>
     </Link>
   )
 }

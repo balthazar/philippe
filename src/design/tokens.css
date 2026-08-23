@@ -1,17 +1,16 @@
 :root {
   --ink: #14110f;
   --ink-soft: #5d5751;
-  --paper: #fbfaf8;
-  --ground: #eeebe6;     /* letterbox ground behind images */
+  --paper: #fff;
   --rule: #d9d4cc;
 
   --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
 
   /* Four steps, nothing between. */
-  --text-s: 0.8125rem;
-  --text-m: 1rem;
-  --text-l: 1.375rem;
-  --text-xl: 2.25rem;
+  --text-s: 0.6875rem;
+  --text-m: 0.8125rem;
+  --text-l: 1rem;
+  --text-xl: 1.375rem;
 
   --space-1: 0.5rem;
   --space-2: 1rem;
@@ -21,5 +20,11 @@
 
   --container: 1440px;
   --gutter: clamp(1rem, 4vw, 3rem);
-  --card-ratio: 4 / 3;
+
+  /* Chosen against the real archive: tall enough that the tallest works
+     (thermometers, portholes, aspect ~0.86) aren't cramped, short enough
+     that the widest works (blackboards, aspect ~1.7) still read as
+     photographs rather than specks in a lot of white. No background: this
+     only aligns caption baselines across a row, it is not a letterbox. */
+  --card-frame-height: 18rem;
 }

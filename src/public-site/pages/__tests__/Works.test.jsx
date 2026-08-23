@@ -23,10 +23,12 @@ beforeEach(() => {
 })
 
 describe('Works page', () => {
-  it('renders decade headings above their works', async () => {
+  it('renders all works in a single flat grid with no decade headings', async () => {
     render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
-    await waitFor(() => expect(screen.getByRole('heading', { name: '2020' })).toBeInTheDocument())
-    expect(screen.getByRole('heading', { name: '2010' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText(/porte/i)).toBeInTheDocument())
+    expect(screen.getByText(/chassis/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '2020' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '2010' })).not.toBeInTheDocument()
   })
 
   it('renders Éditions and Commandes publiques as sections beneath the works', async () => {
