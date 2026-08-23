@@ -7,9 +7,11 @@ import { PagePreview } from '../PagePreview.jsx'
 // (cover, subtitle, yearLabel) a page doesn't have.
 describe('PagePreview', () => {
   it('resolves the title and block text for the current language, falling back to French', () => {
+    // Task 30, part 5: `heading` is retired -- what used to be a heading
+    // block is now a `text` block carrying an <h2>/<h3>.
     const page = {
       title: { fr: 'Titre', en: 'Title' },
-      blocks: [{ type: 'heading', value: { fr: 'Section', en: '' }, level: 2 }],
+      blocks: [{ type: 'text', value: { fr: '<h2>Section</h2>', en: '' } }],
     }
     render(<PagePreview page={page} lang="en" />)
     expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeInTheDocument()

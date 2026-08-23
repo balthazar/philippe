@@ -85,6 +85,16 @@ const PURGED_ORIGINAL_FILENAMES = new Set(['icone-oeuvres.jpg'])
  * Task 26, part A2. Fails if any article or page still carries the unfilled
  * Elementor placeholder heading -- confirms the migration's exact-match
  * drop actually ran, rather than trusting the extraction step blindly.
+ *
+ * Task 30, part 5: `heading` is retired as a block type, and the Article/
+ * Page schema's `type` enum no longer allows it at all, so this check's own
+ * `b.type === 'heading'` branch can now never match anything loaded through
+ * the current schema -- the placeholder drop this guards still runs
+ * (elementor.js's dropPlaceholderHeadings, on the internal 'heading'
+ * representation, BEFORE it is converted to a `text` block carrying an
+ * <h2>/<h3>), just earlier in the pipeline than this check inspects. Left
+ * in place rather than deleted: cheap, harmless, and still correct as
+ * written for any document the schema itself would allow.
  */
 export function checkNoPlaceholderHeadings(articles, pages) {
   const failures = []

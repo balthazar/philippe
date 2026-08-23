@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiGet, apiSend } from '@/api.js'
 import { useSessionExpired } from './session.js'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
-import { PlusIcon } from './icons.jsx'
+import { PlusIcon, StarIcon } from './icons.jsx'
 
 // Order categories are grouped and displayed in. Matches api/src/lib/constants.js
 // CATEGORIES; duplicated here (rather than imported) because the admin is a
@@ -76,6 +76,21 @@ export function ArticleList() {
     } catch (err) {
       if (err?.status === 401) onSessionExpired()
       else setError('Impossible de supprimer cet article.')
+    }
+  }, [onSessionExpired])
+
+  // Task 30, part 2: works only. The toggle appears for the `works` category
+  // and nowhere else (checked at render time below); GET /home only ever
+  // reads `featured` on works articles, so a value on any other category is
+  // simply never read, but the control itself is not offered at all there.
+  const toggleFeatured = useCallback(async (article) => {
+    setError('')
+    try {
+      const updated = await apiSend('PATCH', `/admin/articles/${article._id}`, { featured: !article.featured })
+      setArticles((prev) => prev.map((a) => (a._id === article._id ? { ...a, featured: updated.featured } : a)))
+    } catch (err) {
+      if (err?.status === 401) onSessionExpired()
+      else setError('Impossible de mettre à jour cet article.')
     }
   }, [onSessionExpired])
 
@@ -200,6 +215,18 @@ export function ArticleList() {
                   unstyled native button, a differently-sized danger button).
                 */}
                 <span className="admin-row-actions">
+                  {category === 'works' && (
+                    <button
+                      type="button"
+                      className={`icon-button${article.featured ? ' active' : ''}`}
+                      aria-pressed={Boolean(article.featured)}
+                      aria-label={article.featured ? 'Retirer de la vedette' : 'Mettre en vedette'}
+                      title={article.featured ? 'Retirer de la vedette' : 'Mettre en vedette'}
+                      onClick={() => toggleFeatured(article)}
+                    >
+                      <StarIcon />
+                    </button>
+                  )}
                   <span className={`status-badge status-${article.status}`}>
                     {STATUS_LABELS[article.status] || article.status}
                   </span>

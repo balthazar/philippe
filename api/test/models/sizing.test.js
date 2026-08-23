@@ -59,3 +59,48 @@ describe('gallery item span', () => {
     await expect(a.validate()).rejects.toThrow(/span/)
   })
 })
+
+// Task 30, part 4: a gallery block's display mode -- grid (today's
+// behaviour) or slider, one image at a time on the public page.
+describe('gallery mode', () => {
+  it('defaults to grid', async () => {
+    const a = await Article.create({
+      category: 'works', slug: { fr: 'm1' }, title: { fr: 'M' },
+      blocks: [{ type: 'gallery', items: [] }],
+    })
+    expect(a.blocks[0].mode).toBe('grid')
+  })
+
+  it('accepts slider', async () => {
+    const a = await Article.create({
+      category: 'works', slug: { fr: 'm2' }, title: { fr: 'M2' },
+      blocks: [{ type: 'gallery', mode: 'slider', items: [] }],
+    })
+    expect(a.blocks[0].mode).toBe('slider')
+  })
+
+  it('rejects an unknown mode', async () => {
+    const a = new Article({
+      category: 'works', slug: { fr: 'm3' }, title: { fr: 'M3' },
+      blocks: [{ type: 'gallery', mode: 'carousel', items: [] }],
+    })
+    await expect(a.validate()).rejects.toThrow(/mode/)
+  })
+})
+
+// Task 30, part 2: reinstates the curation flag the plan's Global Constraints
+// once documented as removed (see the amended bullet in
+// docs/superpowers/plans/2026-08-22-philippe-gronon-site.md) -- the client
+// asked for it back so the artist can hand-pick the homepage slideshow.
+describe('featured', () => {
+  it('defaults to false', async () => {
+    const a = await Article.create({ category: 'works', slug: { fr: 'f1' }, title: { fr: 'F' } })
+    expect(a.featured).toBe(false)
+  })
+
+  it('is settable and queryable', async () => {
+    await Article.create({ category: 'works', slug: { fr: 'f2' }, title: { fr: 'F2' }, featured: true })
+    const found = await Article.findOne({ featured: true })
+    expect(found.slug.fr).toBe('f2')
+  })
+})

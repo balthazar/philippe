@@ -3,8 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BlockEditor } from '../BlockEditor.jsx'
 
+// Task 30, part 5: `heading` is retired as a block type -- these generic
+// "any two blocks" fixtures use `text` and `specs` rather than a heading.
 const blocks = [
-  { type: 'heading', value: { fr: 'Un', en: '' }, level: 2 },
+  { type: 'text', value: { fr: '<h2>Un</h2>', en: '' } },
   { type: 'specs', items: [{ term: { fr: 'Tirage', en: '' }, value: { fr: '3', en: '' } }] },
 ]
 
@@ -158,10 +160,14 @@ describe('BlockEditor gallery item icon controls', () => {
     },
   ]
 
-  it('marks the item matching coverId as the pressed cover button', () => {
+  // Task 30, part 3: the star is a real toggle now -- pressing it on the
+  // current cover clears `article.cover` rather than being a dead end once
+  // set. The accessible name says what the press WILL do, not only the
+  // current state, matching the Eye control's own convention just below.
+  it('marks the item matching coverId as the pressed cover button, with a label describing what pressing it will do', () => {
     render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={() => {}} coverId="img2" />)
     expect(screen.getByRole('button', { name: 'Définir comme couverture' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: 'Couverture actuelle' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Retirer la couverture' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('calls onSetCover with the item image when its cover button is clicked', async () => {
@@ -169,6 +175,13 @@ describe('BlockEditor gallery item icon controls', () => {
     render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={onSetCover} coverId={null} />)
     await userEvent.click(screen.getAllByRole('button', { name: 'Définir comme couverture' })[0])
     expect(onSetCover).toHaveBeenCalledWith({ _id: 'img1' })
+  })
+
+  it('calls onSetCover with null when the current cover button is clicked, clearing the cover', async () => {
+    const onSetCover = vi.fn()
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={onSetCover} coverId="img2" />)
+    await userEvent.click(screen.getByRole('button', { name: 'Retirer la couverture' }))
+    expect(onSetCover).toHaveBeenCalledWith(null)
   })
 
   it("reflects each item's hidden state in its own eye button", () => {
@@ -237,5 +250,29 @@ describe('BlockEditor gallery item icon controls', () => {
     const columnsControl = legend.querySelector('.gallery-columns-control')
     expect(columnsControl).toBeInTheDocument()
     expect(container.querySelector('.gallery-columns')).not.toBeInTheDocument()
+  })
+
+  // Task 30, part 4: a gallery block gets a display mode, toggled beside the
+  // column count in the block header.
+  describe('gallery mode toggle', () => {
+    it('shows a mode select beside the column count, defaulting to grid', () => {
+      render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} />)
+      expect(screen.getByLabelText("Mode d'affichage")).toHaveValue('grid')
+      expect(screen.getByLabelText('Colonnes')).toBeInTheDocument()
+    })
+
+    it('hides the column-count select once the block is in slider mode, since it does nothing there', () => {
+      const sliderBlocks = [{ ...galleryBlocks[0], mode: 'slider' }]
+      render(<BlockEditor blocks={sliderBlocks} lang="fr" onChange={() => {}} />)
+      expect(screen.getByLabelText("Mode d'affichage")).toHaveValue('slider')
+      expect(screen.queryByLabelText('Colonnes')).not.toBeInTheDocument()
+    })
+
+    it('switches a gallery block to slider mode via the select', async () => {
+      const onChange = vi.fn()
+      render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={onChange} />)
+      await userEvent.selectOptions(screen.getByLabelText("Mode d'affichage"), 'slider')
+      expect(onChange).toHaveBeenLastCalledWith([{ ...galleryBlocks[0], mode: 'slider' }])
+    })
   })
 })

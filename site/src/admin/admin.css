@@ -232,6 +232,38 @@
   cursor: default;
 }
 
+/* Task 30, part 2: the featured (star) toggle, works articles only -- same
+   icon-button convention as the gallery editor's own star/eye controls
+   (.gallery-editor-tile-controls button), a filled icon for the pressed
+   state rather than a second icon shape. */
+.admin-row-actions .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.admin-row-actions .icon-button:hover {
+  color: var(--ink);
+}
+
+.admin-row-actions .icon-button.active {
+  color: var(--surface);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.admin-row-actions .icon-button.active svg {
+  fill: currentColor;
+}
+
 .status-badge {
   font-size: 0.75rem;
   padding: 0.15rem 0.5rem;

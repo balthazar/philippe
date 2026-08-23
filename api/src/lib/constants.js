@@ -1,6 +1,10 @@
 export const CATEGORIES = ['works', 'exhibitions', 'editions', 'public-orders']
 export const PAGE_KEYS = ['home', 'works', 'exhibitions', 'biography', 'contact', 'bibliography', 'links', 'legal']
-export const BLOCK_TYPES = ['text', 'heading', 'image', 'gallery', 'specs']
+// Task 30, part 5: `heading` is retired. What used to be a heading block is
+// now a `text` block carrying an <h2>/<h3> (see api/src/lib/sanitize.js's
+// whitelist, and RichText.jsx's TipTap heading extension, restricted to
+// those two levels -- never h1, which the article title itself owns).
+export const BLOCK_TYPES = ['text', 'image', 'gallery', 'specs']
 
 // Mirrors site/src/routes.js's SEGMENTS: the api and site are separate
 // deployables (see api/Dockerfile, k8s/*.yaml -- neither container has the

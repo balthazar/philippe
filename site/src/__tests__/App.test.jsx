@@ -89,6 +89,38 @@ describe('App routing', () => {
     expect(screen.getByRole('contentinfo')).toBeInTheDocument()
   })
 
+  // Client feedback (Task 30): the timeline reads as a full-height sidebar
+  // on exhibition pages, so the footer aligns to the content column beside
+  // its base rather than spanning under the timeline too. A pathname check
+  // covers the /expositions section index directly; an individual
+  // exhibition article lives at the root (/2023), indistinguishable from any
+  // other article by URL alone, so ArticleDetail reports its own category up
+  // once it has loaded (mirroring how onTranslatedPath already works).
+  describe('exhibitions footer indent', () => {
+    it('indents the footer on an exhibition article page', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+        if (path.startsWith('/pages/')) return { key: 'exhibitions', title: 'Expositions', blocks: [] }
+        if (path === '/home') return { slides: [] }
+        if (path === '/articles/2023') return { slug: '2023', title: '2023', category: 'exhibitions', blocks: [] }
+        return { items: [], total: 0 }
+      })
+      renderAt('/2023')
+      await waitFor(() => expect(screen.getByRole('contentinfo')).toHaveClass('is-exhibitions'))
+    })
+
+    it('does not indent the footer on a non-exhibition article page', async () => {
+      renderAt('/porte-fr')
+      await waitFor(() => expect(screen.getByRole('contentinfo')).toBeInTheDocument())
+      expect(screen.getByRole('contentinfo')).not.toHaveClass('is-exhibitions')
+    })
+
+    it('indents the footer on the /expositions section index', async () => {
+      renderAt('/expositions')
+      await waitFor(() => expect(screen.getByRole('contentinfo')).toBeInTheDocument())
+      expect(screen.getByRole('contentinfo')).toHaveClass('is-exhibitions')
+    })
+  })
+
   // Client feedback: a short page (e.g. /contact, reduced to one mailto
   // block) must never scroll -- header + main + footer together fit exactly
   // one viewport. `.page-main`'s own min-height used to reserve

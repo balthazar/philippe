@@ -1,9 +1,12 @@
 import sanitizeHtml from 'sanitize-html'
 
 // Duplicated from api/src/lib/sanitize.js on purpose: migrate/ is a separate
-// package from api/. Keep these two whitelists identical.
+// package from api/. Keep these two whitelists identical. Task 30, part 5:
+// h2/h3 added (never h1 -- the article title owns the page's only h1) so a
+// migrated heading (see headingToText, below) survives this sanitizer the
+// same way the live admin's would.
 const OPTIONS = {
-  allowedTags: ['p', 'br', 'em', 'strong', 'a', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'blockquote'],
+  allowedTags: ['p', 'br', 'em', 'strong', 'a', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'blockquote', 'h2', 'h3'],
   allowedAttributes: { a: ['href'] },
   allowedSchemes: ['http', 'https', 'mailto'],
 }
@@ -190,9 +193,40 @@ export function dropPlaceholderHeadings(blocks) {
   return blocks.filter((b) => !isPlaceholderHeading(b))
 }
 
+// `<`, `>` and `&` must be escaped before being interposed into an HTML
+// template string: `stripTags`/`unescapeTextEntities` upstream already
+// decoded a heading's title down to plain text (so an artist-facing value
+// never reads as double-escaped), so wrapping it in `<h2>...</h2>` without
+// re-escaping here would let a literal "<" in a title be parsed as markup by
+// the sanitizer below instead of shown as text -- at best stripped, at worst
+// a different tag than intended.
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Task 30, part 5: retires the `heading` block type. A `heading` is still
+// used INTERNALLY throughout this file (dropTrailingHeadings,
+// dropPlaceholderHeadings, the fr/en merge above) because those all key off
+// `block.type === 'heading'` and there is no reason to disturb logic that
+// already works -- this is the one place, at the very end of
+// mapElementorToBlocks, that turns whatever heading blocks survived into
+// `text` blocks carrying an `<h2>` or `<h3>` (never `<h1>`: the article
+// title owns the page's only h1, and `level` was always 2 or 3 already,
+// schema-enforced, so this mapping can never produce one). Run through the
+// same `clean()` every other text block goes through, so a migrated heading
+// is sanitized exactly the way a live admin-authored one would be.
+function headingToText(block) {
+  const wrap = (text) => (text ? clean(`<h${block.level}>${escapeHtml(text)}</h${block.level}>`) : '')
+  return { type: 'text', value: { fr: wrap(block.value.fr), en: wrap(block.value.en) } }
+}
+
+export function convertHeadingsToText(blocks) {
+  return blocks.map((b) => (b.type === 'heading' ? headingToText(b) : b))
+}
+
 export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   const fr = [...walkWidgets(frNodes)].flatMap((w) => widgetToBlocks(w, ctx))
-  if (!enNodes) return dropTrailingHeadings(dropPlaceholderHeadings(fr))
+  if (!enNodes) return convertHeadingsToText(dropTrailingHeadings(dropPlaceholderHeadings(fr)))
   const en = [...walkWidgets(enNodes)].flatMap((w) => widgetToBlocks(w, ctx))
 
   // The merge is positional, so it is only sound when both trees produced the
@@ -200,7 +234,7 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   // shifted pair coincides on type the English text lands on the wrong French
   // block: a wrong translation that looks right, which is worse than none.
   // On divergence, leave the English side empty and fall back to French.
-  if (en.length !== fr.length) return dropTrailingHeadings(dropPlaceholderHeadings(fr))
+  if (en.length !== fr.length) return convertHeadingsToText(dropTrailingHeadings(dropPlaceholderHeadings(fr)))
 
   const merged = fr.map((block, i) => {
     const other = en[i]
@@ -219,5 +253,5 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
     }
     return block
   })
-  return dropTrailingHeadings(dropPlaceholderHeadings(merged))
+  return convertHeadingsToText(dropTrailingHeadings(dropPlaceholderHeadings(merged)))
 }

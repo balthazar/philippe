@@ -10,7 +10,9 @@ describe('ArticlePreview', () => {
       title: { fr: 'Titre', en: 'Title' },
       yearLabel: { fr: '2020', en: '' },
       cover: null,
-      blocks: [{ type: 'heading', value: { fr: 'Section', en: '' }, level: 2 }],
+      // Task 30, part 5: `heading` is retired -- what used to be a heading
+      // block is now a `text` block carrying an <h2>/<h3>.
+      blocks: [{ type: 'text', value: { fr: '<h2>Section</h2>', en: '' } }],
     }
     render(<ArticlePreview article={article} lang="en" />)
     expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeInTheDocument()
@@ -31,11 +33,30 @@ describe('ArticlePreview', () => {
   // Two cases the brief calls out explicitly: an unpopulated image (a bare
   // id string rather than an object with variants) and a brand-new, mostly
   // blank article. Neither must throw.
-  it('degrades an unpopulated cover to a placeholder instead of throwing', () => {
+  it('degrades an unpopulated cover to a placeholder instead of throwing, when it cannot be resolved from the gallery either', () => {
     const article = { title: { fr: 'T', en: '' }, cover: 'bare-id-string', blocks: [] }
     render(<ArticlePreview article={article} lang="fr" />)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.getByText(/pas d.image de couverture/i)).toBeInTheDocument()
+  })
+
+  // Task 30 bug report: `article.cover` is a bare id string right after the
+  // star toggle sets a new cover pre-save, or right after a save whose
+  // response wasn't populated (see api/src/routes/admin.js's POST fix) --
+  // both are legitimately reachable states, not edge cases. Since the cover
+  // migration, every cover is one of the article's own gallery images, so a
+  // bare id can be resolved locally against the blocks the editor already
+  // holds, rather than falling back to "no cover" for a display-shape
+  // problem that reads to the artist as data loss.
+  it('resolves a bare cover id to the matching gallery image, instead of showing a placeholder', () => {
+    const image = { _id: 'img1', variants: { medium: { path: 'gallery-medium.jpg', width: 800, height: 600 } } }
+    const article = {
+      title: { fr: 'T', en: '' },
+      cover: 'img1',
+      blocks: [{ type: 'gallery', columns: 3, items: [{ image, caption: { fr: '', en: '' }, span: 1 }] }],
+    }
+    const { container } = render(<ArticlePreview article={article} lang="fr" />)
+    expect(container.querySelector('img.article-preview-cover')).toHaveAttribute('src', '/media/gallery-medium.jpg')
   })
 
   it('degrades an unpopulated block image to no <img>, without throwing', () => {

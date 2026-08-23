@@ -105,6 +105,20 @@ export function BlockquoteIcon(props) {
   )
 }
 
+// Task 30, part 5: the RichText toolbar button that toggles a heading
+// (level 2) on the current block -- a plain "H" glyph, consistent with the
+// other icons here being simple line drawings rather than a mark of a
+// specific typeface.
+export function HeadingIcon(props) {
+  return (
+    <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="5" y1="4" x2="5" y2="18" />
+      <line x1="15" y1="4" x2="15" y2="18" />
+      <line x1="5" y1="11" x2="15" y2="11" />
+    </svg>
+  )
+}
+
 export function LinkIcon(props) {
   return (
     <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>

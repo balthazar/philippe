@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks,
   reduceContactPageBlocks, removeEmptyTextBlocks, removeSubtitleDuplicateBlocks, ensureCoverInGallery,
-  coverLegacyIdFor, moveCreditsAfterGallery,
+  coverLegacyIdFor, moveCreditsAfterGallery, defaultGalleryMode,
 } from '../extract.js'
 
 describe('mapCategory', () => {
@@ -356,6 +356,48 @@ describe('coverLegacyIdFor', () => {
 
   it('returns null for a works article with no thumbnail meta at all', () => {
     expect(coverLegacyIdFor('works', undefined)).toBeNull()
+  })
+})
+
+// Task 30, part 4 (client feedback): every gallery in an exhibitions
+// article defaults to slider display mode; every other category's
+// galleries keep the schema's existing grid default untouched. Set once
+// here, at extraction time -- load.js's preserveArtistFields is what then
+// protects the artist's own later choice (toggled in the admin) across a
+// re-run.
+describe('defaultGalleryMode', () => {
+  it('sets every gallery block in an exhibitions article to slider mode', () => {
+    const blocks = [
+      { type: 'text', value: { fr: '<h2>Titre</h2>', en: '' } },
+      { type: 'gallery', columns: 3, items: [] },
+    ]
+    expect(defaultGalleryMode('exhibitions', blocks)).toEqual([
+      blocks[0],
+      { ...blocks[1], mode: 'slider' },
+    ])
+  })
+
+  it('sets every gallery block when an exhibitions article has more than one', () => {
+    const blocks = [
+      { type: 'gallery', columns: 3, items: [] },
+      { type: 'text', value: { fr: '<p>x</p>', en: '' } },
+      { type: 'gallery', columns: 2, items: [] },
+    ]
+    const result = defaultGalleryMode('exhibitions', blocks)
+    expect(result[0].mode).toBe('slider')
+    expect(result[2].mode).toBe('slider')
+  })
+
+  it('leaves works/editions/public-orders galleries untouched (no mode field added)', () => {
+    const blocks = [{ type: 'gallery', columns: 3, items: [] }]
+    expect(defaultGalleryMode('works', blocks)).toEqual(blocks)
+    expect(defaultGalleryMode('editions', blocks)).toEqual(blocks)
+    expect(defaultGalleryMode('public-orders', blocks)).toEqual(blocks)
+  })
+
+  it('leaves non-gallery blocks in an exhibitions article untouched', () => {
+    const blocks = [{ type: 'text', value: { fr: '<p>x</p>', en: '' } }]
+    expect(defaultGalleryMode('exhibitions', blocks)).toEqual(blocks)
   })
 })
 

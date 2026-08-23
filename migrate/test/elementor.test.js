@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapElementorToBlocks, liftSpecs, walkWidgets } from '../elementor.js'
+import { mapElementorToBlocks, liftSpecs, walkWidgets, convertHeadingsToText } from '../elementor.js'
 
 const widget = (widgetType, settings) => ({ elType: 'widget', widgetType, settings })
 const section = (children) => ({ elType: 'section', elements: [{ elType: 'column', elements: children }] })
@@ -17,7 +17,12 @@ describe('mapElementorToBlocks', () => {
     expect(blocks).toEqual([{ type: 'text', value: { fr: '<p>Bonjour</p>', en: '' } }])
   })
 
-  it('maps a heading widget', () => {
+  // Task 30, part 5: retires the `heading` block type. A heading widget is
+  // still recognised internally (dropTrailingHeadings/dropPlaceholderHeadings
+  // below still need to key off it), but the FINAL block mapElementorToBlocks
+  // emits is a `text` block carrying an `<h2>`/`<h3>`, sanitized the same way
+  // any other text block is.
+  it('maps a heading widget into a text block carrying an <h2>/<h3>', () => {
     // Followed by a text widget so it is not a trailing heading, which
     // dropTrailingHeadings would otherwise strip; that behaviour has its own
     // dedicated tests below.
@@ -26,7 +31,7 @@ describe('mapElementorToBlocks', () => {
       null,
       {}
     )
-    expect(blocks[0]).toEqual({ type: 'heading', value: { fr: 'Provenance', en: '' }, level: 3 })
+    expect(blocks[0]).toEqual({ type: 'text', value: { fr: '<h3>Provenance</h3>', en: '' } })
   })
 
   it('maps an image widget to an image block with a legacy id placeholder', () => {
@@ -84,9 +89,9 @@ describe('mapElementorToBlocks', () => {
       ],
     })
     expect(mapElementorToBlocks([g], null, {})).toEqual([
-      { type: 'heading', value: { fr: 'Musée A', en: '' }, level: 3 },
+      { type: 'text', value: { fr: '<h3>Musée A</h3>', en: '' } },
       { type: 'text', value: { fr: '<p>Collection A</p>', en: '' } },
-      { type: 'heading', value: { fr: 'Musée B', en: '' }, level: 3 },
+      { type: 'text', value: { fr: '<h3>Musée B</h3>', en: '' } },
       { type: 'text', value: { fr: '<p>Collection B</p>', en: '' } },
     ])
   })
@@ -96,7 +101,7 @@ describe('mapElementorToBlocks', () => {
       toggle_items: [{ tab_title: 'Musée C', tab_content: '<p>Collection C</p>' }],
     })
     expect(mapElementorToBlocks([g], null, {})).toEqual([
-      { type: 'heading', value: { fr: 'Musée C', en: '' }, level: 3 },
+      { type: 'text', value: { fr: '<h3>Musée C</h3>', en: '' } },
       { type: 'text', value: { fr: '<p>Collection C</p>', en: '' } },
     ])
   })
@@ -175,19 +180,25 @@ const body = (headingSettings) => [
 
 describe('plain-text entity decoding', () => {
   // sanitize-html decodes entities while parsing, then re-encodes the three
-  // characters that are unsafe in HTML text (& < >) on the way out. That is
-  // correct for HTML output and wrong for these fields: heading and specs
-  // values are stored and rendered as PLAIN TEXT, never through
-  // dangerouslySetInnerHTML, so anything left escaped reaches the page
-  // literally. The real biography page shipped "BOURSES &amp;amp; RESIDENCES".
-  it('decodes an escaped ampersand in a heading', () => {
+  // characters that are unsafe in HTML text (& < >) on the way out. Heading
+  // titles go through exactly one unescape (stripTags/unescapeTextEntities,
+  // widgetToBlocks' 'heading' case) BEFORE headingToText wraps them in
+  // <h2>/<h3> -- that decoded plain text is then re-escaped (headingToText's
+  // own escapeHtml) so it can be interposed into an HTML tag safely, and
+  // clean()'s own parse-then-reencode pass (this is now a real `text` block,
+  // sanitized the same as any other) is what produces the final stored HTML.
+  // The real biography page shipped "BOURSES &amp;amp; RESIDENCES" from the
+  // old (pre-Task 30) direct-to-plain-text path; wrapping in a sanitized
+  // text block is what keeps this correct now that it round-trips through
+  // an actual HTML sanitizer rather than being stored as bare text.
+  it('decodes an escaped ampersand in a heading, then re-escapes it correctly inside the wrapping <h2>', () => {
     const blocks = mapElementorToBlocks(body({ title: 'BOURSES &amp; RÉSIDENCES' }), null, {})
-    expect(blocks[0].value.fr).toBe('BOURSES & RÉSIDENCES')
+    expect(blocks[0]).toEqual({ type: 'text', value: { fr: '<h2>BOURSES &amp; RÉSIDENCES</h2>', en: '' } })
   })
 
-  it('decodes escaped angle brackets in a heading', () => {
+  it('decodes escaped angle brackets in a heading without letting them be parsed as markup', () => {
     const blocks = mapElementorToBlocks(body({ title: '&lt;Verso&gt;' }), null, {})
-    expect(blocks[0].value.fr).toBe('<Verso>')
+    expect(blocks[0].value.fr).toBe('<h2>&lt;Verso&gt;</h2>')
   })
 
   // Order matters: &amp; must be reversed LAST. Reversing it first would turn
@@ -195,12 +206,12 @@ describe('plain-text entity decoding', () => {
   // escaping instead of one and inventing markup that was never in the source.
   it('unescapes exactly one level, so a literal entity name survives', () => {
     const blocks = mapElementorToBlocks(body({ title: '&amp;lt; is how you write &amp;amp;lt;' }), null, {})
-    expect(blocks[0].value.fr).toBe('&lt; is how you write &amp;lt;')
+    expect(blocks[0].value.fr).toBe('<h2>&amp;lt; is how you write &amp;amp;lt;</h2>')
   })
 
   it('leaves text with no entities untouched', () => {
     const blocks = mapElementorToBlocks(body({ title: 'Observatoires' }), null, {})
-    expect(blocks[0].value.fr).toBe('Observatoires')
+    expect(blocks[0].value.fr).toBe('<h2>Observatoires</h2>')
   })
 })
 
@@ -233,7 +244,7 @@ describe('dropTrailingHeadings (via mapElementorToBlocks)', () => {
       widget('heading', { title: 'Éditions' }),
     ]
     expect(mapElementorToBlocks(nodes, null, {})).toEqual([
-      { type: 'heading', value: { fr: 'Provenance', en: '' }, level: 2 },
+      { type: 'text', value: { fr: '<h2>Provenance</h2>', en: '' } },
       { type: 'text', value: { fr: '<p>Corps</p>', en: '' } },
     ])
   })
@@ -280,16 +291,16 @@ describe('placeholder heading removal (via mapElementorToBlocks)', () => {
       widget('text-editor', { editor: '<p>Corps</p>' }),
     ]
     expect(mapElementorToBlocks(nodes, null, {})[0]).toEqual({
-      type: 'heading', value: { fr: 'Ajoutez votre titre ici et votre sous-titre', en: '' }, level: 2,
+      type: 'text', value: { fr: '<h2>Ajoutez votre titre ici et votre sous-titre</h2>', en: '' },
     })
   })
 
-  it('keeps a genuine exhibition-title heading untouched', () => {
+  it('keeps a genuine exhibition-title heading untouched, wrapped as an <h2>', () => {
     const nodes = [
       widget('heading', { title: 'Rectos / Versos, Galerie Espace Muraille' }),
       widget('text-editor', { editor: '<p>Corps</p>' }),
     ]
-    expect(mapElementorToBlocks(nodes, null, {})[0].value.fr).toBe('Rectos / Versos, Galerie Espace Muraille')
+    expect(mapElementorToBlocks(nodes, null, {})[0].value.fr).toBe('<h2>Rectos / Versos, Galerie Espace Muraille</h2>')
   })
 
   it('drops several placeholder headings in the same article', () => {
@@ -308,6 +319,35 @@ describe('placeholder heading removal (via mapElementorToBlocks)', () => {
   it('drops a placeholder heading even when it is the only block', () => {
     const nodes = [widget('heading', { title: 'Ajoutez votre titre ici' })]
     expect(mapElementorToBlocks(nodes, null, {})).toEqual([])
+  })
+})
+
+// Task 30, part 5: retires the `heading` block type. Direct unit tests for
+// the conversion step, on top of the mapElementorToBlocks-level tests above.
+describe('convertHeadingsToText', () => {
+  it('converts a level-2 heading into a text block carrying an <h2>', () => {
+    const blocks = [{ type: 'heading', value: { fr: 'Titre', en: '' }, level: 2 }]
+    expect(convertHeadingsToText(blocks)).toEqual([{ type: 'text', value: { fr: '<h2>Titre</h2>', en: '' } }])
+  })
+
+  it('converts a level-3 heading into a text block carrying an <h3>', () => {
+    const blocks = [{ type: 'heading', value: { fr: 'Titre', en: '' }, level: 3 }]
+    expect(convertHeadingsToText(blocks)).toEqual([{ type: 'text', value: { fr: '<h3>Titre</h3>', en: '' } }])
+  })
+
+  it('wraps both languages independently, leaving an empty one empty rather than <h2></h2>', () => {
+    const blocks = [{ type: 'heading', value: { fr: 'Titre', en: 'Title' }, level: 2 }]
+    expect(convertHeadingsToText(blocks)).toEqual([{ type: 'text', value: { fr: '<h2>Titre</h2>', en: '<h2>Title</h2>' } }])
+    const blocksNoEn = [{ type: 'heading', value: { fr: 'Titre', en: '' }, level: 2 }]
+    expect(convertHeadingsToText(blocksNoEn)[0].value.en).toBe('')
+  })
+
+  it('leaves every non-heading block untouched', () => {
+    const blocks = [
+      { type: 'text', value: { fr: '<p>x</p>', en: '' } },
+      { type: 'image', image: { legacyWpId: 1 } },
+    ]
+    expect(convertHeadingsToText(blocks)).toEqual(blocks)
   })
 })
 

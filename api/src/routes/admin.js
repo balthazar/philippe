@@ -73,12 +73,25 @@ adminRouter.get('/articles/:id', asyncHandler(async (req, res) => {
 
 adminRouter.post('/articles', asyncHandler(async (req, res, next) => {
   try {
-    const article = await Article.create({
+    const created = await Article.create({
       ...req.body,
       slug: await ensureSlug(req.body),
       blocks: cleanBlocks(req.body.blocks),
     })
-    res.status(201).json(article.toObject())
+    // Task 30 bug report: this used to return `article.toObject()` straight
+    // off the just-created document, with no populate at all -- so `cover`
+    // and every block image came back as bare ids, unlike GET and PATCH
+    // (both populate below). The client saw the cover "vanish" from the
+    // preview immediately after a brand-new article's first save (which
+    // goes through this POST, not PATCH) because of exactly that shape
+    // mismatch. Re-fetching populated, the same way GET/PATCH already do,
+    // is what keeps every response from this router in one consistent shape.
+    const article = await Article.findById(created._id)
+      .populate('cover')
+      .populate('blocks.image')
+      .populate('blocks.items.image')
+      .lean()
+    res.status(201).json(article)
   } catch (err) { next(err) }
 }))
 

@@ -84,9 +84,12 @@ picture {
   margin-inline: auto;
   padding-inline: var(--page-gutter);
   /* Set once here, so every piece of header text (wordmark, nav links,
-     FR/EN) inherits the same size/weight/family rather than repeating it
-     per element, where one selector can be missed. Only color (active vs
-     inactive state) varies below.
+     FR/EN) inherits the same weight/family/transform/letter-spacing rather
+     than repeating it per element, where one selector can be missed.
+     font-size is inherited from here too, EXCEPT the wordmark, which
+     overrides it below -- everything else in the header stays at this
+     var(--text-l). Color (active vs inactive state) is the only thing that
+     was never set here at all, always per-element below.
      Task 29 (client typography pass): letter-spacing used to vary too (the
      wordmark tracked wider than nav/lang-switch); the client took it to 0
      everywhere in the header, so it moved up here as one shared value
@@ -99,6 +102,11 @@ picture {
 }
 
 .site-header .wordmark {
+  /* Client feedback (Task 30): the wordmark alone sits 2px above the rest
+     of the header's var(--text-l) (16px) -- a one-off override, not a new
+     token: nothing else in the header (or, so far, anywhere else) uses this
+     size, so naming it would be a name for a value used exactly once. */
+  font-size: 1.125rem;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -190,6 +198,22 @@ picture {
   margin: 0;
 }
 
+/* Client feedback (Task 30): on exhibition pages the timeline reads as a
+   full-height sidebar; the footer aligns to the content column beside its
+   base, rather than spanning under the timeline too. Layout only -- Footer
+   stays exactly where PublicLayout already renders it (a sibling of
+   Header/Outlet), this only shifts where its own content starts. Below
+   768px the timeline stacks above the content instead of beside it (see
+   .exhibitions-layout), so there is no column to align to and no indent is
+   applied. --exhibitions-timeline-width is the exact same token
+   .exhibitions-layout's own grid-template-columns reads, so the two cannot
+   fall out of step. */
+@media (min-width: 768px) {
+  .site-footer.is-exhibitions {
+    padding-inline-start: calc(var(--page-gutter) + var(--exhibitions-timeline-width) + var(--gutter));
+  }
+}
+
 /* Client feedback: header + main + footer together must fit exactly one
    viewport when content is short (e.g. /contact, reduced to one mailto
    block) -- the page must never scroll for that. `.page-main`'s own
@@ -247,14 +271,16 @@ picture {
 }
 
 /* The 42rem reading measure lives on the block elements themselves (see
-   .block-text / .block-heading / .block-specs below), not on this wrapper, so
-   uncapping .page-intro alone does nothing at all -- the copy stays in a
-   narrow column ranged left inside a full-width parent. Article body copy
-   keeps that measure, because long lines of running text are genuinely hard
-   to read; a short page lede set centred across the page is a different
-   thing and opts out. */
+   .block-text / .block-specs below), not on this wrapper, so uncapping
+   .page-intro alone does nothing at all -- the copy stays in a narrow
+   column ranged left inside a full-width parent. Article body copy keeps
+   that measure, because long lines of running text are genuinely hard to
+   read; a short page lede set centred across the page is a different thing
+   and opts out. An <h2>/<h3> inside .block-text (Task 30, part 5: what used
+   to be a separate .block-heading block) is unaffected by max-width here on
+   purpose -- it has none of its own, it is simply constrained by its
+   .block-text parent, which this rule already uncaps. */
 .page-intro .block-text,
-.page-intro .block-heading,
 .page-intro .block-specs {
   max-width: none;
 }
@@ -611,7 +637,7 @@ picture {
 
 @media (min-width: 768px) {
   .exhibitions-layout {
-    grid-template-columns: 14rem 1fr;
+    grid-template-columns: var(--exhibitions-timeline-width) 1fr;
     gap: var(--gutter);
   }
 }
@@ -726,8 +752,8 @@ picture {
    colour above is shared with plain :hover/:focus, so weight is what a
    colour-blind visitor -- or the print/no-colour case -- still reads as
    "this one is current". 700 is the same bold this codebase already uses
-   for emphasis elsewhere (.block-heading, .category-section h2), not a new
-   invented weight. */
+   for emphasis elsewhere (.block-text h2/h3, .category-section h2), not a
+   new invented weight. */
 .exhibitions-timeline a[aria-current='true'] {
   font-weight: 700;
 }
@@ -847,9 +873,14 @@ picture {
   margin: 0 0 var(--space-2);
 }
 
-.block-heading {
+/* Task 30, part 5: retires the `heading` block type -- what used to be a
+   heading block, styled via its own .block-heading class, is now an
+   <h2>/<h3> stored inside a sanitized `text` block's HTML (.block-text
+   below), so the same visual treatment is now scoped to those tags directly
+   rather than to a block-level class. */
+.block-text h2,
+.block-text h3 {
   font-family: var(--font-chrome);
-  max-width: 42rem;
   margin: var(--space-3) 0 var(--space-2);
   font-size: var(--text-l);
   font-weight: 700;
@@ -928,6 +959,99 @@ picture {
   font-family: var(--font-chrome);
   font-size: var(--text-s);
   color: var(--ink-soft);
+}
+
+/* Gallery block, slider mode (Task 30, part 4). Shares its transition
+   tokens and fade-through-white approach with the homepage .slideshow-image
+   rules above (same reasoning: mixed aspect ratios within one gallery), but
+   is sized to sit inline within an article rather than own the viewport. */
+.gallery-slider {
+  margin: var(--space-3) 0;
+}
+
+.gallery-slider-stage {
+  position: relative;
+  /* Reserves a stable box before an image's own intrinsic size is known --
+     without this the stage collapses to 0 height (both images are
+     absolutely positioned, see .gallery-slider-image below) and nothing
+     paints. 4:3 is a reasonable middle ground for this archive's range of
+     aspect ratios; the image itself is never cropped (object-fit: contain
+     below), so this is a budget, not a crop. */
+  aspect-ratio: 4 / 3;
+  max-height: 80vh;
+}
+
+.gallery-slider-image-button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.gallery-slider-image {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  opacity: 1;
+}
+
+.gallery-slider-image--outgoing {
+  z-index: 1;
+  transition: opacity var(--fade-out-ms) ease-in;
+}
+
+.gallery-slider-image--outgoing.is-leaving {
+  opacity: 0;
+}
+
+.gallery-slider-image--entering {
+  opacity: 0;
+  transition: opacity var(--fade-in-ms) ease-out var(--fade-out-ms);
+}
+
+.gallery-slider-image--entering.is-entered {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-slider-image--outgoing,
+  .gallery-slider-image--entering {
+    transition: none;
+  }
+  .gallery-slider-image--entering {
+    opacity: 1;
+  }
+}
+
+.gallery-slider-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-family: var(--font-chrome);
+  font-size: var(--text-s);
+  color: var(--ink-soft);
+  letter-spacing: 0.06em;
+}
+
+.gallery-slider-controls button {
+  border: 0;
+  background: none;
+  padding: var(--space-1);
+  color: var(--ink);
+  font-size: var(--text-l);
+  line-height: 1;
+  cursor: pointer;
 }
 
 /* Lightbox */

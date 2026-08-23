@@ -9,8 +9,10 @@ export const resolve = (field, lang) => (field ? field[lang] || field.fr || '' :
 
 export function resolveBlock(block, lang) {
   switch (block.type) {
+    // Task 30, part 5: `heading` is retired as a block type -- what used to
+    // be a heading is now a `text` block carrying an <h2>/<h3>, so it needs
+    // no case of its own here any more.
     case 'text':
-    case 'heading':
       return { ...block, value: resolve(block.value, lang) }
     case 'image':
       return { ...block, caption: resolve(block.caption, lang) }

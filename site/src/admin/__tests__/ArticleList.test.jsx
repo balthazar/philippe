@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/api.js'
 import { ArticleList } from '../ArticleList.jsx'
 
 const ITEMS = [
-  { _id: '1', title: { fr: 'Porte', en: '' }, category: 'works', status: 'published', slug: { fr: 'porte' } },
-  { _id: '2', title: { fr: 'Fenêtre', en: '' }, category: 'works', status: 'draft', slug: { fr: 'fenetre' } },
+  { _id: '1', title: { fr: 'Porte', en: '' }, category: 'works', status: 'published', slug: { fr: 'porte' }, featured: false },
+  { _id: '2', title: { fr: 'Fenêtre', en: '' }, category: 'works', status: 'draft', slug: { fr: 'fenetre' }, featured: true },
   { _id: '3', title: { fr: 'Rétrospective', en: '' }, category: 'exhibitions', status: 'draft', slug: { fr: 'retro' } },
 ]
 
@@ -188,6 +188,41 @@ describe('ArticleList', () => {
     // looking like nothing happened, but it also must not flip the badge
     // to a state the server never confirmed.
     expect(screen.getByText('Publié')).toBeInTheDocument()
+  })
+
+  // Task 30, part 2: the featured toggle appears for the `works` category
+  // and nowhere else -- there is no per-slide curation for exhibitions.
+  it('shows the featured toggle only for works articles', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: ITEMS, total: ITEMS.length })
+    renderList()
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+
+    expect(screen.getAllByRole('button', { name: /vedette/i })).toHaveLength(2) // Porte, Fenêtre
+    const retroRow = screen.getByText('Rétrospective').closest('li')
+    expect(within(retroRow).queryByRole('button', { name: /vedette/i })).not.toBeInTheDocument()
+  })
+
+  it('reflects the current featured state in the toggle', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: ITEMS, total: ITEMS.length })
+    renderList()
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+
+    const porteRow = screen.getByText('Porte').closest('li')
+    const fenetreRow = screen.getByText('Fenêtre').closest('li')
+    expect(within(porteRow).getByRole('button', { name: /mettre en vedette/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(within(fenetreRow).getByRole('button', { name: /retirer de la vedette/i })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('toggles featured via a PATCH', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0]], total: 1 })
+    const send = vi.spyOn(api, 'apiSend').mockResolvedValue({ ...ITEMS[0], featured: true })
+    renderList()
+
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /mettre en vedette/i }))
+
+    expect(send).toHaveBeenCalledWith('PATCH', '/admin/articles/1', { featured: true })
+    await waitFor(() => expect(screen.getByRole('button', { name: /retirer de la vedette/i })).toHaveAttribute('aria-pressed', 'true'))
   })
 
   it('reverts the optimistic reorder and shows an error when the reorder POST fails', async () => {

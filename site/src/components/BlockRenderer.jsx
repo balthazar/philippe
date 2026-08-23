@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Lightbox } from './Lightbox.jsx'
+import { GallerySlider } from './GallerySlider.jsx'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
 
@@ -28,12 +29,14 @@ export function BlockRenderer({ blocks = [] }) {
       {blocks.map((block, i) => {
         switch (block.type) {
           case 'text':
-            // Server-sanitized on write, so this is safe to inject.
+            // Server-sanitized on write, so this is safe to inject. Task
+            // 30, part 5: `heading` is retired as its own block type -- a
+            // heading is now an <h2>/<h3> inside this same sanitized HTML
+            // (styled via .block-text h2/h3 in base.css), which is a
+            // genuine security improvement: heading values used to be the
+            // one field stored unsanitized, safe only because every render
+            // path treated them as plain text.
             return <div key={i} className="block-text" dangerouslySetInnerHTML={{ __html: block.value }} />
-          case 'heading': {
-            const Tag = block.level === 3 ? 'h3' : 'h2'
-            return <Tag key={i} className="block-heading">{block.value}</Tag>
-          }
           case 'specs':
             return (
               <dl key={i} className="block-specs">
@@ -56,10 +59,27 @@ export function BlockRenderer({ blocks = [] }) {
             // Task 27, client feedback item 1: a gallery item can be
             // `hidden` -- kept in the data (so it can also serve as the
             // article's cover) without showing in the public grid. Filtered
-            // out here, before both the grid AND the lightbox's own image
-            // list, so a hidden image can never become reachable by
+            // out here, before both the grid/slider AND the lightbox's own
+            // image list, so a hidden image can never become reachable by
             // arrowing through the visible ones either.
             const items = (block.items || []).filter((item) => !item.hidden)
+
+            // Task 30, part 4: slider mode shows one image at a time via
+            // GallerySlider, sharing its carousel/crossfade machinery with
+            // the homepage Slideshow. Clicking the current slide opens the
+            // very same Lightbox the grid uses, scoped to this block's own
+            // (already hidden-filtered) item list, so arrowing through the
+            // lightbox never reaches a hidden image there either.
+            if (block.mode === 'slider') {
+              return (
+                <GallerySlider
+                  key={i}
+                  items={items}
+                  onActivate={(j) => setLightbox({ images: items.map((it) => it.image), index: j })}
+                />
+              )
+            }
+
             return (
               <ul key={i} className="block-gallery" style={{ '--columns': block.columns || 3 }}>
                 {items.map((item, j) => (

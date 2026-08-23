@@ -246,9 +246,24 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
           text (LocalizedInput), never rich text: not sanitized
           server-side, same rule as Titre and Slug. Placed beside them, per
           the brief.
+
+          Task 30 (client feedback): hidden for exhibitions, along with
+          Année affichée and the year-sort fields below -- verified against
+          the real archive that all 25 exhibitions leave every one of these
+          empty/null, and lib/exhibitionsOrder.js already documents why
+          (the timeline sorts on the article's own title, not these
+          fields). Hidden, not deleted: the model/API keep the fields, and
+          `update()`/`save()` below are untouched, so a value that already
+          exists here (or is typed while category briefly reads something
+          else) is never blanked by hiding its input -- only the JSX is
+          conditional.
         */}
-        <LocalizedInput label="Sous-titre" lang={lang} value={article.subtitle} onChange={(subtitle) => update({ subtitle })} />
-        <LocalizedInput label="Année affichée" lang={lang} value={article.yearLabel} onChange={(yearLabel) => update({ yearLabel })} />
+        {article.category !== 'exhibitions' && (
+          <>
+            <LocalizedInput label="Sous-titre" lang={lang} value={article.subtitle} onChange={(subtitle) => update({ subtitle })} />
+            <LocalizedInput label="Année affichée" lang={lang} value={article.yearLabel} onChange={(yearLabel) => update({ yearLabel })} />
+          </>
+        )}
         <LocalizedInput label="Slug" lang={lang} value={article.slug} onChange={(slug) => update({ slug })} />
 
         <label htmlFor="category">Catégorie</label>
@@ -258,22 +273,24 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
           ))}
         </select>
 
-        <div className="year-sort-fields">
-          <label htmlFor="yearStart">Année de début (tri)</label>
-          <input
-            id="yearStart"
-            type="number"
-            value={article.yearStart}
-            onChange={(e) => update({ yearStart: e.target.value })}
-          />
-          <label htmlFor="yearEnd">Année de fin (tri)</label>
-          <input
-            id="yearEnd"
-            type="number"
-            value={article.yearEnd}
-            onChange={(e) => update({ yearEnd: e.target.value })}
-          />
-        </div>
+        {article.category !== 'exhibitions' && (
+          <div className="year-sort-fields">
+            <label htmlFor="yearStart">Année de début (tri)</label>
+            <input
+              id="yearStart"
+              type="number"
+              value={article.yearStart}
+              onChange={(e) => update({ yearStart: e.target.value })}
+            />
+            <label htmlFor="yearEnd">Année de fin (tri)</label>
+            <input
+              id="yearEnd"
+              type="number"
+              value={article.yearEnd}
+              onChange={(e) => update({ yearEnd: e.target.value })}
+            />
+          </div>
+        )}
 
         {/*
           Task 27, Part B3: the gallery (inside Contenu) is the substance of

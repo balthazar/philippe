@@ -68,21 +68,36 @@ publicRouter.get('/pages/:key', asyncHandler(async (req, res) => {
 publicRouter.get('/home', asyncHandler(async (req, res) => {
   const lang = langOf(req)
 
-  // The slideshow is simply the most recent works. There is no curation flag:
-  // each work has one image, its cover, and that same image serves both the
-  // archive grid and the slideshow, so nothing is chosen twice.
+  // Task 30, part 2: reinstates the curation flag (see the amended bullet in
+  // docs/superpowers/plans/2026-08-22-philippe-gronon-site.md). The artist
+  // hand-picks the slideshow by toggling `featured` on works articles and
+  // ordering it via the article list's existing drag-to-reorder `position`
+  // -- there is no second ordering mechanism.
   //
   // `cover: { $ne: null }` also excludes documents missing the field entirely
   // (verified against MongoDB). That is deliberate: a slide with no image cannot
   // render, so a work without a cover is omitted rather than emitted as a broken
   // slide.
-  const recent = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
+  let slideArticles = await Article.find({ status: 'published', category: 'works', featured: true, cover: { $ne: null } })
     .select(LIST_FIELDS)
-    .sort({ yearStart: -1, createdAt: -1 })
+    .sort({ position: 1 })
     .limit(8)
     .populate('cover')
     .lean()
 
-  const slides = recent.map((a) => ({ image: a.cover, article: a, caption: a.title }))
+  // Fallback: nothing is featured yet (or every featured work has since lost
+  // its cover), so fall back to the most recent published works. Without
+  // this the slideshow goes blank the instant this ships and stays blank
+  // until someone toggles something.
+  if (!slideArticles.length) {
+    slideArticles = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
+      .select(LIST_FIELDS)
+      .sort({ yearStart: -1, createdAt: -1 })
+      .limit(8)
+      .populate('cover')
+      .lean()
+  }
+
+  const slides = slideArticles.map((a) => ({ image: a.cover, article: a, caption: a.title }))
   res.json(resolveDoc({ slides }, lang))
 }))

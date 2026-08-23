@@ -138,4 +138,35 @@ describe('GET /api/home', () => {
     expect(res.status).toBe(200)
     expect(res.body.slides).toEqual([])
   })
+
+  // Task 30, part 2: reinstates the curation flag. Featured works win over
+  // recency, ordered by the article list's own manual `position` -- there is
+  // no second ordering mechanism.
+  it('prefers featured works, ordered by the article list position, over recency', async () => {
+    const cover2 = await Image.create({
+      filename: 'testcover2',
+      width: 2000,
+      height: 1500,
+      variants: {
+        thumb: { path: 'cd/testcover2-thumb.webp', width: 600, height: 450 },
+        medium: { path: 'cd/testcover2-medium.webp', width: 1400, height: 1050 },
+        large: { path: 'cd/testcover2-large.webp', width: 2000, height: 1500 },
+      },
+    })
+    await Article.create([
+      { category: 'works', status: 'published', slug: { fr: 'featured-a' }, title: { fr: 'A' }, yearStart: 2019, cover: cover2._id, featured: true, position: 5 },
+      { category: 'works', status: 'published', slug: { fr: 'featured-b' }, title: { fr: 'B' }, yearStart: 2022, cover: cover2._id, featured: true, position: 1 },
+    ])
+    const res = await request(createApp()).get('/api/home')
+    // 'porte' (2023, not featured) is excluded entirely once something is
+    // featured; the two featured works appear by position, not by year.
+    expect(res.body.slides.map((s) => s.article.slug)).toEqual(['featured-b', 'featured-a'])
+  })
+
+  // Without this fallback the slideshow goes blank the moment featured ships
+  // and stays blank until someone toggles something.
+  it('falls back to the most recent works when nothing is featured, so the slideshow is never empty', async () => {
+    const res = await request(createApp()).get('/api/home')
+    expect(res.body.slides.map((s) => s.article.slug)).toEqual(['porte'])
+  })
 })

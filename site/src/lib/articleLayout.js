@@ -1,4 +1,7 @@
-const TEXT_TYPES = new Set(['text', 'heading', 'specs'])
+// Task 30, part 5: the `heading` block type is retired -- what used to be a
+// heading block is now a `text` block carrying an <h2>/<h3>, so it no longer
+// needs (or gets) a separate entry here.
+const TEXT_TYPES = new Set(['text', 'specs'])
 const MEDIA_TYPES = new Set(['image', 'gallery'])
 
 /**

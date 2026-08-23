@@ -55,6 +55,12 @@
   --fade-in-ms: 300ms;
   --page-gutter: 3.75rem;
 
+  /* Task 30 (client feedback): the exhibitions timeline's own column width,
+     shared with the footer's indent on exhibition pages (base.css's
+     .site-footer.is-exhibitions) so the two can never fall out of step --
+     one token, read in both places, rather than the same 14rem retyped. */
+  --exhibitions-timeline-width: 14rem;
+
   /* Chosen against the real archive: tall enough that the tallest works
      (thermometers, portholes, aspect ~0.86) aren't cramped, short enough
      that the widest works (blackboards, aspect ~1.7) still read as

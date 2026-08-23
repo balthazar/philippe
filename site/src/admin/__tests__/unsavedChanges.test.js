@@ -69,12 +69,12 @@ describe('countUnsavedChanges', () => {
 
   it('counts an added block as 1', () => {
     const saved = base()
-    const current = { ...base(), blocks: [...saved.blocks, { type: 'heading', value: 'H', level: 2 }] }
+    const current = { ...base(), blocks: [...saved.blocks, { type: 'text', value: '<h2>H</h2>' }] }
     expect(countUnsavedChanges(current, saved)).toBe(1)
   })
 
   it('counts a removed block as 1', () => {
-    const saved = { ...base(), blocks: [{ type: 'text', value: '<p>a</p>' }, { type: 'heading', value: 'H', level: 2 }] }
+    const saved = { ...base(), blocks: [{ type: 'text', value: '<p>a</p>' }, { type: 'text', value: '<h2>H</h2>' }] }
     const current = { ...base(), blocks: [{ type: 'text', value: '<p>a</p>' }] }
     expect(countUnsavedChanges(current, saved)).toBe(1)
   })

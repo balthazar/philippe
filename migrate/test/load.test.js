@@ -145,7 +145,9 @@ describe('loadAll', () => {
               { image: { legacyWpId: 3 }, caption: { fr: '', en: '' } },
             ],
           },
-          { type: 'heading', value: { fr: 'Titre', en: 'Title' }, level: 2 },
+          // Task 30, part 5: `heading` is retired -- what used to be a
+          // heading block is now a `text` block carrying an <h2>.
+          { type: 'text', value: { fr: '<h2>Titre</h2>', en: '<h2>Title</h2>' } },
           { type: 'text', value: { fr: '<p>x</p>', en: '<p>x</p>' } },
           { type: 'image', image: { legacyWpId: 5 }, caption: { fr: '', en: '' }, size: 'wide' },
         ],
@@ -214,7 +216,7 @@ describe('loadAll', () => {
       const article = await Article.findOne({ legacyWpId: 1001 })
       expect(article).not.toBeNull()
       // the image block referencing the missing file (id 5) must be gone
-      expect(article.blocks.map((b) => b.type)).toEqual(['image', 'gallery', 'heading', 'text'])
+      expect(article.blocks.map((b) => b.type)).toEqual(['image', 'gallery', 'text', 'text'])
 
       const coverImage = await Image.findOne({ legacyWpId: 1 })
       expect(String(article.cover)).toBe(String(coverImage._id))
@@ -386,6 +388,163 @@ describe('loadAll', () => {
     try {
       const article = await Article.findOne({ legacyWpId: 5001 })
       expect(article.subtitle.fr).toBe('Numérisation, épreuves numériques pigmentaires')
+    } finally {
+      await disconnect()
+    }
+  }, 60_000)
+
+  it('preserves artist-set status, cover and gallery hidden flags across a second load, while still picking up updated source content', async () => {
+    // Task 30, part 1: a re-run must still pick up corrected content from
+    // the source (title, here) while never clobbering the fields the artist
+    // owns through the admin: status, cover, and each gallery item's hidden
+    // flag. Real incident this guards: re-running load silently republished
+    // nouveau-2024, which had been deliberately set to draft.
+    await writeFixtures()
+    const dbName = `test-${counter++}`
+    const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+    await loadAll(opts)
+
+    let image2Id
+    let image3Id
+    await connect(mongod.getUri(), dbName)
+    try {
+      const image2 = await Image.findOne({ legacyWpId: 2 })
+      const image3 = await Image.findOne({ legacyWpId: 3 })
+      image2Id = image2._id
+      image3Id = image3._id
+
+      // Simulate the admin: unpublish the article, change its cover away
+      // from what the source/extraction would set, and hide one gallery item.
+      const article = await Article.findOne({ legacyWpId: 1001 })
+      article.status = 'draft'
+      article.cover = image2Id
+      article.blocks = article.blocks.map((b) =>
+        b.type === 'gallery'
+          ? { ...b, items: b.items.map((it) => (String(it.image) === String(image3Id) ? { ...it, hidden: true } : it)) }
+          : b
+      )
+      await article.save()
+    } finally {
+      await disconnect()
+    }
+
+    // Simulate a corrected source: the title changes in the WordPress export.
+    const articlesJson = JSON.parse(await readFile(join(dataDir, 'articles.json'), 'utf8'))
+    articlesJson[0].title = { fr: 'Œuvre A (corrigé)', en: 'Work A (fixed)' }
+    await writeFile(join(dataDir, 'articles.json'), JSON.stringify(articlesJson))
+
+    await loadAll(opts)
+
+    await connect(mongod.getUri(), dbName)
+    try {
+      const article = await Article.findOne({ legacyWpId: 1001 })
+      expect(article.status).toBe('draft') // preserved, not republished
+      expect(String(article.cover)).toBe(String(image2Id)) // preserved, not reset from coverLegacyId
+      const galleryBlock = article.blocks.find((b) => b.type === 'gallery')
+      const item3 = galleryBlock.items.find((it) => String(it.image) === String(image3Id))
+      expect(item3.hidden).toBe(true) // preserved
+      expect(article.title.fr).toBe('Œuvre A (corrigé)') // content still updates
+    } finally {
+      await disconnect()
+    }
+  }, 60_000)
+
+  it('preserves an artist-chosen gallery mode across a second load, distinct from the migration-set default', async () => {
+    // Task 30 (client feedback, gallery slider default for exhibitions): the
+    // migration sets a per-category default for a gallery block's `mode`
+    // (extract.js's defaultGalleryMode); the loader must preserve any later
+    // change away from that default, same "artist owns it" rule as status/
+    // cover/hidden above, for the same reason (toggleable in the admin).
+    // Deliberately a DIFFERENT shape of test from the one above: `mode`
+    // here has a migration-SET, non-default value on the very first load
+    // ('slider'), not a field the migration simply leaves alone -- a re-run
+    // must preserve the artist's later change (back to 'grid') rather than
+    // reapplying the source's own 'slider' default every time.
+    await writeFixtures()
+    const dbName = `test-${counter++}`
+    const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+
+    const articlesJson = JSON.parse(await readFile(join(dataDir, 'articles.json'), 'utf8'))
+    articlesJson[0].blocks = articlesJson[0].blocks.map((b) => (b.type === 'gallery' ? { ...b, mode: 'slider' } : b))
+    await writeFile(join(dataDir, 'articles.json'), JSON.stringify(articlesJson))
+
+    await loadAll(opts)
+
+    await connect(mongod.getUri(), dbName)
+    try {
+      const article = await Article.findOne({ legacyWpId: 1001 })
+      const galleryBlock = article.blocks.find((b) => b.type === 'gallery')
+      expect(galleryBlock.mode).toBe('slider') // the migration's own default applied on first import
+
+      // Simulate the admin: the artist switches this gallery back to grid.
+      article.blocks = article.blocks.map((b) => (b.type === 'gallery' ? { ...b, mode: 'grid' } : b))
+      await article.save()
+    } finally {
+      await disconnect()
+    }
+
+    // Re-run against the SAME source (still says 'slider'): must never
+    // silently revert the artist's own later choice.
+    await loadAll(opts)
+
+    await connect(mongod.getUri(), dbName)
+    try {
+      const article = await Article.findOne({ legacyWpId: 1001 })
+      const galleryBlock = article.blocks.find((b) => b.type === 'gallery')
+      expect(galleryBlock.mode).toBe('grid') // preserved, not reverted to the source's 'slider'
+    } finally {
+      await disconnect()
+    }
+  }, 60_000)
+
+  it('applies the migration-set gallery mode default when the existing document predates the field entirely, rather than clobbering it with undefined', async () => {
+    // Real incident this guards: the live database was loaded before
+    // `mode` existed in the schema at all, so every existing gallery block
+    // has no `mode` key whatsoever (not "artist chose grid" -- "the field
+    // never existed here yet"). A re-run that extracted a fresh 'slider'
+    // default for an exhibitions gallery must apply it, not preserve the
+    // absence of a field nobody ever set. This is the opposite failure mode
+    // from the "artist chose grid, keep it" test above: there, `existing`
+    // genuinely held 'grid'; here, `existing` holds nothing at all.
+    await writeFixtures()
+    const dbName = `test-${counter++}`
+    const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+
+    await loadAll(opts)
+
+    // Directly strip `mode` at the raw Mongo level (bypassing Mongoose's
+    // own schema default) to genuinely simulate a document written before
+    // `mode` existed in the schema at all -- calling loadAll() twice in a
+    // row is NOT enough on its own to reproduce this: the current schema's
+    // `setDefaultsOnInsert` would already write a real `mode: 'grid'` on
+    // the very first insert, which is a different (and already correctly
+    // handled) case from "the field is genuinely absent".
+    await connect(mongod.getUri(), dbName)
+    try {
+      await Article.updateOne(
+        { legacyWpId: 1001, 'blocks.type': 'gallery' },
+        { $unset: { 'blocks.$.mode': '' } }
+      )
+      const before = await Article.findOne({ legacyWpId: 1001 }).lean()
+      expect(before.blocks.find((b) => b.type === 'gallery').mode).toBeUndefined()
+    } finally {
+      await disconnect()
+    }
+
+    // Re-run: the source now sets 'slider' (simulates extract.js's
+    // defaultGalleryMode running against a database that already has this
+    // article, whose gallery block has no `mode` key whatsoever).
+    const articlesJson = JSON.parse(await readFile(join(dataDir, 'articles.json'), 'utf8'))
+    articlesJson[0].blocks = articlesJson[0].blocks.map((b) => (b.type === 'gallery' ? { ...b, mode: 'slider' } : b))
+    await writeFile(join(dataDir, 'articles.json'), JSON.stringify(articlesJson))
+
+    await loadAll(opts)
+
+    await connect(mongod.getUri(), dbName)
+    try {
+      const article = await Article.findOne({ legacyWpId: 1001 })
+      const galleryBlock = article.blocks.find((b) => b.type === 'gallery')
+      expect(galleryBlock.mode).toBe('slider')
     } finally {
       await disconnect()
     }

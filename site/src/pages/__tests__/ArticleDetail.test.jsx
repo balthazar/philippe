@@ -101,11 +101,13 @@ describe('ArticleDetail', () => {
   })
 
   it('renders a single column when text and media interleave', async () => {
+    // Task 30, part 5: `heading` is retired -- what used to be a heading
+    // block is now a `text` block carrying an <h3>.
     vi.spyOn(api, 'apiGet').mockResolvedValue({
       slug: 'expo-multi', title: 'Expo multi', blocks: [
-        { type: 'heading', value: 'Un', level: 3 },
+        { type: 'text', value: '<h3>Un</h3>' },
         { type: 'gallery', columns: 3, items: [] },
-        { type: 'heading', value: 'Deux', level: 3 },
+        { type: 'text', value: '<h3>Deux</h3>' },
         { type: 'gallery', columns: 3, items: [] },
       ],
     })
@@ -216,12 +218,15 @@ describe('ArticleDetail', () => {
     // (.article-layout), which is what produced the huge vertical gaps the
     // client saw (a couple of short text lines beside a tall gallery).
     it('renders an exhibition entry stacked full width, in heading/gallery/credit order, not the works two-column split', async () => {
+      // Task 30, part 5: `heading` is retired -- what used to be a heading
+      // block is now a `text` block carrying an <h2>, so the exhibition
+      // entry's first two blocks are both `.block-text` now.
       vi.spyOn(api, 'apiGet').mockImplementation((path, params = {}) => {
         if (path === '/articles/2023') {
           return Promise.resolve({
             slug: '2023', title: '2023', category: 'exhibitions',
             blocks: [
-              { type: 'heading', value: 'Rectos / Versos, Galerie Espace Muraille', level: 2 },
+              { type: 'text', value: '<h2>Rectos / Versos, Galerie Espace Muraille</h2>' },
               { type: 'gallery', columns: 3, items: [] },
               { type: 'text', value: '<p>© Luca Fascini 2023</p>' },
             ],
@@ -240,7 +245,7 @@ describe('ArticleDetail', () => {
       expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
 
       const content = container.querySelector('.exhibitions-content')
-      expect([...content.children].map((el) => el.className)).toEqual(['block-heading', 'block-gallery', 'block-text'])
+      expect([...content.children].map((el) => el.className)).toEqual(['block-text', 'block-gallery', 'block-text'])
     })
 
     // The plain, no-credit shape (10 of the 25 years: just a heading then a
@@ -255,7 +260,7 @@ describe('ArticleDetail', () => {
           return Promise.resolve({
             slug: '2021', title: '2021', category: 'exhibitions',
             blocks: [
-              { type: 'heading', value: 'Musée Untel', level: 2 },
+              { type: 'text', value: '<h2>Musée Untel</h2>' },
               { type: 'gallery', columns: 3, items: [] },
             ],
           })
@@ -273,7 +278,7 @@ describe('ArticleDetail', () => {
       expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
       expect(container.querySelector('.article-text-col')).not.toBeInTheDocument()
       const content = container.querySelector('.exhibitions-content')
-      expect([...content.children].map((el) => el.className)).toEqual(['block-heading', 'block-gallery'])
+      expect([...content.children].map((el) => el.className)).toEqual(['block-text', 'block-gallery'])
     })
 
     // A year with more than one entry (e.g. "hghg") renders every entry the
@@ -285,9 +290,9 @@ describe('ArticleDetail', () => {
           return Promise.resolve({
             slug: '2019', title: '2019', category: 'exhibitions',
             blocks: [
-              { type: 'heading', value: 'Premier lieu', level: 2 },
+              { type: 'text', value: '<h2>Premier lieu</h2>' },
               { type: 'gallery', columns: 3, items: [] },
-              { type: 'heading', value: 'Second lieu', level: 2 },
+              { type: 'text', value: '<h2>Second lieu</h2>' },
               { type: 'gallery', columns: 3, items: [] },
             ],
           })
@@ -305,7 +310,7 @@ describe('ArticleDetail', () => {
       expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
       const content = container.querySelector('.exhibitions-content')
       expect([...content.children].map((el) => el.className)).toEqual([
-        'block-heading', 'block-gallery', 'block-heading', 'block-gallery',
+        'block-text', 'block-gallery', 'block-text', 'block-gallery',
       ])
     })
   })

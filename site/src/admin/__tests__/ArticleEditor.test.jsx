@@ -127,6 +127,78 @@ describe('ArticleEditor subtitle field', () => {
   })
 })
 
+// Task 30 (client feedback): subtitle, yearLabel, yearStart/yearEnd are
+// genuinely unused by exhibitions (verified against the real archive: all
+// 25 are empty/null), so the editor hides those inputs for that category
+// rather than showing fields that never do anything. Hidden, not deleted:
+// the model and API keep the fields, and a value that somehow exists must
+// survive untouched through a save while its input is hidden.
+describe('ArticleEditor hides fields exhibitions do not use', () => {
+  it('hides subtitle, yearLabel and year-sort fields when the category is exhibitions', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'exhibitions' })
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    expect(screen.queryByLabelText('Sous-titre')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Année affichée')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Année de début (tri)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Année de fin (tri)')).not.toBeInTheDocument()
+  })
+
+  it('shows those same fields for a works article', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'works' })
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    expect(screen.getByLabelText('Sous-titre')).toBeInTheDocument()
+    expect(screen.getByLabelText('Année affichée')).toBeInTheDocument()
+    expect(screen.getByLabelText('Année de début (tri)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Année de fin (tri)')).toBeInTheDocument()
+  })
+
+  it('does not blank an already-populated subtitle/year on save while its field is hidden for exhibitions', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      ...ARTICLE,
+      category: 'exhibitions',
+      subtitle: { fr: 'Reste intact', en: '' },
+      yearLabel: { fr: '2019-2021', en: '' },
+      yearStart: 2019,
+      yearEnd: 2021,
+    })
+    const send = vi.spyOn(api, 'apiSend').mockResolvedValue(ARTICLE)
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /enregistrer/i }))
+    expect(send.mock.calls[0][2]).toMatchObject({
+      subtitle: { fr: 'Reste intact', en: '' },
+      yearLabel: { fr: '2019-2021', en: '' },
+      yearStart: 2019,
+      yearEnd: 2021,
+    })
+  })
+
+  it('keeps subtitle/year values when the category is switched to exhibitions and back to works', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      ...ARTICLE,
+      category: 'works',
+      subtitle: { fr: 'Numérisation', en: '' },
+      yearStart: 2020,
+      yearEnd: 2020,
+    })
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+    expect(screen.getByLabelText('Sous-titre')).toHaveValue('Numérisation')
+
+    await userEvent.selectOptions(screen.getByLabelText('Catégorie'), 'exhibitions')
+    expect(screen.queryByLabelText('Sous-titre')).not.toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText('Catégorie'), 'works')
+    expect(screen.getByLabelText('Sous-titre')).toHaveValue('Numérisation')
+    expect(screen.getByLabelText('Année de début (tri)')).toHaveValue(2020)
+  })
+})
+
 // Task 27, Part B3: the client's two per-image gallery toggles ("Cover",
 // "Hidden from grid") replace the separate cover picker -- but only after
 // the migration folded every stray cover into its own gallery, which it now

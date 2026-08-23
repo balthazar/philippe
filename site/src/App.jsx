@@ -21,7 +21,7 @@ const Admin = lazy(() => import('@/admin/Admin.jsx'))
 // toggle points at that article's own counterpart slug rather than at the
 // bare translated section. See Header.jsx's counterpartPath() for the
 // fallback this wiring overrides.
-function localizedRoutes(lang, onTranslatedPath) {
+function localizedRoutes(lang, onTranslatedPath, onExhibitionsLayout) {
   const s = (key) => SEGMENTS[key][lang]
   return (
     <>
@@ -41,7 +41,7 @@ function localizedRoutes(lang, onTranslatedPath) {
         otherwise a section path like /contact would resolve here as an
         article slug instead of its own page.
       */}
-      <Route path=":slug" element={<ArticleDetail onTranslatedPath={onTranslatedPath} />} />
+      <Route path=":slug" element={<ArticleDetail onTranslatedPath={onTranslatedPath} onExhibitionsLayout={onExhibitionsLayout} />} />
     </>
   )
 }
@@ -49,7 +49,7 @@ function localizedRoutes(lang, onTranslatedPath) {
 // A layout route: wraps only the public branches below it in the public
 // chrome, via <Outlet/>. /admin (a sibling route, not nested under this
 // one) never passes through here, so it never renders <Header>/<Footer>.
-function PublicLayout({ translatedPath }) {
+function PublicLayout({ translatedPath, isExhibitionsArticle }) {
   // Task 26, part B4: the slideshow owns the viewport on the homepage
   // (both languages' index route, "/" and "/en"), so the footer is dropped
   // there. Every other page keeps it. A pathname check, not a route
@@ -57,17 +57,27 @@ function PublicLayout({ translatedPath }) {
   const { pathname } = useLocation()
   const isHome = pathname === '/' || pathname === '/en'
 
+  // Task 30 (client feedback): the /expositions section index is knowable
+  // from the pathname alone, the same way isHome is above. An individual
+  // exhibition article cannot be -- it lives at the flat article root
+  // (/:slug), indistinguishable by URL from a work or an edition -- so that
+  // case comes from `isExhibitionsArticle`, reported up by ArticleDetail
+  // once it knows the article's own category (mirrors how `translatedPath`
+  // already reaches Header the same way).
+  const isExhibitionsSection = pathname === `/${SEGMENTS.exhibitions.fr}` || pathname === `/en/${SEGMENTS.exhibitions.en}`
+
   return (
     <div className="site-shell">
       <Header translatedPath={translatedPath} />
       <Outlet />
-      {!isHome && <Footer />}
+      {!isHome && <Footer indent={isExhibitionsSection || isExhibitionsArticle} />}
     </div>
   )
 }
 
 export default function App() {
   const [translatedPath, setTranslatedPath] = useState(null)
+  const [isExhibitionsArticle, setIsExhibitionsArticle] = useState(false)
 
   return (
     <Routes>
@@ -81,9 +91,9 @@ export default function App() {
         below, not nested under it, so it never renders the public chrome.
       */}
       <Route path="/admin/*" element={<Suspense fallback={null}><Admin /></Suspense>} />
-      <Route element={<PublicLayout translatedPath={translatedPath} />}>
-        <Route path="/">{localizedRoutes('fr', setTranslatedPath)}</Route>
-        <Route path="/en">{localizedRoutes('en', setTranslatedPath)}</Route>
+      <Route element={<PublicLayout translatedPath={translatedPath} isExhibitionsArticle={isExhibitionsArticle} />}>
+        <Route path="/">{localizedRoutes('fr', setTranslatedPath, setIsExhibitionsArticle)}</Route>
+        <Route path="/en">{localizedRoutes('en', setTranslatedPath, setIsExhibitionsArticle)}</Route>
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

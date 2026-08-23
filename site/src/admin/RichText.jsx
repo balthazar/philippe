@@ -2,30 +2,40 @@ import { useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
-import { BoldIcon, ItalicIcon, BulletListIcon, OrderedListIcon, BlockquoteIcon, LinkIcon } from './icons.jsx'
+import { BoldIcon, ItalicIcon, BulletListIcon, OrderedListIcon, BlockquoteIcon, HeadingIcon, LinkIcon } from './icons.jsx'
 
 /**
  * Stored HTML from a `text` block is sanitized server-side on write against
  * a narrow whitelist: p, br, em, strong, a[href], ul, ol, li, dl, dt, dd,
- * blockquote (api/src/lib/sanitize.js). StarterKit ships several extensions
- * that produce markup outside that list -- heading (h1-h6), codeBlock
- * (pre/code), code, horizontalRule (hr) and strike (s).
+ * blockquote, h2, h3 (api/src/lib/sanitize.js). StarterKit ships several
+ * extensions that produce markup outside that list -- codeBlock (pre/code),
+ * code, horizontalRule (hr), strike (s), and heading at levels the server
+ * does not allow (h1, which the article title itself owns, and h4-h6, which
+ * this project has no use for).
  *
- * Hiding their toolbar buttons is NOT enough to keep that markup out: TipTap
- * still binds their keyboard shortcuts and markdown input rules (typing
- * "# " at the start of a line, "```", or the strikethrough shortcut), so
- * without disabling them here the artist could produce markup that looks
- * applied in the editor, survives until save, and is then silently dropped
- * by the server -- the work looks accepted and is quietly discarded. So
- * these extensions are turned off in the schema itself (`false`, not just
- * omitted from the toolbar), which also means content fed in from outside
- * (paste, or old stored HTML) can never be represented by this editor
- * either. See src/admin/__tests__/RichText.test.jsx, which proves this by
- * feeding disallowed markup directly and asserting none of it survives.
+ * Hiding a toolbar button is NOT enough to keep any of this out: TipTap
+ * still binds keyboard shortcuts and markdown input rules (typing "# " or
+ * "#### " at the start of a line, "```", or the strikethrough shortcut), so
+ * without restricting the schema itself the artist could produce markup
+ * that looks applied in the editor, survives until save, and is then
+ * silently dropped by the server -- the work looks accepted and is quietly
+ * discarded. So:
+ *   - codeBlock, code, horizontalRule and strike stay OFF (`false`), exactly
+ *     as before Task 30 -- the file's own comment used to list heading here
+ *     too; it no longer does.
+ *   - heading is back ON, but restricted to `levels: [2, 3]`, so h1/h4/h5/h6
+ *     can never be represented by this editor either -- matching the server
+ *     whitelist exactly, both what it allows (h2, h3) and what it withholds
+ *     (h1, reserved for the article title).
+ * This also means content fed in from outside (paste, or old stored HTML)
+ * can never be represented outside these exact bounds. See
+ * src/admin/__tests__/RichText.test.jsx, which proves this by feeding
+ * disallowed markup directly and asserting none of it survives, and by
+ * feeding h2/h3 and asserting it does.
  */
 const extensions = [
   StarterKit.configure({
-    heading: false,
+    heading: { levels: [2, 3] },
     codeBlock: false,
     code: false,
     horizontalRule: false,
@@ -80,18 +90,35 @@ export function RichText({ value, onChange }) {
   }
 
   // Every entry here corresponds to a mark/node the schema above actually
-  // allows (bold, italic, bullet list, ordered list, blockquote, link) and
-  // no others: a button for heading, code, a code block, a horizontal rule
+  // allows (bold, italic, bullet list, ordered list, blockquote, heading,
+  // link) and no others: a button for code, a code block, a horizontal rule
   // or strikethrough would let the artist apply something that looks
   // accepted in the editor and is then silently stripped by the server on
   // save. See the file-level comment for why those extensions are disabled
   // in the schema itself, not just left out of this toolbar.
+  //
+  // Task 30, part 5: the heading button toggles level 2 specifically -- the
+  // single toolbar button the brief calls for. Level 3 stays representable
+  // (see RichText.test.jsx) via TipTap's own "### " markdown input rule
+  // without a second button.
   const buttons = [
     { name: 'bold', label: 'Gras', Icon: BoldIcon, run: () => editor.chain().focus().toggleBold().run() },
     { name: 'italic', label: 'Italique', Icon: ItalicIcon, run: () => editor.chain().focus().toggleItalic().run() },
     { name: 'bulletList', label: 'Liste à puces', Icon: BulletListIcon, run: () => editor.chain().focus().toggleBulletList().run() },
     { name: 'orderedList', label: 'Liste numérotée', Icon: OrderedListIcon, run: () => editor.chain().focus().toggleOrderedList().run() },
     { name: 'blockquote', label: 'Citation', Icon: BlockquoteIcon, run: () => editor.chain().focus().toggleBlockquote().run() },
+    // Label "Titre de section", not the bare "Titre" every LocalizedInput
+    // field for an article/page's own title already uses (ArticleEditor.jsx,
+    // PageEditor.jsx) -- a RichText toolbar can render nested inside either
+    // form alongside that field, and a colliding accessible name breaks
+    // getByLabelText-style lookups for BOTH controls, not just this one.
+    {
+      name: 'heading',
+      label: 'Titre de section',
+      Icon: HeadingIcon,
+      isActive: () => editor.isActive('heading', { level: 2 }),
+      run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+    },
   ]
 
   return (
@@ -101,7 +128,7 @@ export function RichText({ value, onChange }) {
           <button
             key={b.name}
             type="button"
-            className={editor.isActive(b.name) ? 'active' : ''}
+            className={(b.isActive ? b.isActive() : editor.isActive(b.name)) ? 'active' : ''}
             aria-label={b.label}
             title={b.label}
             onClick={b.run}

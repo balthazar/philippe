@@ -11,8 +11,11 @@ describe('BlockRenderer', () => {
     expect(screen.getByText('monde')).toBeInTheDocument()
   })
 
-  it('renders a heading at the requested level', () => {
-    render(<BlockRenderer blocks={[{ type: 'heading', value: 'Provenance', level: 3 }]} />)
+  // Task 30, part 5: `heading` is retired as a block type. What used to be a
+  // heading block is now a `text` block carrying an <h2>/<h3> directly in its
+  // (server-sanitized) HTML.
+  it('renders a heading carried inside a text block, at whichever level its HTML specifies', () => {
+    render(<BlockRenderer blocks={[{ type: 'text', value: '<h3>Provenance</h3>' }]} />)
     expect(screen.getByRole('heading', { level: 3, name: 'Provenance' })).toBeInTheDocument()
   })
 
@@ -94,6 +97,48 @@ describe('BlockRenderer', () => {
     it('renders every item when none is hidden', () => {
       render(<BlockRenderer blocks={[{ type: 'gallery', columns: 3, items: [{ image: img('a.webp') }, { image: img('b.webp') }] }]} />)
       expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    })
+  })
+
+  // Task 30, part 4: a gallery block's slider display mode.
+  describe('gallery slider mode', () => {
+    it('renders one image at a time instead of a grid', () => {
+      render(
+        <BlockRenderer
+          blocks={[{ type: 'gallery', mode: 'slider', columns: 3, items: [{ image: img('a.webp') }, { image: img('b.webp') }] }]}
+        />
+      )
+      expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+      expect(screen.getAllByRole('img')).toHaveLength(1)
+    })
+
+    it('shows previous/next controls only when there is more than one image', () => {
+      render(<BlockRenderer blocks={[{ type: 'gallery', mode: 'slider', items: [{ image: img('a.webp') }] }]} />)
+      expect(screen.queryByRole('button', { name: /suivant|précédent/i })).not.toBeInTheDocument()
+    })
+
+    it('keeps a hidden item out of the slider and out of the lightbox', async () => {
+      render(
+        <BlockRenderer
+          blocks={[{
+            type: 'gallery', mode: 'slider',
+            items: [{ image: img('visible-1.webp') }, { image: img('hidden.webp'), hidden: true }, { image: img('visible-2.webp') }],
+          }]}
+        />
+      )
+      // Only two visible images to cycle through -- the hidden one never
+      // appears as a slide.
+      expect(screen.getByRole('button', { name: 'Suivant' })).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Suivant' }))
+      const currentButton = screen.getByRole('button', { name: 'une porte' })
+      expect(within(currentButton).getByRole('img')).toHaveAttribute('src', '/media/visible-2.webp')
+
+      await userEvent.click(currentButton)
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByRole('img')).toHaveAttribute('src', '/media/visible-2.webp')
+      // Wraps to the first visible image, never the hidden one in between.
+      await userEvent.click(within(dialog).getByRole('button', { name: /suivant|next/i }))
+      expect(within(dialog).getByRole('img')).toHaveAttribute('src', '/media/visible-1.webp')
     })
   })
 })

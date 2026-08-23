@@ -4,21 +4,25 @@ import { RichText } from './RichText.jsx'
 import { ImagePicker } from './ImagePicker.jsx'
 import { ArrowUpIcon, ArrowDownIcon, TrashIcon, StarIcon, EyeIcon, WidthIcon } from './icons.jsx'
 
+// Task 30, part 5: `heading` is retired as an insertable block type. A
+// heading is now authored inside a `text` block via RichText's own "Titre"
+// toolbar button (an <h2>/<h3>, sanitized server-side same as the rest of
+// that block's HTML) -- there is no separate heading block to insert any
+// more.
 const EMPTY = {
   text: { type: 'text', value: { fr: '', en: '' } },
-  heading: { type: 'heading', value: { fr: '', en: '' }, level: 2 },
   image: { type: 'image', image: null, caption: { fr: '', en: '' }, size: 'wide' },
   gallery: { type: 'gallery', columns: 3, items: [] },
   specs: { type: 'specs', items: [] },
 }
 
-const LABELS = { text: 'Texte', heading: 'Titre', image: 'Image', gallery: 'Galerie', specs: 'Caractéristiques' }
+const LABELS = { text: 'Texte', image: 'Image', gallery: 'Galerie', specs: 'Caractéristiques' }
 
-// Heading text and specs terms/values are NEVER rich text (controller
-// correction 3): unlike `text` blocks, they are not sanitized server-side.
-// They're safe today only because every render path treats them as plain
-// text and never passes them through dangerouslySetInnerHTML. Wiring a
-// LocalizedInput here rather than RichText is deliberate, not an oversight.
+// Specs terms/values are NEVER rich text (controller correction 3): unlike
+// `text` blocks, they are not sanitized server-side. They're safe today only
+// because every render path treats them as plain text and never passes them
+// through dangerouslySetInnerHTML. Wiring a LocalizedInput here rather than
+// RichText is deliberate, not an oversight.
 
 // Client feedback (task 27), replacing the original plan of keeping a
 // separate cover picker: `onSetCover`/`coverId` are only ever passed from
@@ -132,15 +136,33 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
               */}
               {block.type === 'gallery' && (
                 <span className="gallery-columns-control">
-                  <label htmlFor={`columns-${i}`} className="sr-only">Colonnes</label>
+                  {/*
+                    Task 30, part 4: the column count is meaningless in
+                    slider mode (one image shown at a time), so it is hidden
+                    rather than left as a control that does nothing.
+                  */}
+                  {block.mode !== 'slider' && (
+                    <>
+                      <label htmlFor={`columns-${i}`} className="sr-only">Colonnes</label>
+                      <select
+                        id={`columns-${i}`}
+                        value={block.columns || 3}
+                        onChange={(e) => replace(i, { ...block, columns: Number(e.target.value) })}
+                      >
+                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <option key={n} value={n}>{n} col.</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                  <label htmlFor={`mode-${i}`} className="sr-only">Mode d'affichage</label>
                   <select
-                    id={`columns-${i}`}
-                    value={block.columns || 3}
-                    onChange={(e) => replace(i, { ...block, columns: Number(e.target.value) })}
+                    id={`mode-${i}`}
+                    value={block.mode || 'grid'}
+                    onChange={(e) => replace(i, { ...block, mode: e.target.value })}
                   >
-                    {[1, 2, 3, 4, 5, 6].map((n) => (
-                      <option key={n} value={n}>{n} col.</option>
-                    ))}
+                    <option value="grid">Grille</option>
+                    <option value="slider">Diaporama</option>
                   </select>
                 </span>
               )}
@@ -175,26 +197,17 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
               </span>
             </legend>
 
+            {/*
+              Task 30, part 5: `heading` is retired as its own block type.
+              A heading is now authored right here, inside a `text` block,
+              via RichText's "Titre" toolbar button -- there is no separate
+              heading block body any more.
+            */}
             {block.type === 'text' && (
               <RichText
                 value={block.value[lang] || ''}
                 onChange={(html) => replace(i, { ...block, value: { ...block.value, [lang]: html } })}
               />
-            )}
-
-            {block.type === 'heading' && (
-              <>
-                <LocalizedInput label="Titre" lang={lang} value={block.value} onChange={(value) => replace(i, { ...block, value })} />
-                <label htmlFor={`level-${i}`}>Niveau</label>
-                <select
-                  id={`level-${i}`}
-                  value={block.level || 2}
-                  onChange={(e) => replace(i, { ...block, level: Number(e.target.value) })}
-                >
-                  <option value={2}>Titre 2</option>
-                  <option value={3}>Titre 3</option>
-                </select>
-              </>
             )}
 
             {block.type === 'image' && (
@@ -269,14 +282,24 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
                         passed (ArticleEditor) -- PageEditor's pages have no
                         `cover` field at all.
                       */}
+                      {/*
+                        Task 30, part 3: a real toggle now. Pressing the
+                        star on the CURRENT cover clears `article.cover`
+                        (onSetCover(null)) rather than being a dead end once
+                        set. The label says what the press WILL do, not only
+                        the current state -- "Couverture actuelle" described
+                        state alone and gave no hint that pressing it did
+                        anything, the same reason the Eye control below
+                        already phrases its own label as an action.
+                      */}
                       {onSetCover && (
                         <button
                           type="button"
                           className={isCover ? 'active' : ''}
                           aria-pressed={isCover}
-                          aria-label={isCover ? 'Couverture actuelle' : 'Définir comme couverture'}
-                          title={isCover ? 'Couverture actuelle' : 'Définir comme couverture'}
-                          onClick={() => onSetCover(image)}
+                          aria-label={isCover ? 'Retirer la couverture' : 'Définir comme couverture'}
+                          title={isCover ? 'Retirer la couverture' : 'Définir comme couverture'}
+                          onClick={() => onSetCover(isCover ? null : image)}
                         >
                           <StarIcon />
                         </button>

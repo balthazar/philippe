@@ -261,6 +261,19 @@ export function coverLegacyIdFor(category, rawThumbnailId) {
   return Number(rawThumbnailId || 0) || null
 }
 
+// Task 30, part 4 (client feedback): every gallery in an exhibitions
+// article defaults to slider display mode -- one image at a time, since an
+// exhibition's own gallery is a set of installation photographs rather
+// than a grid the way a work's is. Works, editions and public-orders
+// galleries keep the schema's existing grid default untouched (no `mode`
+// field added). Set once here, at extraction time; load.js's
+// preserveArtistFields is what then protects the artist's own later choice
+// (toggled in the admin) across a re-run.
+export function defaultGalleryMode(category, blocks) {
+  if (category !== 'exhibitions') return blocks
+  return blocks.map((b) => (b.type === 'gallery' ? { ...b, mode: 'slider' } : b))
+}
+
 // Task 29, part 3. Source order in the archive is heading, credit, gallery;
 // the wanted reading order is heading, gallery, credit -- fixed here, at
 // extraction time, not in the site renderer (see the task brief: rendering
@@ -363,6 +376,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     let subtitleDuplicateBlocksRemoved = 0
     let coversFoldedIntoGallery = 0
     let creditBlocksMoved = 0
+    let slidersDefaulted = 0
 
     const articles = pairByTrid(postRows).map((pair) => {
       const base = parseYearLabel(pair.fr.post_title)
@@ -401,6 +415,11 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       const withCover = ensureCoverInGallery({ coverLegacyId, blocks: reordered })
       if (withCover !== reordered) coversFoldedIntoGallery += 1
 
+      // Task 30, part 4 (client feedback): every gallery in an exhibitions
+      // article defaults to slider mode.
+      const withGalleryMode = defaultGalleryMode(category, withCover)
+      slidersDefaulted += withGalleryMode.filter((b) => b.type === 'gallery' && b.mode === 'slider').length
+
       return {
         legacyWpId: pair.fr.ID,
         category,
@@ -413,7 +432,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
         yearStart: base.yearStart,
         yearEnd: base.yearEnd,
         coverLegacyId,
-        blocks: withCover,
+        blocks: withGalleryMode,
       }
     })
 
@@ -424,7 +443,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     console.log(
       `blocks removed: ${emptyTextBlocksRemoved} empty text block(s), ${subtitleDuplicateBlocksRemoved} subtitle-duplicate block(s); ` +
       `${coversFoldedIntoGallery} cover(s) folded into their gallery as a hidden item; ` +
-      `${creditBlocksMoved} credit block(s) moved after their gallery`
+      `${creditBlocksMoved} credit block(s) moved after their gallery; ` +
+      `${slidersDefaulted} exhibitions gallery block(s) defaulted to slider mode`
     )
 
     const enOnlySlugs = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
@@ -485,6 +505,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       subtitleDuplicateBlocksRemoved,
       coversFoldedIntoGallery,
       creditBlocksMoved,
+      slidersDefaulted,
     }
   } finally {
     await close()

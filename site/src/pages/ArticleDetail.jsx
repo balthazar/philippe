@@ -58,7 +58,7 @@ function ExhibitionArticle({ article, lang }) {
  * this component no longer needs (a route-provided section no longer means
  * anything to `routeFor` once a slug is given).
  */
-export function ArticleDetail({ onTranslatedPath }) {
+export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   const { slug } = useParams()
   const { lang, otherLang } = useLang()
   const { data: article, error } = usePageData(`article:${slug}:${lang}`, () =>
@@ -79,6 +79,18 @@ export function ArticleDetail({ onTranslatedPath }) {
     onTranslatedPath?.(translatedPath ?? null)
     return () => onTranslatedPath?.(null)
   }, [translatedPath, onTranslatedPath])
+
+  // Task 30 (client feedback): reports this article's own category up to
+  // PublicLayout (via App.jsx) so it can indent the footer to the content
+  // column on an exhibition article page -- an individual article lives at
+  // the flat root (/:slug), indistinguishable by URL alone, so this can only
+  // be known once the article itself has loaded. Cleared on unmount so a
+  // stale "yes, exhibitions" never survives into whatever page is visited
+  // next, mirroring onTranslatedPath's own cleanup just above.
+  useEffect(() => {
+    onExhibitionsLayout?.(article?.category === 'exhibitions')
+    return () => onExhibitionsLayout?.(false)
+  }, [article, onExhibitionsLayout])
 
   // `article` is checked before `error` as belt and braces. usePageData now
   // resets both synchronously on a key change, so a stale error from a

@@ -189,6 +189,26 @@ describe('admin articles', () => {
     expect(patched.body.cover).toMatchObject({ _id: String(image._id), filename: 'cover.jpg' })
     expect(patched.body.cover).toEqual(fetched.body.cover)
   })
+
+  // Task 30 bug report: the client saw the cover "vanish" from the preview
+  // immediately after the FIRST save of a brand-new article (the one that
+  // goes through POST, not PATCH). Root cause: unlike PATCH, POST returned
+  // `article.toObject()` with no populate at all, so `cover` came back as a
+  // bare ObjectId string instead of the populated shape the client's admin
+  // UI (ArticleEditor -> ArticlePreview) expects. PATCH was already correct
+  // (see the test above); POST must match it.
+  it('POST populates cover the same way GET/PATCH do, not a bare id', async () => {
+    const image = await Image.create({
+      filename: 'new-cover.jpg',
+      variants: { medium: { path: 'new-cover-medium.jpg', width: 800, height: 600 } },
+    })
+    const agent = await directAgent()
+    const created = await agent
+      .post('/api/admin/articles')
+      .send({ category: 'works', title: { fr: 'T' }, cover: String(image._id) })
+
+    expect(created.body.cover).toMatchObject({ _id: String(image._id), filename: 'new-cover.jpg' })
+  })
 })
 
 describe('admin pages', () => {

@@ -243,13 +243,18 @@ otherwise report a swapped aspect ratio and render the wrong placeholder shape.
 
 ### Home
 
-There is no `Home` document and no curation flag. The slideshow is simply the
-most recent published works that have a cover image. Each work has exactly one
-image, its `cover`, and that same image serves both the archive grid and the
-slideshow, so nothing is chosen twice. An earlier draft kept a
-stored slide list as an override; it was removed because nothing wrote it, it
-published draft articles, and it returned a different response shape than the
-derived path.
+There is no `Home` document. The slideshow shows the artist's featured works
+(`Article.featured`, works only, ordered by the article list's own `position`),
+falling back to the most recent published works with a cover when nothing is
+featured, so it can never render empty (Task 30, part 2 -- this reverses an
+earlier decision documented right here, which read "no curation flag" and
+explained that a `featured` boolean had been removed as unnecessary; the
+client asked for it back). Each work still has exactly one image, its
+`cover`, and that same image still serves both the archive grid and the
+slideshow, so nothing is chosen twice within a single work. A separate,
+even earlier draft kept a stored slide list as an override; that one stays
+removed, since nothing wrote it, it published draft articles, and it
+returned a different response shape than the derived path.
 
 ### User
 
