@@ -15,7 +15,7 @@ import { processImage } from '#lib/imagePipeline.js'
 import { sanitize } from '#lib/sanitize.js'
 import { uniqueSlug } from '#lib/slug.js'
 import { localize } from '#lib/localize.js'
-import { PAGE_KEYS } from '#lib/constants.js'
+import { PAGE_KEYS, RESERVED_SLUGS } from '#lib/constants.js'
 
 const mediaRoot = () => process.env.MEDIA_ROOT || '/data/media'
 
@@ -32,8 +32,24 @@ function cleanBlocks(blocks = []) {
   )
 }
 
+// Task 27, Part A: articles now live at the root (/:slug, /en/:slug), so a
+// slug equal to a section segment ("oeuvres", "contact", ...) would shadow
+// that section's own route. Checked against both languages, on both create
+// and update, since PATCH's ensureSlug() call goes through this same
+// function whenever the request body includes a slug at all.
+function assertSlugNotReserved(slug) {
+  for (const lang of ['fr', 'en']) {
+    if (slug[lang] && RESERVED_SLUGS.includes(slug[lang])) {
+      const err = new Error(`"${slug[lang]}" is a reserved URL segment and cannot be used as an article slug`)
+      err.status = 400
+      throw err
+    }
+  }
+}
+
 async function ensureSlug(body, currentId = null) {
   const slug = { ...(body.slug || {}) }
+  assertSlugNotReserved(slug)
   if (!slug.fr) {
     const taken = async (s) => {
       const hit = await Article.findOne({ 'slug.fr': s })

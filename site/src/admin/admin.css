@@ -12,6 +12,12 @@
   --surface: #f7f7f5;
   --danger: #b00020;
   --confirm: #1e6b34;
+  /* Client feedback: named once, used by both .admin-nav's own height and
+     the sticky preview pane's `top` (below), so the two cannot disagree.
+     This project already made the "hardcoded pixel guess drifts from the
+     nav's real height" mistake once, on the public side -- --header-height
+     in design/tokens.css exists for exactly this reason. */
+  --admin-nav-height: 3.5rem;
 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   color: var(--ink);
@@ -47,11 +53,26 @@
 }
 
 .admin-nav {
+  /* Task 27, client feedback item 5: it scrolled away today. Stuck to the
+     top of the viewport; z-index keeps it above everything below it,
+     including the sticky preview pane (which starts its own stacking
+     context at the top of its own column). An explicit height (the shared
+     --admin-nav-height token, not the padding-plus-content it used to
+     emerge from) is what lets the preview pane below park exactly at this
+     nav's bottom edge instead of a guess that drifts the moment this
+     padding changes. box-sizing: border-box keeps that height inclusive of
+     the padding, since this stylesheet doesn't set a project-wide reset
+     (deliberately: see the file header comment). */
+  box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  z-index: 20;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  padding: 1rem 1.5rem;
+  height: var(--admin-nav-height);
+  padding-inline: 1.5rem;
   background: var(--ink);
 }
 
@@ -126,8 +147,12 @@
   padding: 1.5rem;
 }
 
+/* Task 27, client feedback item 3: no horizontal padding of its own any
+   more -- .admin-index-content (the shared page container's inner column)
+   owns that edge now, so this aligns with the toolbar's heading above it
+   instead of sitting 1.5rem further in. */
 .admin-article-group {
-  padding: 0 1.5rem 1.5rem;
+  padding: 0 0 1.5rem;
 }
 
 .admin-article-group ul {
@@ -174,6 +199,39 @@
   color: var(--muted);
 }
 
+/* Task 27, Part B4: the row's status badge, publish toggle and delete
+   control read as one designed group -- matched in size, weight and
+   spacing, in their own tighter gap than the row's own (drag handle / title
+   / actions) gap. */
+.admin-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-row-actions .status-badge,
+.admin-row-actions .admin-row-button,
+.admin-row-actions .button-danger {
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.admin-row-button {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.admin-row-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .status-badge {
   font-size: 0.75rem;
   padding: 0.15rem 0.5rem;
@@ -191,8 +249,11 @@
   color: #8a5a00;
 }
 
+/* Task 27, client feedback item 3: no horizontal margin of its own -- every
+   context this renders in (.admin-index-content, .admin-editor) already
+   owns that edge via its own container, the same as every other field. */
 .admin-error {
-  margin: 0 1.5rem 1rem;
+  margin: 0 0 1rem;
   padding: 0.6rem 0.9rem;
   background: #fdeaea;
   color: var(--danger);
@@ -233,10 +294,22 @@
 
 /* Shared: FR/EN content toggle (Task 21). This is per-field CONTENT, not the
    admin chrome, which stays French-only by client decision. */
+/* Task 27, client feedback item 6: no horizontal padding of its own -- the
+   surrounding page container (.admin-editor-layout / .admin-editor, or
+   .admin-media-library) already owns that edge, the same way the toolbar's
+   own heading does. The extra 1.5rem here was what pushed FR/EN out of
+   alignment with the title beside it. */
 .lang-toggle {
   display: flex;
   gap: 0.4rem;
-  padding: 0 1.5rem 1rem;
+  padding: 0 0 1rem;
+}
+
+/* Client feedback: inline in the toolbar row now (ArticleEditor), beside
+   the publish control -- no bottom padding of its own there, or it would
+   sit lower than the button next to it instead of sharing its baseline. */
+.admin-toolbar .lang-toggle {
+  padding-bottom: 0;
 }
 
 .lang-toggle button {
@@ -265,7 +338,12 @@
   gap: 2.5rem;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 1.5rem 3rem;
+  /* Client feedback: no bottom padding -- it stopped the preview column
+     (now sticky through --admin-nav-height, above) from reaching the
+     bottom of the page. .admin-editor keeps its own bottom clearance
+     below, for a different reason (the sticky save bar), unaffected by
+     this row's own padding. */
+  padding: 0 1.5rem;
 }
 
 .admin-editor {
@@ -277,11 +355,40 @@
   flex-direction: column;
   gap: 0.9rem;
   /* Clearance so the sticky save bar below never covers the last block's
-     controls when scrolled all the way down (client feedback item 2). */
+     controls when scrolled all the way down (client feedback item 2).
+     Kept: .admin-editor-actions sticks to `bottom: 0` of the page's own
+     scroll (this column is normal document flow, not its own scrolling
+     container, and nothing between them sets overflow), which this
+     column's own bottom padding is what's still budgeting for -- the
+     .admin-editor-layout bottom padding removed above is a different rule
+     entirely (it only ever affected where the ROW's own box ended, not
+     where the sticky bar unsticks within this column), so removing that
+     one doesn't touch the reason this one exists. */
   padding-bottom: 4.5rem;
 }
 
 .admin-editor .admin-toolbar {
+  padding: 1.5rem 0;
+}
+
+/* Task 27, client feedback item 3: Articles, Pages and Images now share one
+   page container -- the same .admin-editor-layout outer row PagesIndex
+   already used, centred at the same max-width with the same horizontal
+   padding -- instead of three different bespoke wrappers (ArticleList had
+   none at all; MediaLibrary capped at its own 960px). Unlike .admin-editor
+   (the two-column editor forms' inner column, capped at 640px so a preview
+   pane fits beside it), this content has no pane beside it and no reason to
+   be narrower than the row itself -- a list of rows or a grid of thumbnails
+   both want the full width. */
+.admin-index-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.admin-index-content .admin-toolbar {
   padding: 1.5rem 0;
 }
 
@@ -361,12 +468,6 @@
   margin-left: auto;
 }
 
-.admin-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-}
-
 .admin-status-control {
   display: flex;
   align-items: center;
@@ -416,17 +517,30 @@
   font-size: 0.9rem;
 }
 
-/* Preview pane */
+/* Preview pane. Task 27, Part C2: `top: 1.5rem` (with a shorter max-height
+   below it) used to leave the sticky panel's own top edge 1.5rem below the
+   viewport top and its bottom short of the viewport bottom -- both gaps
+   showed the page behind it (the admin's off-white --surface) rather than
+   the white preview. The breathing room that `top`/`padding-top` used to
+   provide now lives on .admin-preview-header instead.
+   Client feedback: `top: 0` and `height: 100dvh` ignored .admin-nav, which
+   is ALSO stuck to the top (z-index 20, above this) -- once scrolled, this
+   pane's own top edge disappeared behind it. Parked at the shared
+   --admin-nav-height token instead (the same one .admin-nav's own height
+   uses), so this pane's top edge always lands exactly at the nav's bottom
+   edge, and its height is the viewport height minus that same token so its
+   bottom edge still reaches the viewport bottom, not `--admin-nav-height`
+   past it. */
 .admin-preview-pane {
   flex: 1 1 420px;
   min-width: 0;
   position: sticky;
-  top: 1.5rem;
+  top: var(--admin-nav-height);
   align-self: flex-start;
-  max-height: calc(100dvh - 3rem);
+  height: calc(100dvh - var(--admin-nav-height));
+  max-height: calc(100dvh - var(--admin-nav-height));
   display: flex;
   flex-direction: column;
-  padding-top: 1.5rem;
   /* Task 26, part B5: it's a preview of a white page, so it must sit on
      white -- not the admin's own off-white --surface, which it inherited
      from .admin's body background before this. */
@@ -438,7 +552,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  padding-bottom: 0.75rem;
+  padding: 1.5rem 1.5rem 0.75rem;
   border-bottom: 1px solid var(--line);
   flex: 0 0 auto;
 }
@@ -466,9 +580,19 @@
   cursor: default;
 }
 
+/* Task 27, Part C2: horizontal padding added (there was none) so the
+   rendered article/page sits clear of the panel's own frame instead of
+   flush against it -- the preview is a picture of a white page, and a real
+   page has margins.
+   Client feedback (item 4): this is INTERNAL padding, inside the white
+   pane, fixing gaps that showed the page behind it while scrolling -- it is
+   not the same thing as the pane's own OUTER right-hand edge, which still
+   sits inset from the row's true right edge by .admin-editor-layout's own
+   padding + this pane's flex-basis (unchanged, and deliberately not
+   stretched flush to the page). */
 .admin-preview-scroll {
   overflow-y: auto;
-  padding: 1.25rem 0;
+  padding: 1.25rem 1.5rem;
 }
 
 .article-preview {
@@ -691,6 +815,23 @@
   gap: 0.5rem;
 }
 
+/* Task 27, client feedback item 1: the "Cover" / "Hidden from grid" toggles
+   sit alongside the span selector on the same row, in their own tight
+   sub-group. */
+.gallery-item-toggles {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.gallery-item-toggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
 .gallery-spans {
   list-style: none;
   padding: 0;
@@ -815,13 +956,9 @@
   margin-top: 0.3rem;
 }
 
-/* MediaLibrary */
-.admin-media-library {
-  max-width: 960px;
-  margin: 0 auto 3rem;
-  padding: 0 1.5rem;
-}
-
+/* MediaLibrary. Task 27, client feedback item 3: its own max-width/margin/
+   padding are gone -- .admin-editor-layout + .admin-index-content now own
+   the page container, the same as Articles and Pages. */
 .media-library-grid {
   list-style: none;
   padding: 0;

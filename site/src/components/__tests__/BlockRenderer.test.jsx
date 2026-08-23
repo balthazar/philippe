@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BlockRenderer } from '../BlockRenderer.jsx'
 
@@ -50,5 +50,50 @@ describe('BlockRenderer', () => {
   it('ignores an unknown block type instead of crashing the page', () => {
     render(<BlockRenderer blocks={[{ type: 'video', value: 'x' }, { type: 'text', value: '<p>ok</p>' }]} />)
     expect(screen.getByText('ok')).toBeInTheDocument()
+  })
+
+  // Task 27, client feedback item 1: a gallery item can be `hidden` -- kept
+  // in the data (so it can also serve as the article's cover) without
+  // showing in the public grid. Must be excluded from the lightbox too, or
+  // a hidden image becomes reachable by arrowing through the visible ones.
+  describe('hidden gallery items', () => {
+    it('does not render a hidden item in the grid', () => {
+      render(
+        <BlockRenderer
+          blocks={[{ type: 'gallery', columns: 3, items: [{ image: img('visible.webp') }, { image: img('hidden.webp'), hidden: true }] }]}
+        />
+      )
+      expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    })
+
+    it('never includes a hidden item among the lightbox images', async () => {
+      render(
+        <BlockRenderer
+          blocks={[{
+            type: 'gallery', columns: 3,
+            items: [{ image: img('visible-1.webp') }, { image: img('hidden.webp'), hidden: true }, { image: img('visible-2.webp') }],
+          }]}
+        />
+      )
+      // Only two visible buttons to open the lightbox from -- the hidden
+      // item never gets one at all.
+      const buttons = screen.getAllByRole('button', { name: /une porte/i })
+      expect(buttons).toHaveLength(2)
+
+      await userEvent.click(buttons[1])
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByRole('img')).toHaveAttribute('src', '/media/visible-2.webp')
+
+      // Arrowing "next" from the second visible image must wrap back to the
+      // first, past only the two visible images -- never landing on the
+      // hidden one in between.
+      await userEvent.click(within(dialog).getByRole('button', { name: /suivant|next/i }))
+      expect(within(dialog).getByRole('img')).toHaveAttribute('src', '/media/visible-1.webp')
+    })
+
+    it('renders every item when none is hidden', () => {
+      render(<BlockRenderer blocks={[{ type: 'gallery', columns: 3, items: [{ image: img('a.webp') }, { image: img('b.webp') }] }]} />)
+      expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    })
   })
 })

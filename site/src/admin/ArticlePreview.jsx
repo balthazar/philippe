@@ -1,30 +1,5 @@
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
-
-const resolve = (field, lang) => (field ? field[lang] || field.fr || '' : '')
-
-/**
- * Maps one block from the editor's `{ fr, en }` draft shape into the plain,
- * language-resolved shape BlockRenderer (and the public API) expect --
- * mirrors api/src/lib/localize.js's resolveDoc, but only for the block
- * fields this admin editor can actually produce. Kept local rather than
- * imported: api/ and site/ are separate bundles, the same reason
- * ArticleEditor.jsx already duplicates CATEGORY_LABELS.
- */
-function resolveBlock(block, lang) {
-  switch (block.type) {
-    case 'text':
-    case 'heading':
-      return { ...block, value: resolve(block.value, lang) }
-    case 'image':
-      return { ...block, caption: resolve(block.caption, lang) }
-    case 'gallery':
-      return { ...block, items: (block.items || []).map((item) => ({ ...item, caption: resolve(item.caption, lang) })) }
-    case 'specs':
-      return { ...block, items: (block.items || []).map((item) => ({ term: resolve(item.term, lang), value: resolve(item.value, lang) })) }
-    default:
-      return block
-  }
-}
+import { resolve, resolveBlock } from './resolveBlocks.js'
 
 // `cover` is populated (an object with `variants`) right after a load, but
 // can be a bare id string in between saves (or simply unset on a brand-new
@@ -52,6 +27,9 @@ function coverSrc(cover) {
  */
 export function ArticlePreview({ article, lang }) {
   const title = resolve(article.title, lang)
+  // Task 27, Part B2: rendered directly under the title, before anything
+  // else -- the same position ArticleDetail.jsx (the public page) uses.
+  const subtitle = resolve(article.subtitle, lang)
   const yearLabel = resolve(article.yearLabel, lang)
   const blocks = (article.blocks || []).map((block) => resolveBlock(block, lang))
   const cover = coverSrc(article.cover)
@@ -65,6 +43,7 @@ export function ArticlePreview({ article, lang }) {
       )}
       <header className="article-header">
         <h1>{title || 'Sans titre'}</h1>
+        {subtitle && <p className="article-subtitle">{subtitle}</p>}
         {yearLabel && <p className="article-year">{yearLabel}</p>}
       </header>
       <BlockRenderer blocks={blocks} />

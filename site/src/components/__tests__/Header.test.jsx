@@ -51,15 +51,18 @@ describe('Header', () => {
   // (which real ArticleDetail only ever sets from a *client* effect --
   // never during SSR), this pins that the preload path, read straight from
   // context, is what makes the link right on the very first render instead.
+  // Task 27, Part A: the article itself lives at the root now
+  // (/tableaux-electriques-2007-2010), not under /oeuvres/, and the preload
+  // key is keyed on the slug alone (no section).
   it('prefers a preloaded translatedPath over the naive same-slug guess, with no translatedPath prop set', () => {
     render(
-      <MemoryRouter initialEntries={['/oeuvres/tableaux-electriques-2007-2010']}>
-        <PreloadProvider value={{ 'translatedPath:works:tableaux-electriques-2007-2010:fr': '/en/works/switchboards-2007-2010' }}>
+      <MemoryRouter initialEntries={['/tableaux-electriques-2007-2010']}>
+        <PreloadProvider value={{ 'translatedPath:tableaux-electriques-2007-2010:fr': '/en/switchboards-2007-2010' }}>
           <LangProvider><Header /></LangProvider>
         </PreloadProvider>
       </MemoryRouter>
     )
-    expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/works/switchboards-2007-2010')
+    expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/switchboards-2007-2010')
   })
 
   it('sets the document language to match the route', () => {

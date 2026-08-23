@@ -65,9 +65,10 @@ describe('Slideshow', () => {
     expect(screen.getByAltText('porte')).toBeInTheDocument()
   })
 
+  // Task 27, Part A: articles live at the root now, no /oeuvres/ segment.
   it('links the current slide to its article', () => {
     renderShow()
-    expect(screen.getByRole('link', { name: /porte/i })).toHaveAttribute('href', '/oeuvres/porte')
+    expect(screen.getByRole('link', { name: /porte/i })).toHaveAttribute('href', '/porte')
   })
 
   it('passes width and height through to the image so the browser can reserve the box', () => {

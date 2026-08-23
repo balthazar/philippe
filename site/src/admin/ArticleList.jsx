@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiGet, apiSend } from '@/api.js'
 import { useSessionExpired } from './session.js'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
+import { PlusIcon } from './icons.jsx'
 
 // Order categories are grouped and displayed in. Matches api/src/lib/constants.js
 // CATEGORIES; duplicated here (rather than imported) because the admin is a
@@ -134,15 +135,25 @@ export function ArticleList() {
   const groups = groupByCategory(articles)
 
   return (
-    <div className="admin-article-list">
-      <div className="admin-toolbar">
-        <h1>Articles</h1>
-        <Link to="/admin/articles/new" className="button">Nouvel article</Link>
-      </div>
+    // Task 27, client feedback item 3: same page container as Pages and
+    // Images now (.admin-editor-layout, the outer row; .admin-index-content,
+    // the zero-padding inner column that owns this content's own edge).
+    <div className="admin-editor-layout">
+      <div className="admin-index-content admin-article-list">
+        <div className="admin-toolbar">
+          <h1>Articles</h1>
+          {/* Task 27, client feedback item 4: a real button, with an icon.
+              Decorative (aria-hidden, see icons.jsx) since "Nouvel article"
+              is already its own visible, accessible text. */}
+          <Link to="/admin/articles/new" className="button">
+            <PlusIcon />
+            Nouvel article
+          </Link>
+        </div>
 
-      {error && <p role="alert" className="admin-error">{error}</p>}
+        {error && <p role="alert" className="admin-error">{error}</p>}
 
-      {groups.map(([category, items]) => (
+        {groups.map(([category, items]) => (
         <section key={category} className="admin-article-group">
           <h2>{CATEGORY_LABELS[category] || category}</h2>
           <ul>
@@ -182,19 +193,28 @@ export function ArticleList() {
               >
                 <span className="drag-handle" aria-hidden="true">⠿</span>
                 <Link to={`/admin/articles/${article._id}`}>{article.title?.fr}</Link>
-                <span className={`status-badge status-${article.status}`}>
-                  {STATUS_LABELS[article.status] || article.status}
+                {/*
+                  Task 27, Part B4: badge, publish toggle and delete read as
+                  one designed group, matched in size/weight/spacing, rather
+                  than three unrelated elements (a pill-shaped badge, an
+                  unstyled native button, a differently-sized danger button).
+                */}
+                <span className="admin-row-actions">
+                  <span className={`status-badge status-${article.status}`}>
+                    {STATUS_LABELS[article.status] || article.status}
+                  </span>
+                  <button type="button" className="admin-row-button" onClick={() => togglePublish(article)}>
+                    {article.status === 'published' ? 'Dépublier' : 'Publier'}
+                  </button>
+                  <ConfirmDelete label={article.title?.fr} onConfirm={() => deleteArticle(article)} />
                 </span>
-                <button type="button" onClick={() => togglePublish(article)}>
-                  {article.status === 'published' ? 'Dépublier' : 'Publier'}
-                </button>
-                <ConfirmDelete label={article.title?.fr} onConfirm={() => deleteArticle(article)} />
               </li>
               )
             })}
           </ul>
         </section>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }

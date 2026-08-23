@@ -115,6 +115,20 @@ export function LinkIcon(props) {
   )
 }
 
+// Task 27, client feedback item 4: "Nouvel article" is a real button now,
+// with this icon beside its own visible text -- so, same rule as every
+// other icon here, it stays decorative (aria-hidden) and carries no
+// aria-label/title of its own; the button's accessible name comes from its
+// text, exactly like every other icon+text control in this admin.
+export function PlusIcon(props) {
+  return (
+    <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
 export function ExternalLinkIcon(props) {
   return (
     <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>

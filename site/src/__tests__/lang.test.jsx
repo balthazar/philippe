@@ -36,11 +36,13 @@ describe('LangProvider / useLang', () => {
     expect(screen.getByTestId('works-href')).toHaveTextContent('/oeuvres')
   })
 
+  // Task 27, Part A: an article href (a slug given) carries no section
+  // segment -- only the /en language prefix.
   it('detects English from the /en prefix and builds hrefs under /en', () => {
     renderAt('/en/works')
     expect(screen.getByTestId('lang')).toHaveTextContent('en')
     expect(screen.getByTestId('other-lang')).toHaveTextContent('fr')
-    expect(screen.getByTestId('works-slug-href')).toHaveTextContent('/en/works/press-frame')
+    expect(screen.getByTestId('works-slug-href')).toHaveTextContent('/en/press-frame')
   })
 
   it('treats the root path as French', () => {

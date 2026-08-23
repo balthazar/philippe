@@ -22,6 +22,17 @@ function renderList() {
 }
 
 describe('ArticleList', () => {
+  // Task 27, client feedback item 4: a real button, not a bare text link.
+  it('shows "Nouvel article" as a styled button, with the icon staying decorative', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [], total: 0 })
+    renderList()
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Nouvel article' })).toBeInTheDocument())
+    const link = screen.getByRole('link', { name: 'Nouvel article' })
+    expect(link).toHaveAttribute('href', '/admin/articles/new')
+    expect(link).toHaveClass('button')
+    expect(link.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('groups articles by category and shows a status badge and link per article', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({ items: ITEMS, total: ITEMS.length })
     renderList()
@@ -40,6 +51,20 @@ describe('ArticleList', () => {
     // Status badges reflect each article's own status.
     expect(screen.getByText('Publié')).toBeInTheDocument()
     expect(screen.getAllByText('Brouillon')).toHaveLength(2)
+  })
+
+  // Task 27, Part B4: badge, publish toggle and delete read as one designed
+  // group in each row, not three unrelated elements.
+  it('groups the badge, publish toggle and delete control together in each row', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0]], total: 1 })
+    renderList()
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+
+    const group = document.querySelector('.admin-row-actions')
+    expect(group).toBeInTheDocument()
+    expect(group.querySelector('.status-badge')).toBeInTheDocument()
+    expect(group).toHaveTextContent('Publié')
+    expect(group.querySelector('button')).toBeInTheDocument()
   })
 
   it('toggles publish status via a PATCH and updates the badge', async () => {

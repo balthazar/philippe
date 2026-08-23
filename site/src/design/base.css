@@ -65,18 +65,29 @@ picture {
   position: sticky;
   top: 0;
   z-index: 10;
+  /* Full-bleed: the header's background must span the viewport at any
+     width. Its content is capped and centred by .site-header-inner below,
+     the same way .container caps and centres the page's own content --
+     without that, above --container's 1440px the header's content sat 60px
+     from the browser edge while the page content sat much further in. */
+  background: var(--paper);
+  height: var(--header-height);
+  line-height: 1;
+}
+
+.site-header-inner {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  background: var(--paper);
-  height: var(--header-height);
+  height: 100%;
+  max-width: var(--container);
+  margin-inline: auto;
   padding-inline: var(--page-gutter);
-  line-height: 1;
-  /* Set once here, on the container, so every piece of header text
-     (wordmark, nav links, FR/EN) inherits the same size/weight/family
-     rather than repeating it per element, where one selector can be missed.
-     Only letter-spacing (the wordmark tracks wider than nav/lang-switch)
-     and color (active vs inactive state) vary below. */
+  /* Set once here, so every piece of header text (wordmark, nav links,
+     FR/EN) inherits the same size/weight/family rather than repeating it
+     per element, where one selector can be missed. Only letter-spacing (the
+     wordmark tracks wider than nav/lang-switch) and color (active vs
+     inactive state) vary below. */
   font-family: var(--font-chrome);
   font-size: var(--text-l);
   font-weight: 700;
@@ -323,8 +334,14 @@ picture {
    of the whole viewport -- see the comment in Slideshow.jsx. Deliberately
    just a block: the caption centers on the inherited text-align and the
    controls center themselves, so no layout changes by introducing it. */
+/* D3: bottom padding on the flex:0 chrome wrapper -- not the full-bleed
+   .slideshow section itself -- so the breathing room comes out of the
+   image stage's own budget (.slideshow-stage is the flexible, flex:1 1 auto
+   child) rather than pushing the caption/controls past the fixed
+   100dvh - header-height the slideshow is allotted. */
 .slideshow-chrome {
   flex: 0 0 auto;
+  padding-bottom: var(--space-2);
 }
 
 /* The image stage: the flexible child that absorbs whatever height the

@@ -54,6 +54,32 @@ describe('ArticlePreview', () => {
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 
+  // Task 27, Part B2: rendered directly under the title, before the year
+  // label -- the same position the public ArticleDetail page uses.
+  it('renders the subtitle between the title and the year label', () => {
+    const article = {
+      title: { fr: 'Titre', en: '' },
+      subtitle: { fr: 'Numérisation, épreuves numériques pigmentaires', en: '' },
+      yearLabel: { fr: '2020', en: '' },
+      cover: null,
+      blocks: [],
+    }
+    const { container } = render(<ArticlePreview article={article} lang="fr" />)
+    const header = container.querySelector('.article-header')
+    const subtitle = screen.getByText('Numérisation, épreuves numériques pigmentaires')
+    expect(subtitle).toHaveClass('article-subtitle')
+    // eslint-disable-next-line no-bitwise
+    expect(header.querySelector('h1').compareDocumentPosition(subtitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // eslint-disable-next-line no-bitwise
+    expect(subtitle.compareDocumentPosition(screen.getByText('2020')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('renders no subtitle line when the article has none', () => {
+    const article = { title: { fr: 'Titre', en: '' }, subtitle: { fr: '', en: '' }, cover: null, blocks: [] }
+    const { container } = render(<ArticlePreview article={article} lang="fr" />)
+    expect(container.querySelector('.article-subtitle')).not.toBeInTheDocument()
+  })
+
   it('resolves specs terms/values and gallery captions as plain text for the current language', () => {
     const article = {
       title: { fr: '', en: '' },

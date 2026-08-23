@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks, reduceContactPageBlocks } from '../extract.js'
+import {
+  pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks,
+  reduceContactPageBlocks, removeEmptyTextBlocks, removeSubtitleDuplicateBlocks, ensureCoverInGallery,
+} from '../extract.js'
 
 describe('mapCategory', () => {
   it('maps both language names onto one canonical category', () => {
@@ -140,6 +143,121 @@ describe('extractSubtitle', () => {
     const result = extractSubtitle('works', blocks)
     expect(result.matched).toBe(false)
     expect(result.reason).toMatch(/no text block/i)
+  })
+
+  // Client feedback (task 27): the previous version only ever looked at the
+  // FIRST text block by type. On real archive articles (client-measured: 30
+  // of 34 works) the technique line is genuinely the first text block and
+  // this worked; but a works article whose first text block is real prose
+  // (ending in terminal punctuation) with the technique line further down
+  // used to fall through to "no match" without ever looking past that first
+  // block -- the true technique line was left both un-extracted AND, since
+  // extraction never touched it, still sitting in the article as a block.
+  it('finds and removes the technique line even when an earlier text block is real prose', () => {
+    const blocks = [
+      textBlock('<p>Une véritable description en prose qui se termine par un point.</p>'),
+      { type: 'heading', value: { fr: 'x', en: '' }, level: 2 },
+      textBlock('<p>Numérisation, épreuves numériques pigmentaires</p>'),
+      { type: 'gallery', items: [] },
+    ]
+    const result = extractSubtitle('works', blocks)
+    expect(result.matched).toBe(true)
+    expect(result.subtitle).toEqual({ fr: 'Numérisation, épreuves numériques pigmentaires', en: '' })
+    expect(result.blocks).toEqual([blocks[0], blocks[1], blocks[3]])
+  })
+})
+
+// Client feedback (task 27): the technique line the migration lifts into
+// `subtitle` sometimes appears a SECOND time in the source content, as its
+// own separate text block elsewhere in the article (measured: 30 of 63
+// articles). extractSubtitle only ever removes the ONE occurrence it matched
+// on; this is a second, content-based pass over what's left, run after
+// subtitle extraction, that drops any other text block whose entire content
+// is exactly `<p>{subtitle}</p>` -- matched on content, not position, since
+// position is what left these duplicates behind in the first place.
+describe('removeSubtitleDuplicateBlocks', () => {
+  const textBlock = (fr, en = '') => ({ type: 'text', value: { fr, en } })
+
+  it('removes a later text block that exactly duplicates the extracted subtitle', () => {
+    const blocks = [
+      textBlock('<p>Une prose qui reste.</p>'),
+      textBlock('<p>1. Légende unique - 2023</p>'),
+      textBlock(''),
+      textBlock('<p>Photographie analogique, épreuve numérique pigmentaire</p>'),
+      { type: 'gallery', items: [] },
+    ]
+    const subtitle = { fr: 'Photographie analogique, épreuve numérique pigmentaire', en: '' }
+    expect(removeSubtitleDuplicateBlocks(blocks, subtitle)).toEqual([blocks[0], blocks[1], blocks[2], blocks[4]])
+  })
+
+  it('leaves a block whose content only partially overlaps the subtitle untouched', () => {
+    const blocks = [textBlock('<p>1. Photographie analogique, épreuve numérique pigmentaire - 2023</p>')]
+    const subtitle = { fr: 'Photographie analogique, épreuve numérique pigmentaire', en: '' }
+    expect(removeSubtitleDuplicateBlocks(blocks, subtitle)).toEqual(blocks)
+  })
+
+  it('does nothing when there is no subtitle to match against', () => {
+    const blocks = [textBlock('<p>x</p>')]
+    expect(removeSubtitleDuplicateBlocks(blocks, { fr: '', en: '' })).toEqual(blocks)
+  })
+})
+
+// Client feedback (task 27): 26 articles carry a text block whose fr and en
+// are both empty -- rendering nothing on the page, showing as a blank field
+// in the editor. "Empty" is judged after stripping tags and whitespace (an
+// empty `<p></p>` counts; a block with real text does not), and only ever
+// applies to `text` blocks -- an image block with no image yet is the
+// artist's business, not the migration's.
+describe('removeEmptyTextBlocks', () => {
+  it('drops a text block whose fr and en are both empty after stripping tags and whitespace', () => {
+    const blocks = [
+      { type: 'text', value: { fr: '', en: '' } },
+      { type: 'text', value: { fr: '<p></p>', en: '  ' } },
+      { type: 'text', value: { fr: '<p>Reste</p>', en: '' } },
+    ]
+    expect(removeEmptyTextBlocks(blocks)).toEqual([blocks[2]])
+  })
+
+  it('never removes a non-text block on emptiness grounds', () => {
+    const blocks = [{ type: 'image', image: null }]
+    expect(removeEmptyTextBlocks(blocks)).toEqual(blocks)
+  })
+})
+
+// Client feedback (task 27), replacing the original B3 plan: 37 of 63
+// articles have a cover that is not among their gallery images, and one has
+// no gallery at all. Rather than keep a separate cover picker forever, the
+// migration folds each such cover into the article's own gallery as a
+// hidden item (creating the gallery when none exists) so the admin's two
+// per-image toggles ("Cover", "Hidden from grid") can express every case,
+// no visible grid image is added, and no cover is lost.
+describe('ensureCoverInGallery', () => {
+  it('adds the cover to an existing gallery block as a hidden item when not already present', () => {
+    const blocks = [{ type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 1 } }] }]
+    const result = ensureCoverInGallery({ coverLegacyId: 2, blocks })
+    expect(result[0].items).toEqual([
+      { image: { legacyWpId: 1 } },
+      { image: { legacyWpId: 2 }, caption: { fr: '', en: '' }, span: 1, hidden: true },
+    ])
+  })
+
+  it('creates a gallery block containing just the hidden cover when the article has no gallery at all', () => {
+    const blocks = [{ type: 'text', value: { fr: 'x', en: '' } }]
+    const result = ensureCoverInGallery({ coverLegacyId: 5, blocks })
+    expect(result).toEqual([
+      blocks[0],
+      { type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 5 }, caption: { fr: '', en: '' }, span: 1, hidden: true }] },
+    ])
+  })
+
+  it('does nothing when the cover is already among the gallery items', () => {
+    const blocks = [{ type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 9 } }] }]
+    expect(ensureCoverInGallery({ coverLegacyId: 9, blocks })).toEqual(blocks)
+  })
+
+  it('does nothing when there is no cover at all', () => {
+    const blocks = [{ type: 'gallery', columns: 3, items: [] }]
+    expect(ensureCoverInGallery({ coverLegacyId: null, blocks })).toEqual(blocks)
   })
 })
 

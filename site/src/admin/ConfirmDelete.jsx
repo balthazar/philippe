@@ -23,7 +23,7 @@ export function ConfirmDelete({ label, onConfirm, busy = false }) {
       <button type="button" className="button-danger" disabled={busy} onClick={onConfirm}>
         {busy ? 'Suppression…' : 'Confirmer'}
       </button>
-      <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
+      <button type="button" className="admin-row-button" disabled={busy} onClick={() => setConfirming(false)}>
         Annuler
       </button>
     </span>

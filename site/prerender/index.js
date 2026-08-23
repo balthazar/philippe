@@ -18,14 +18,19 @@ const CATEGORIES = ['works', 'exhibitions', 'editions', 'public-orders']
 const PAGE_KEYS = ['works', 'exhibitions', 'biography', 'contact', 'bibliography', 'links', 'legal']
 const CONTENT_PAGE_KEYS = ['home', ...PAGE_KEYS]
 
+// Task 27, Part A (SEO-critical): individual articles move to the root --
+// /:slug in French, /en/:slug in English -- to match the URLs the site
+// being replaced served (works and exhibitions share this one flat
+// namespace; `category` no longer selects a URL segment at all). Section
+// listings (works, exhibitions, ...) are unaffected and keep their own
+// segment via SEGMENTS below.
 export function collectRoutes({ articles, pageKeys }) {
   const routes = ['/', '/en']
   for (const key of pageKeys) {
     routes.push(`/${SEGMENTS[key].fr}`, `/en/${SEGMENTS[key].en}`)
   }
   for (const a of articles) {
-    const section = a.category === 'exhibitions' ? 'exhibitions' : 'works'
-    if (a.slug?.fr) routes.push(`/${SEGMENTS[section].fr}/${a.slug.fr}`)
+    if (a.slug?.fr) routes.push(`/${a.slug.fr}`)
     // Slug is the one localized field that didn't already follow the
     // `en || fr` rule every other field on this project uses (client
     // feedback, task 25): a blank English slug used to skip the English
@@ -33,7 +38,7 @@ export function collectRoutes({ articles, pageKeys }) {
     // hreflang for it, reachable only by typing the French slug under /en/
     // by hand (the public API's $or slug lookup already resolves that).
     const enSlug = a.slug?.en || a.slug?.fr
-    if (enSlug) routes.push(`/en/${SEGMENTS[section].en}/${enSlug}`)
+    if (enSlug) routes.push(`/en/${enSlug}`)
   }
   return [...new Set(routes)]
 }
@@ -41,7 +46,6 @@ export function collectRoutes({ articles, pageKeys }) {
 const SITE_NAME = 'Philippe Gronon'
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
 const routeLang = (route) => (route === '/en' || route.startsWith('/en/') ? 'en' : 'fr')
-const sectionFor = (category) => (category === 'exhibitions' ? 'exhibitions' : 'works')
 
 // Reads one language out of a {fr, en} localized field, falling back to
 // French, and always to '' (never to the field object itself: title/
@@ -88,24 +92,29 @@ export function headFor(route, content, site = SITE) {
     tags.push(`<title>${esc(year ? `${title}, ${year}` : title)} | ${SITE_NAME}</title>`)
     description = localize(match.seoDescription, lang)
 
-    const section = sectionFor(match.category)
+    // Task 27, Part A: articles live at the root now, so their hreflang
+    // alternates do too -- no section segment, in either language.
     if (match.slug?.fr) {
-      const fr = `${site}/${SEGMENTS[section].fr}/${match.slug.fr}`
-      tags.push(`<link rel="alternate" hreflang="fr" href="${fr}">`)
+      tags.push(`<link rel="alternate" hreflang="fr" href="${site}/${match.slug.fr}">`)
     }
     // Same `en || fr` fallback as collectRoutes above, so the hreflang
     // alternate always agrees with which routes actually got prerendered.
     const enSlug = match.slug?.en || match.slug?.fr
     if (enSlug) {
-      const en = `${site}/en/${SEGMENTS[section].en}/${enSlug}`
-      tags.push(`<link rel="alternate" hreflang="en" href="${en}">`)
+      tags.push(`<link rel="alternate" hreflang="en" href="${site}/en/${enSlug}">`)
     }
     const cover = match.cover?.variants?.medium?.path
     if (cover) tags.push(`<meta property="og:image" content="${site}/media/${cover}">`)
   } else {
     const pageKey = pageKeyForRoute(route)
     const page = pageKey && content.pages?.[pageKey]
-    if (page) {
+    // D4: the home route's title is literally "Philippe Gronon", never
+    // "<page title> | Philippe Gronon" -- every other route gets the
+    // suffixed form.
+    if (pageKey === 'home') {
+      tags.push(`<title>${SITE_NAME}</title>`)
+      description = page ? localize(page.seoDescription, lang) : ''
+    } else if (page) {
       const title = localize(page.title, lang)
       tags.push(`<title>${esc(title)} | ${SITE_NAME}</title>`)
       description = localize(page.seoDescription, lang)
@@ -133,15 +142,20 @@ export function headFor(route, content, site = SITE) {
 // every article (see mergeArticleLists below), so the counterpart route can
 // be computed here and handed to entry-server.jsx's render() as preload data,
 // under the exact key ArticleDetail's usePageData call reads
-// (`translatedPath:<section>:<slug>:<lang>`). See src/main.jsx for how this
+// (`translatedPath:<slug>:<lang>`). See src/main.jsx for how this
 // same value reaches the client at hydration time (window.__PRELOAD__), which
 // is what keeps this from becoming a hydration mismatch instead of a fix.
+//
+// Task 27, Part A: the key used to be namespaced by section
+// (`translatedPath:<section>:<slug>:<lang>`), because the URL itself carried
+// the section. Articles now live at the root, in one flat slug namespace
+// shared by every category, so the section is no longer known (or needed) to
+// look this up -- keyed on the slug alone, which is already globally unique.
 export function preloadFor(route, content) {
   const lang = routeLang(route)
   const match = findArticleMatch(route, content)
   if (!match) return {}
 
-  const section = sectionFor(match.category)
   const otherLang = lang === 'fr' ? 'en' : 'fr'
   // Same `en || fr` fallback as collectRoutes/headFor above: when the
   // English slug is blank, the EN route collectRoutes actually generated
@@ -155,7 +169,10 @@ export function preloadFor(route, content) {
   const otherSlug = resolveSlug(otherLang)
   if (!ownSlug || !otherSlug) return {}
 
-  return { [`translatedPath:${section}:${ownSlug}:${lang}`]: routeFor(section, otherLang, otherSlug) }
+  // `routeFor`'s first argument only ever matters when there's no slug (it
+  // selects a section's segment); with `otherSlug` given, the article always
+  // resolves to the flat root URL regardless of that argument.
+  return { [`translatedPath:${ownSlug}:${lang}`]: routeFor('article', otherLang, otherSlug) }
 }
 
 // `<` -> < also escapes `</script>`, so embedded preload JSON can't
@@ -173,6 +190,17 @@ export function pageHtml(route, template, head, bodyHtml, preload = {}) {
     .replace('</head>', `${head}\n</head>`)
     .replace('<div id="root"></div>', `<div id="root">${bodyHtml}</div>`)
     .replace('</body>', `<script>window.__PRELOAD__=${safeJson(preload)}</script>\n</body>`)
+}
+
+// D4: the admin bundle is lazily loaded and never prerendered per-route
+// (App.jsx: /admin/* is a sibling of the public layout route), so it needs
+// its own served file, with its own fixed title ("Admin | Philippe Gronon"),
+// so a static host's SPA fallback never hands out a public route's
+// prerendered <head> (title/canonical/OG for some article) to /admin.
+// Controller correction 3: noindex here, on top of robots.txt's Disallow,
+// since a Disallow alone doesn't guarantee a linked-to page stays unindexed.
+export function adminPageHtml(template) {
+  return template.replace('</head>', `<title>Admin | ${SITE_NAME}</title>\n<meta name="robots" content="noindex">\n</head>`)
 }
 
 async function fetchJson(path) {
@@ -344,13 +372,7 @@ async function main() {
     await writeFile(out, page)
   }
 
-  // The admin bundle is lazily loaded and never prerendered (App.jsx: /admin/*
-  // is a sibling of the public layout route). It still needs its own served
-  // file so a static host's SPA fallback doesn't hand out a public route's
-  // prerendered <head> (title/canonical/OG for some article) to /admin.
-  // Controller correction 3: noindex here, on top of robots.txt's Disallow,
-  // since a Disallow alone doesn't guarantee a linked-to page stays unindexed.
-  const adminPage = template.replace('</head>', '<meta name="robots" content="noindex">\n</head>')
+  const adminPage = adminPageHtml(template)
   await mkdir(join(DIST, 'admin'), { recursive: true })
   await writeFile(join(DIST, 'admin', 'index.html'), adminPage)
 

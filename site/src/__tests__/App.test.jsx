@@ -39,20 +39,42 @@ describe('App routing', () => {
     await waitFor(() => expect(screen.getByText('Né en 1964')).toBeInTheDocument())
   })
 
-  it('renders a 404 for an unknown path', async () => {
-    renderAt('/nonsense')
+  // Task 27, Part A: with articles at the root, a single unknown path
+  // segment is indistinguishable from a genuine article slug until the API
+  // says otherwise -- it can no longer be the site-level 404 page. Only a
+  // path with no matching route shape at all (more than one segment, here)
+  // still falls through to the catch-all NotFound route.
+  it('renders a 404 for an unknown multi-segment path', async () => {
+    renderAt('/nonsense/extra')
     await waitFor(() => expect(screen.getByRole('heading', { name: /404/ })).toBeInTheDocument())
+  })
+
+  it('treats a single unknown path segment as a potential article slug, not the site 404 page', async () => {
+    vi.spyOn(api, 'apiGet').mockRejectedValue(Object.assign(new Error('nope'), { status: 404 }))
+    renderAt('/nonsense')
+    await waitFor(() => expect(screen.getByText(/introuvable/i)).toBeInTheDocument())
+    expect(screen.queryByRole('heading', { name: /404/ })).not.toBeInTheDocument()
   })
 
   // Guards the wiring called out in the Task 19 controller corrections:
   // ArticleDetail's onTranslatedPath must reach Header's toggle so it points
   // at the article's own counterpart slug, not the bare translated section
-  // (which counterpartPath() alone would produce: /en/works/porte-fr).
+  // (which counterpartPath() alone would produce). Task 27, Part A: the
+  // article itself now lives at the root (/porte-fr), not under /oeuvres/.
   it('points the language toggle at an article counterpart slug, not the bare section', async () => {
-    renderAt('/oeuvres/porte-fr')
+    renderAt('/porte-fr')
     await waitFor(() =>
-      expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/works/door-en')
+      expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/door-en')
     )
+  })
+
+  // Task 27, Part A: the old WordPress URLs carried a trailing slash
+  // (/<slug>/); the new root-level article URLs must resolve identically
+  // with or without it, or this change loses exactly the traffic it exists
+  // to keep.
+  it('resolves a trailing-slash article URL the same as the slash-free form', async () => {
+    renderAt('/porte-fr/')
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Porte' })).toBeInTheDocument())
   })
 
   // Task 26, part B4: the slideshow owns the viewport on the homepage, so

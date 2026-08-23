@@ -45,6 +45,32 @@ export function resolveBlockImages(blocks = [], byLegacyId) {
   return out
 }
 
+// Client feedback (task 27): ensureCoverInGallery (extract.js) decides
+// whether to fold a cover in using the RAW legacy WordPress attachment id,
+// before content-based image deduplication (below, in the media import
+// loop) has run. Two distinct legacy ids can resolve to the very same Mongo
+// Image (a byte-identical file registered twice in WordPress) -- observed on
+// the real archive: the cover's own legacy id differed from a gallery item
+// that turned out, after resolution, to be the same photo, so
+// ensureCoverInGallery correctly saw no match and added a redundant hidden
+// reference to an image already visible in the same gallery. Dropped here,
+// once every id is a real ObjectId and duplicate identity is unambiguous.
+export function dropRedundantHiddenDuplicates(blocks) {
+  const visibleIds = new Set()
+  for (const b of blocks) {
+    if (b.type !== 'gallery') continue
+    for (const it of b.items || []) {
+      if (!it.hidden && it.image) visibleIds.add(String(it.image))
+    }
+  }
+  if (!visibleIds.size) return blocks
+  return blocks.map((b) => {
+    if (b.type !== 'gallery') return b
+    const items = (b.items || []).filter((it) => !(it.hidden && visibleIds.has(String(it.image))))
+    return items.length === (b.items || []).length ? b : { ...b, items }
+  })
+}
+
 /**
  * The set of legacy media ids actually used by an article cover, an image
  * block or a gallery item, across both articles and pages. Of the 1282
@@ -218,7 +244,7 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
           yearEnd: article.yearEnd,
           subtitle: article.subtitle || { fr: '', en: '' },
           cover: byLegacyId.get(article.coverLegacyId) || null,
-          blocks: resolveBlockImages(article.blocks, byLegacyId),
+          blocks: dropRedundantHiddenDuplicates(resolveBlockImages(article.blocks, byLegacyId)),
           legacyWpId: article.legacyWpId,
         },
         { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }

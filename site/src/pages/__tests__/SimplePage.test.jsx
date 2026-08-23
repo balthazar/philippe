@@ -52,6 +52,30 @@ describe('SimplePage', () => {
     expect(container.querySelector('main')).toHaveClass('page-main-centered')
   })
 
+  // D2: the header already marks Contact as the current section, so the
+  // page-level heading is redundant -- only the email.
+  it('drops the page title on the Contact page', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      key: 'contact', title: 'Contact',
+      blocks: [{ type: 'text', value: '<p><a href="mailto:info@philippegronon.com">info@philippegronon.com</a></p>' }],
+    })
+    render(
+      <MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>
+    )
+    await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+  })
+
+  it('keeps the page title on every other simple page', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      key: 'biography', title: 'Biographie', blocks: [{ type: 'text', value: '<p>Né en 1964</p>' }],
+    })
+    render(
+      <MemoryRouter><LangProvider><SimplePage pageKey="biography" /></LangProvider></MemoryRouter>
+    )
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Biographie' })).toBeInTheDocument())
+  })
+
   it('does not centre a normal, multi-block page', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({
       key: 'biography', title: 'Biographie',

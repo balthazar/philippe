@@ -96,39 +96,101 @@ export function extractSubtitle(category, blocks) {
   const empty = { fr: '', en: '' }
   if (category !== 'works') return { subtitle: empty, blocks, matched: false, reason: 'not a works article' }
 
-  const idx = blocks.findIndex((b) => b.type === 'text')
-  if (idx === -1) return { subtitle: empty, blocks, matched: false, reason: 'no text block' }
+  const textIndexes = blocks.reduce((acc, b, i) => (b.type === 'text' ? [...acc, i] : acc), [])
+  if (!textIndexes.length) return { subtitle: empty, blocks, matched: false, reason: 'no text block' }
 
-  const block = blocks[idx]
-  const frSplit = splitLeadingParagraph(block.value.fr)
-  if (!frSplit) {
+  // Client feedback (task 27): tries every text block in turn, not only the
+  // first one by type. On the real archive the technique line is usually
+  // (but not always) the very first text block; when it isn't -- an earlier
+  // block is real prose -- the old, first-only version gave up entirely
+  // instead of looking further, leaving both the subtitle unextracted and
+  // the technique-line block sitting untouched in the article.
+  let lastReason = 'no text block'
+  for (const idx of textIndexes) {
+    const block = blocks[idx]
+    const frSplit = splitLeadingParagraph(block.value.fr)
+    if (!frSplit) {
+      lastReason = 'text block does not open with a single leading paragraph'
+      continue
+    }
+    if (TERMINAL_PUNCTUATION_RE.test(frSplit.first)) {
+      lastReason = 'first paragraph reads as prose (ends in sentence punctuation), not a technique line'
+      continue
+    }
+
+    const enSplit = splitLeadingParagraph(block.value.en)
+    const subtitle = {
+      fr: frSplit.first,
+      en: enSplit && !TERMINAL_PUNCTUATION_RE.test(enSplit.first) ? enSplit.first : '',
+    }
+
+    const restFr = frSplit.rest
+    const restEn = enSplit ? enSplit.rest : ''
+    const remainder = restFr || restEn ? [{ ...block, value: { fr: restFr, en: restEn } }] : []
+
     return {
-      subtitle: empty, blocks, matched: false,
-      reason: 'first text block does not open with a single leading paragraph',
+      subtitle,
+      blocks: [...blocks.slice(0, idx), ...remainder, ...blocks.slice(idx + 1)],
+      matched: true,
     }
   }
-  if (TERMINAL_PUNCTUATION_RE.test(frSplit.first)) {
-    return {
-      subtitle: empty, blocks, matched: false,
-      reason: 'first paragraph reads as prose (ends in sentence punctuation), not a technique line',
-    }
-  }
 
-  const enSplit = splitLeadingParagraph(block.value.en)
-  const subtitle = {
-    fr: frSplit.first,
-    en: enSplit && !TERMINAL_PUNCTUATION_RE.test(enSplit.first) ? enSplit.first : '',
-  }
+  return { subtitle: empty, blocks, matched: false, reason: lastReason }
+}
 
-  const restFr = frSplit.rest
-  const restEn = enSplit ? enSplit.rest : ''
-  const remainder = restFr || restEn ? [{ ...block, value: { fr: restFr, en: restEn } }] : []
+// Client feedback (task 27): the technique line lifted into `subtitle` above
+// sometimes appears a SECOND time elsewhere in the article, as its own
+// separate text block (measured: 30 of 63 articles). extractSubtitle only
+// ever removes the one occurrence it matched on; this is a second,
+// content-based pass over what's left, dropping any other text block whose
+// entire content is exactly `<p>{subtitle}</p>` -- matched on content, not
+// position, since position is what left these duplicates behind.
+export function removeSubtitleDuplicateBlocks(blocks, subtitle) {
+  if (!subtitle?.fr) return blocks
+  return blocks.filter((b) => {
+    if (b.type !== 'text') return true
+    const split = splitLeadingParagraph(b.value?.fr)
+    return !(split && !split.rest && split.first === subtitle.fr)
+  })
+}
 
-  return {
-    subtitle,
-    blocks: [...blocks.slice(0, idx), ...remainder, ...blocks.slice(idx + 1)],
-    matched: true,
-  }
+function stripToPlainText(html) {
+  return String(html || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim()
+}
+
+// Client feedback (task 27): 26 articles carry a text block whose fr and en
+// are both empty -- renders nothing on the page, shows as a blank field in
+// the editor. Judged after stripping tags and whitespace, so an empty
+// `<p></p>` counts as empty even though it isn't the empty string. Never
+// touches a non-`text` block: an image block with no image yet is the
+// artist's own business, not this migration's.
+export function removeEmptyTextBlocks(blocks = []) {
+  return blocks.filter((b) => {
+    if (b.type !== 'text') return true
+    return stripToPlainText(b.value?.fr).length > 0 || stripToPlainText(b.value?.en).length > 0
+  })
+}
+
+// Client feedback (task 27), replacing the original plan of keeping a
+// separate cover picker forever: 37 of 63 articles have a cover that is not
+// among their gallery images, and one has no gallery at all. Folds each such
+// cover into the article's own gallery as a hidden item (creating the
+// gallery when none exists), so the admin's two per-image toggles ("Cover",
+// "Hidden from grid") can express every case -- no cover is lost, and no
+// visible grid image is added, since the folded-in item is hidden.
+export function ensureCoverInGallery({ coverLegacyId, blocks }) {
+  if (!coverLegacyId) return blocks
+
+  const alreadyPresent = blocks.some(
+    (b) => b.type === 'gallery' && (b.items || []).some((it) => it.image?.legacyWpId === coverLegacyId)
+  )
+  if (alreadyPresent) return blocks
+
+  const hiddenItem = { image: { legacyWpId: coverLegacyId }, caption: { fr: '', en: '' }, span: 1, hidden: true }
+  const firstGalleryIdx = blocks.findIndex((b) => b.type === 'gallery')
+  if (firstGalleryIdx === -1) return [...blocks, { type: 'gallery', columns: 3, items: [hiddenItem] }]
+
+  return blocks.map((b, i) => (i === firstGalleryIdx ? { ...b, items: [...(b.items || []), hiddenItem] } : b))
 }
 
 /**
@@ -228,6 +290,9 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     let subtitleMatched = 0
     const subtitleNonMatches = []
     let purgedImageBlockCount = 0
+    let emptyTextBlocksRemoved = 0
+    let subtitleDuplicateBlocksRemoved = 0
+    let coversFoldedIntoGallery = 0
 
     const articles = pairByTrid(postRows).map((pair) => {
       const base = parseYearLabel(pair.fr.post_title)
@@ -241,11 +306,26 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       const purged = purgeImageBlocks(rawBlocks, purgedLegacyIds)
       purgedImageBlockCount += rawBlocks.length - purged.length
 
-      const { subtitle, blocks, matched, reason } = extractSubtitle(category, purged)
+      // Client feedback (task 27): empty text blocks are stripped BEFORE
+      // subtitle extraction, so a stray empty block can never masquerade as
+      // (or sit in front of) the real technique-line block.
+      const withoutEmpty = removeEmptyTextBlocks(purged)
+      emptyTextBlocksRemoved += purged.length - withoutEmpty.length
+
+      const { subtitle, blocks: afterSubtitle, matched, reason } = extractSubtitle(category, withoutEmpty)
       if (category === 'works') {
         if (matched) subtitleMatched += 1
         else subtitleNonMatches.push({ slug: pair.fr.post_name, reason })
       }
+
+      // Client feedback (task 27): a second, content-based pass drops any
+      // other text block that duplicates the extracted subtitle verbatim.
+      const deduped = removeSubtitleDuplicateBlocks(afterSubtitle, subtitle)
+      subtitleDuplicateBlocksRemoved += afterSubtitle.length - deduped.length
+
+      const coverLegacyId = Number(thumbs.get(pair.fr.ID) || 0) || null
+      const withCover = ensureCoverInGallery({ coverLegacyId, blocks: deduped })
+      if (withCover !== deduped) coversFoldedIntoGallery += 1
 
       return {
         legacyWpId: pair.fr.ID,
@@ -258,14 +338,18 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
         yearLabel: { fr: base.yearLabel, en: en ? en.yearLabel : '' },
         yearStart: base.yearStart,
         yearEnd: base.yearEnd,
-        coverLegacyId: Number(thumbs.get(pair.fr.ID) || 0) || null,
-        blocks,
+        coverLegacyId,
+        blocks: withCover,
       }
     })
 
     console.log(
       `subtitle (works articles): ${subtitleMatched} matched, ${subtitleNonMatches.length} did not` +
       (subtitleNonMatches.length ? ` (${subtitleNonMatches.map((m) => `${m.slug}: ${m.reason}`).join('; ')})` : '')
+    )
+    console.log(
+      `blocks removed: ${emptyTextBlocksRemoved} empty text block(s), ${subtitleDuplicateBlocksRemoved} subtitle-duplicate block(s); ` +
+      `${coversFoldedIntoGallery} cover(s) folded into their gallery as a hidden item`
     )
 
     const enOnlySlugs = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
@@ -294,6 +378,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       )
       const purged = purgeImageBlocks(rawBlocks, purgedLegacyIds)
       purgedImageBlockCount += rawBlocks.length - purged.length
+      const withoutEmpty = removeEmptyTextBlocks(purged)
+      emptyTextBlocksRemoved += purged.length - withoutEmpty.length
       return {
         legacyWpId: pair.fr.ID,
         sourceSlug: pair.fr.post_name,
@@ -301,7 +387,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
         // Task 26, part B3: reduces /contact to just its mailto block. A
         // no-op for every other page (reduceContactPageBlocks returns its
         // input unchanged unless sourceSlug === 'contact').
-        blocks: reduceContactPageBlocks(pair.fr.post_name, purged),
+        blocks: reduceContactPageBlocks(pair.fr.post_name, withoutEmpty),
       }
     })
 
@@ -320,6 +406,9 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       subtitle: { matched: subtitleMatched, nonMatches: subtitleNonMatches },
       purgedImageBlockCount,
       purgedLegacyIds: [...purgedLegacyIds],
+      emptyTextBlocksRemoved,
+      subtitleDuplicateBlocksRemoved,
+      coversFoldedIntoGallery,
     }
   } finally {
     await close()

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { apiGet, apiSend } from '@/api.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { BlockEditor } from './BlockEditor.jsx'
+import { PagePreview } from './PagePreview.jsx'
 
 // Matches api/src/lib/constants.js PAGE_KEYS. Exported so PagesIndex.jsx
 // (task 25, section 6) can list all eight without duplicating this table.
@@ -88,7 +89,10 @@ export function PageEditor() {
       <form className="admin-editor" onSubmit={save}>
         <div className="admin-toolbar">
           <h1>{PAGE_LABELS[key] || key}</h1>
-          <Link to="/admin/pages">Retour aux pages</Link>
+          {/*
+            Task 27, D5: dropped, same reasoning as the article back-links
+            removed earlier -- the nav (Pages, above) already covers it.
+          */}
         </div>
 
         <div className="lang-toggle" role="group" aria-label="Langue du contenu">
@@ -110,6 +114,16 @@ export function PageEditor() {
           {saved && <span className="save-confirmation">Enregistré</span>}
         </div>
       </form>
+
+      {/* Task 27, Part C1: pages had no live preview at all. */}
+      <aside className="admin-preview-pane" aria-label="Aperçu">
+        <div className="admin-preview-header">
+          <h2>Aperçu</h2>
+        </div>
+        <div className="admin-preview-scroll">
+          <PagePreview page={page} lang={lang} />
+        </div>
+      </aside>
     </div>
   )
 }

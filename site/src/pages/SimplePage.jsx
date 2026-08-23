@@ -25,9 +25,13 @@ export function SimplePage({ pageKey }) {
   const isSingleBlock = page.blocks.length === 1
   const className = `page-main${isSingleBlock ? ' page-main-centered' : ''}`
 
+  // D2: the header already marks Contact as the current section (its nav
+  // link is .active), so a page-level "Contact" heading is redundant --
+  // just the email, centred (page-main-centered above already handles the
+  // centring, keyed to Contact's single mailto block).
   return (
     <Container as="main" className={className}>
-      <h1>{page.title}</h1>
+      {pageKey !== 'contact' && <h1>{page.title}</h1>}
       <BlockRenderer blocks={page.blocks} />
     </Container>
   )

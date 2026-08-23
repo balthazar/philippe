@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { collectRoutes, headFor, pageHtml, mergeArticleLists, preloadFor, checkFloor, unreachableApiOutcome } from '../index.js'
+import {
+  collectRoutes, headFor, pageHtml, adminPageHtml, mergeArticleLists, preloadFor, checkFloor, unreachableApiOutcome,
+} from '../index.js'
 
 // Controller correction 4: a reachable API answering 200 with an (almost)
 // empty list is not caught by main()'s try/catch around fetchArticles /
@@ -53,18 +55,31 @@ describe('unreachableApiOutcome', () => {
   })
 })
 
+// Task 27, Part A (SEO-critical): individual articles move to the root,
+// matching the URLs the site being replaced used
+// (https://www.philippegronon.com/<slug>/). Only section listings
+// (works, exhibitions, ...) keep their own segment.
 describe('collectRoutes', () => {
-  it('emits both languages for every static page and article', () => {
+  it('emits both languages for every static page, and articles at the root', () => {
     const routes = collectRoutes({
       articles: [{ category: 'works', slug: { fr: 'porte', en: 'door' } }],
       pageKeys: ['biography'],
     })
     expect(routes).toContain('/')
     expect(routes).toContain('/en')
-    expect(routes).toContain('/oeuvres/porte')
-    expect(routes).toContain('/en/works/door')
+    expect(routes).toContain('/porte')
+    expect(routes).toContain('/en/door')
     expect(routes).toContain('/biographie')
     expect(routes).toContain('/en/biography')
+  })
+
+  it('puts an exhibition at the root too, in the same flat namespace as a work', () => {
+    const routes = collectRoutes({
+      articles: [{ category: 'exhibitions', slug: { fr: 'retrospective', en: 'retrospective-en' } }],
+      pageKeys: [],
+    })
+    expect(routes).toContain('/retrospective')
+    expect(routes).toContain('/en/retrospective-en')
   })
 
   // Client feedback (task 25): reversed from the prior behaviour, which
@@ -75,8 +90,8 @@ describe('collectRoutes', () => {
   // slug, not silently disappear from the site and its sitemap.
   it('builds the English article route from the French slug when the English slug is blank', () => {
     const routes = collectRoutes({ articles: [{ category: 'works', slug: { fr: 'nouveau-2024', en: '' } }], pageKeys: [] })
-    expect(routes).toContain('/oeuvres/nouveau-2024')
-    expect(routes).toContain('/en/works/nouveau-2024')
+    expect(routes).toContain('/nouveau-2024')
+    expect(routes).toContain('/en/nouveau-2024')
   })
 
   // Fix round 1: a real, live-data bug. "Identical fr/en slug" was being
@@ -92,8 +107,8 @@ describe('collectRoutes', () => {
       articles: [{ category: 'exhibitions', slug: { fr: 'martyrs-2015-2021', en: 'martyrs-2015-2021' } }],
       pageKeys: [],
     })
-    expect(routes).toContain('/expositions/martyrs-2015-2021')
-    expect(routes).toContain('/en/exhibitions/martyrs-2015-2021')
+    expect(routes).toContain('/martyrs-2015-2021')
+    expect(routes).toContain('/en/martyrs-2015-2021')
   })
 
   it('never emits an admin or not-found route', () => {
@@ -140,22 +155,24 @@ describe('headFor', () => {
   const site = 'https://example.org'
 
   it('titles an article page with its title and year', () => {
-    expect(headFor('/oeuvres/porte', content, site)).toContain('<title>Porte, 2023 | Philippe Gronon</title>')
+    expect(headFor('/porte', content, site)).toContain('<title>Porte, 2023 | Philippe Gronon</title>')
   })
 
   it('falls back to the French title on the English route', () => {
-    expect(headFor('/en/works/door', content, site)).toContain('<title>Porte, 2023 | Philippe Gronon</title>')
+    expect(headFor('/en/door', content, site)).toContain('<title>Porte, 2023 | Philippe Gronon</title>')
   })
 
-  it('emits a canonical URL and both hreflang alternates', () => {
-    const head = headFor('/oeuvres/porte', content, site)
-    expect(head).toContain('<link rel="canonical" href="https://example.org/oeuvres/porte">')
-    expect(head).toContain('hreflang="fr" href="https://example.org/oeuvres/porte"')
-    expect(head).toContain('hreflang="en" href="https://example.org/en/works/door"')
+  // Task 27, Part A: canonical and hreflang move to the root along with the
+  // route itself -- no section segment in either language.
+  it('emits a canonical URL and both hreflang alternates, at the root', () => {
+    const head = headFor('/porte', content, site)
+    expect(head).toContain('<link rel="canonical" href="https://example.org/porte">')
+    expect(head).toContain('hreflang="fr" href="https://example.org/porte"')
+    expect(head).toContain('hreflang="en" href="https://example.org/en/door"')
   })
 
   it('emits an Open Graph image pointing at the cover', () => {
-    expect(headFor('/oeuvres/porte', content, site)).toContain('content="https://example.org/media/2023/abc-medium.webp"')
+    expect(headFor('/porte', content, site)).toContain('content="https://example.org/media/2023/abc-medium.webp"')
   })
 
   // Client feedback (task 25): the hreflang alternate must agree with the
@@ -170,12 +187,31 @@ describe('headFor', () => {
         yearLabel: { fr: '2024', en: '' },
       }],
     }
-    const head = headFor('/oeuvres/nouveau-2024', withBlankEnSlug, site)
-    expect(head).toContain('hreflang="en" href="https://example.org/en/works/nouveau-2024"')
+    const head = headFor('/nouveau-2024', withBlankEnSlug, site)
+    expect(head).toContain('hreflang="en" href="https://example.org/en/nouveau-2024"')
   })
 
   it('titles a non-article route without crashing', () => {
     expect(headFor('/biographie', content, site)).toContain('<title>Philippe Gronon</title>')
+  })
+
+  // D4: the home route's title is literally "Philippe Gronon", never
+  // "<home page title> | Philippe Gronon" -- every other route gets the
+  // suffixed form.
+  it('titles the home route as bare "Philippe Gronon", in either language', () => {
+    const withHome = { articles: [], pages: { home: { title: { fr: 'Accueil', en: 'Home' }, seoDescription: { fr: '', en: '' } } } }
+    expect(headFor('/', withHome, site)).toContain('<title>Philippe Gronon</title>')
+    expect(headFor('/', withHome, site)).not.toContain('Accueil')
+    expect(headFor('/en', withHome, site)).toContain('<title>Philippe Gronon</title>')
+    expect(headFor('/en', withHome, site)).not.toContain('Home')
+  })
+
+  it('still emits the home page\'s own seoDescription, even though the title is fixed', () => {
+    const withHomeDescription = {
+      articles: [],
+      pages: { home: { title: { fr: 'Accueil', en: '' }, seoDescription: { fr: 'Photographe.', en: '' } } },
+    }
+    expect(headFor('/', withHomeDescription, site)).toContain('<meta name="description" content="Photographe.">')
   })
 
   // Guards against the literal reference implementation's bug: it always read
@@ -193,8 +229,8 @@ describe('headFor', () => {
         cover: { variants: { medium: { path: '2021/r-medium.webp' } } },
       }],
     }
-    const frHead = headFor('/expositions/retrospective', bilingual, site)
-    const enHead = headFor('/en/exhibitions/retrospective-en', bilingual, site)
+    const frHead = headFor('/retrospective', bilingual, site)
+    const enHead = headFor('/en/retrospective-en', bilingual, site)
     expect(frHead).toContain('<title>Rétrospective, 2021 | Philippe Gronon</title>')
     expect(enHead).toContain('<title>Retrospective, 2021 | Philippe Gronon</title>')
   })
@@ -210,14 +246,14 @@ describe('headFor', () => {
         cover: { variants: { medium: { path: '2023/abc-medium.webp' } } },
       }],
     }
-    expect(headFor('/oeuvres/porte', withDescription, site))
+    expect(headFor('/porte', withDescription, site))
       .toContain('<meta name="description" content="Une porte photographiée en 2023.">')
-    expect(headFor('/en/works/door', withDescription, site))
+    expect(headFor('/en/door', withDescription, site))
       .toContain('<meta name="description" content="A door photographed in 2023.">')
   })
 
   it('emits no description tag when neither the article nor the page has one', () => {
-    expect(headFor('/oeuvres/porte', content, site)).not.toContain('name="description"')
+    expect(headFor('/porte', content, site)).not.toContain('name="description"')
     expect(headFor('/biographie', content, site)).not.toContain('name="description"')
   })
 
@@ -240,8 +276,8 @@ describe('headFor', () => {
       }],
       pages: { biography: { title: { fr: 'Biographie', en: 'Biography' }, seoDescription: { fr: '', en: '' } } },
     }
-    expect(headFor('/oeuvres/porte', emptyDescription, site)).not.toContain('object Object')
-    expect(headFor('/oeuvres/porte', emptyDescription, site)).not.toContain('name="description"')
+    expect(headFor('/porte', emptyDescription, site)).not.toContain('object Object')
+    expect(headFor('/porte', emptyDescription, site)).not.toContain('name="description"')
     expect(headFor('/biographie', emptyDescription, site)).not.toContain('object Object')
     expect(headFor('/biographie', emptyDescription, site)).not.toContain('name="description"')
   })
@@ -269,6 +305,12 @@ describe('headFor', () => {
 // build time, from the same merged article data headFor uses, so it can be
 // rendered correctly server-side instead of only being correct after a
 // client effect runs post-hydration.
+//
+// Task 27, Part A: the key used to be namespaced by section
+// (`translatedPath:<section>:<slug>:<lang>`), since the URL itself carried
+// the section. Articles now live at the root in one flat slug namespace
+// shared by every category, so this keys on the slug alone -- the section is
+// neither known from the route nor needed to look this up any more.
 describe('preloadFor', () => {
   const content = {
     articles: [{
@@ -279,16 +321,16 @@ describe('preloadFor', () => {
   }
 
   it('preloads the French route with a key-value pair pointing at the English counterpart', () => {
-    const preload = preloadFor('/oeuvres/tableaux-electriques-2007-2010', content)
+    const preload = preloadFor('/tableaux-electriques-2007-2010', content)
     expect(preload).toEqual({
-      'translatedPath:works:tableaux-electriques-2007-2010:fr': '/en/works/switchboards-2007-2010',
+      'translatedPath:tableaux-electriques-2007-2010:fr': '/en/switchboards-2007-2010',
     })
   })
 
   it('preloads the English route pointing back at the French counterpart', () => {
-    const preload = preloadFor('/en/works/switchboards-2007-2010', content)
+    const preload = preloadFor('/en/switchboards-2007-2010', content)
     expect(preload).toEqual({
-      'translatedPath:works:switchboards-2007-2010:en': '/oeuvres/tableaux-electriques-2007-2010',
+      'translatedPath:switchboards-2007-2010:en': '/tableaux-electriques-2007-2010',
     })
   })
 
@@ -296,13 +338,31 @@ describe('preloadFor', () => {
   // it's just the same string under the other language prefix.
   it('preloads a same-slug article to its own slug under the other language prefix', () => {
     const sameSlug = { articles: [{ category: 'exhibitions', slug: { fr: 'martyrs-2015-2021', en: 'martyrs-2015-2021' } }] }
-    expect(preloadFor('/expositions/martyrs-2015-2021', sameSlug)).toEqual({
-      'translatedPath:exhibitions:martyrs-2015-2021:fr': '/en/exhibitions/martyrs-2015-2021',
+    expect(preloadFor('/martyrs-2015-2021', sameSlug)).toEqual({
+      'translatedPath:martyrs-2015-2021:fr': '/en/martyrs-2015-2021',
     })
   })
 
   it('returns an empty object for a non-article route', () => {
     expect(preloadFor('/biographie', content)).toEqual({})
+  })
+})
+
+// D4: the admin bundle isn't prerendered per-route, so it needs its own
+// fixed title, set directly in the HTML file that's served for /admin.
+describe('adminPageHtml', () => {
+  const TEMPLATE = '<!doctype html><html lang="fr"><head><meta charset="UTF-8"></head><body><div id="root"></div></body></html>'
+
+  it('sets the admin title', () => {
+    expect(adminPageHtml(TEMPLATE)).toContain('<title>Admin | Philippe Gronon</title>')
+  })
+
+  it('still carries the noindex meta tag', () => {
+    expect(adminPageHtml(TEMPLATE)).toContain('<meta name="robots" content="noindex">')
+  })
+
+  it('does not touch the rest of the template', () => {
+    expect(adminPageHtml(TEMPLATE)).toContain('<div id="root"></div>')
   })
 })
 

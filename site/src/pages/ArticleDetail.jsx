@@ -19,24 +19,29 @@ import { splitArticleLayout } from '@/lib/articleLayout.js'
  * header's language-toggle href, not this page's own content.
  *
  * Fix round 1 (Task 22): this goes through usePageData, keyed exactly as
- * prerender/index.js's preloadFor() keys it (`translatedPath:<section>:
- * <slug>:<lang>`), so on a prerendered route the correct counterpart href is
- * already in the server-rendered HTML -- a crawler or a fast click never
- * sees the wrong, section-only fallback link. src/main.jsx reads the same
- * preload data back out of window.__PRELOAD__ at hydration time, so the
- * client's first render matches the server's; without that, this would be a
- * genuine hydration mismatch (an href that differs from what the server
- * sent), not just a stale link.
+ * prerender/index.js's preloadFor() keys it (`translatedPath:<slug>:<lang>`),
+ * so on a prerendered route the correct counterpart href is already in the
+ * server-rendered HTML -- a crawler or a fast click never sees a stale
+ * fallback link. src/main.jsx reads the same preload data back out of
+ * window.__PRELOAD__ at hydration time, so the client's first render matches
+ * the server's; without that, this would be a genuine hydration mismatch (an
+ * href that differs from what the server sent), not just a stale link.
+ *
+ * Task 27, Part A: articles live at the root now (works and exhibitions
+ * share one flat slug namespace), so the cache keys below are keyed on the
+ * slug alone -- already globally unique -- rather than a `routeKey` prop
+ * this component no longer needs (a route-provided section no longer means
+ * anything to `routeFor` once a slug is given).
  */
-export function ArticleDetail({ routeKey, onTranslatedPath }) {
+export function ArticleDetail({ onTranslatedPath }) {
   const { slug } = useParams()
   const { lang, otherLang, href } = useLang()
-  const { data: article, error } = usePageData(`article:${routeKey}:${slug}:${lang}`, () =>
+  const { data: article, error } = usePageData(`article:${slug}:${lang}`, () =>
     apiGet(`/articles/${slug}`, { lang })
   )
 
-  const { data: translatedPath } = usePageData(`translatedPath:${routeKey}:${slug}:${lang}`, () =>
-    apiGet(`/articles/${slug}`, { lang: otherLang }).then((data) => routeFor(routeKey, otherLang, data.slug))
+  const { data: translatedPath } = usePageData(`translatedPath:${slug}:${lang}`, () =>
+    apiGet(`/articles/${slug}`, { lang: otherLang }).then((data) => routeFor('article', otherLang, data.slug))
   )
 
   useEffect(() => {
@@ -88,12 +93,12 @@ export function ArticleDetail({ routeKey, onTranslatedPath }) {
 
         <nav className="article-pager" aria-label={lang === 'fr' ? 'Navigation entre œuvres' : 'Article navigation'}>
           {article.prev && (
-            <Link to={href(routeKey, article.prev.slug)} rel="prev">
+            <Link to={href('article', article.prev.slug)} rel="prev">
               {lang === 'fr' ? 'Précédent' : 'Previous'}
             </Link>
           )}
           {article.next && (
-            <Link to={href(routeKey, article.next.slug)} rel="next">
+            <Link to={href('article', article.next.slug)} rel="next">
               {lang === 'fr' ? 'Suivant' : 'Next'}
             </Link>
           )}

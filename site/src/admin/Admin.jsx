@@ -28,15 +28,20 @@ export default function Admin() {
         {/*
           Task 25, client feedback item 5 (replacing the earlier text "Voir
           le site" link, item 4): the artist's own PG mark, top-left, linking
-          out to the live public site in a new tab. It's a link with no other
-          text, so its accessible name comes entirely from the image's alt.
+          out to the live public site. It's a link with no other text, so
+          its accessible name comes entirely from the image's alt.
+          Task 27, client feedback item 7: same-tab now, not a new tab --
+          this reverses the earlier new-tab instruction; the editor
+          preview's own "Voir la page publique" link (ArticleEditor.jsx)
+          stays a new tab, since that one is a genuine aside while editing.
         */}
-        <a className="admin-nav-mark" href="/" target="_blank" rel="noopener">
+        <a className="admin-nav-mark" href="/">
           <img src="/pg-mark.png" alt="Philippe Gronon" />
         </a>
+        {/* Task 27, client feedback item 3: Articles, Pages, Images. */}
         <Link to="/admin">Articles</Link>
-        <Link to="/admin/media">Images</Link>
         <Link to="/admin/pages">Pages</Link>
+        <Link to="/admin/media">Images</Link>
         <button type="button" onClick={logout}>Déconnexion</button>
       </nav>
       {/*

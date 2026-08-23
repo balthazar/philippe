@@ -73,8 +73,10 @@ describe('Admin login', () => {
   // from the admin nav (top-left), opening in a new tab without granting it
   // access to `window.opener`. Superseded from a text link to the artist's
   // own PG mark image -- its accessible name comes from the image's alt,
-  // since the link has no other text.
-  it('links out to the live public site via the PG mark in the nav, in a new tab', async () => {
+  // since the link has no other text. Task 27, client feedback item 7:
+  // same-tab now, not a new tab (reverses the earlier instruction this test
+  // originally guarded).
+  it('links out to the live public site via the PG mark in the nav, in the same tab', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
       if (path === '/auth/me') return { email: 'admin@example.com' }
       return { items: [] }
@@ -83,13 +85,15 @@ describe('Admin login', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'Philippe Gronon' })).toBeInTheDocument())
     const link = screen.getByRole('link', { name: 'Philippe Gronon' })
     expect(link).toHaveAttribute('href', '/')
-    expect(link).toHaveAttribute('target', '_blank')
-    expect(link).toHaveAttribute('rel', 'noopener')
+    expect(link).not.toHaveAttribute('target')
+    expect(link).not.toHaveAttribute('rel')
   })
 
-  // Task 25, section 6: every one of the eight pages must be reachable, not
-  // just biography (previously the nav's only pages link).
-  it('reaches the pages index from the nav, listing all eight pages', async () => {
+  // Task 25, section 6: every page with something editable must be
+  // reachable, not just biography (previously the nav's only pages link).
+  // Task 27, D6: "Accueil" and "Expositions (intro)" dropped from the list
+  // (neither has anything editable) -- six now, not eight.
+  it('reaches the pages index from the nav, listing the six editable pages', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
       if (path === '/auth/me') return { email: 'admin@example.com' }
       return { items: [] }
@@ -99,9 +103,7 @@ describe('Admin login', () => {
     await userEvent.click(screen.getByRole('link', { name: 'Pages' }))
 
     for (const [key, label] of [
-      ['home', 'Accueil'],
       ['works', 'Œuvres (intro)'],
-      ['exhibitions', 'Expositions (intro)'],
       ['biography', 'Biographie'],
       ['contact', 'Contact'],
       ['bibliography', 'Bibliographie'],
@@ -110,5 +112,7 @@ describe('Admin login', () => {
     ]) {
       expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', `/admin/pages/${key}`)
     }
+    expect(screen.queryByRole('link', { name: 'Accueil' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Expositions (intro)' })).not.toBeInTheDocument()
   })
 })

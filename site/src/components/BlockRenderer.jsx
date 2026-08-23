@@ -53,7 +53,13 @@ export function BlockRenderer({ blocks = [] }) {
               </figure>
             )
           case 'gallery': {
-            const items = block.items || []
+            // Task 27, client feedback item 1: a gallery item can be
+            // `hidden` -- kept in the data (so it can also serve as the
+            // article's cover) without showing in the public grid. Filtered
+            // out here, before both the grid AND the lightbox's own image
+            // list, so a hidden image can never become reachable by
+            // arrowing through the visible ones either.
+            const items = (block.items || []).filter((item) => !item.hidden)
             return (
               <ul key={i} className="block-gallery" style={{ '--columns': block.columns || 3 }}>
                 {items.map((item, j) => (

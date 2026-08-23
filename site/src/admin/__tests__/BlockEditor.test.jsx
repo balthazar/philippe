@@ -123,3 +123,63 @@ describe('BlockEditor', () => {
     expect(targets[1]).not.toHaveClass('drop-indicator-after')
   })
 })
+
+// Client feedback (task 27), replacing the original plan of keeping a
+// separate cover picker: each gallery image gets two toggles, "Cover" and
+// "Hidden from grid", so an image that only exists to serve as the cover can
+// live in the gallery without appearing in the public grid. Only rendered
+// when `onSetCover` is passed (ArticleEditor) -- PageEditor's pages have no
+// `cover` field at all, so its BlockEditor usage omits it.
+describe('BlockEditor gallery cover and hidden toggles', () => {
+  const galleryBlocks = [
+    {
+      type: 'gallery',
+      columns: 3,
+      items: [
+        { image: { _id: 'img1' }, caption: { fr: '', en: '' }, span: 1 },
+        { image: { _id: 'img2' }, caption: { fr: '', en: '' }, span: 1, hidden: true },
+      ],
+    },
+  ]
+
+  it('marks the item matching coverId as the checked cover radio', () => {
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={() => {}} coverId="img2" />)
+    const radios = screen.getAllByRole('radio', { name: /couverture/i })
+    expect(radios[0]).not.toBeChecked()
+    expect(radios[1]).toBeChecked()
+  })
+
+  it('calls onSetCover with the item image when its cover radio is chosen', async () => {
+    const onSetCover = vi.fn()
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={onSetCover} coverId={null} />)
+    const radios = screen.getAllByRole('radio', { name: /couverture/i })
+    await userEvent.click(radios[0])
+    expect(onSetCover).toHaveBeenCalledWith({ _id: 'img1' })
+  })
+
+  it("reflects each item's hidden state in its own checkbox", () => {
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={() => {}} coverId={null} />)
+    const checkboxes = screen.getAllByRole('checkbox', { name: /masquer/i })
+    expect(checkboxes[0]).not.toBeChecked()
+    expect(checkboxes[1]).toBeChecked()
+  })
+
+  it("toggles an item's hidden flag via onChange, leaving the rest of the item untouched", async () => {
+    const onChange = vi.fn()
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={onChange} onSetCover={() => {}} coverId={null} />)
+    const checkboxes = screen.getAllByRole('checkbox', { name: /masquer/i })
+    await userEvent.click(checkboxes[0])
+    expect(onChange).toHaveBeenLastCalledWith([
+      {
+        ...galleryBlocks[0],
+        items: [{ ...galleryBlocks[0].items[0], hidden: true }, galleryBlocks[0].items[1]],
+      },
+    ])
+  })
+
+  it('does not render cover/hidden toggles when onSetCover is not provided (e.g. PageEditor)', () => {
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} />)
+    expect(screen.queryByRole('radio', { name: /couverture/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /masquer/i })).not.toBeInTheDocument()
+  })
+})

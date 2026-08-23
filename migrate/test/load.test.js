@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import sharp from 'sharp'
-import { loadAll, resolveBlockImages, collectReferencedIds } from '../load.js'
+import { loadAll, resolveBlockImages, collectReferencedIds, dropRedundantHiddenDuplicates } from '../load.js'
 import { connect, disconnect } from '../../api/src/db.js'
 import { Article } from '../../api/src/models/Article.js'
 import { Page } from '../../api/src/models/Page.js'
@@ -38,6 +38,49 @@ describe('resolveBlockImages', () => {
   it('drops a gallery block entirely when every item in it is unresolved', () => {
     const blocks = [{ type: 'gallery', items: [{ image: { legacyWpId: 999 } }] }]
     expect(resolveBlockImages(blocks, byLegacyId)).toHaveLength(0)
+  })
+})
+
+// Client feedback (task 27): ensureCoverInGallery (extract.js) decides
+// whether to fold a cover in using the RAW legacy WordPress attachment id,
+// before content-based image deduplication (this same file's import loop)
+// has run. Two distinct legacy ids can resolve to the very same Mongo Image
+// (a byte-identical file registered twice in WordPress) -- observed on the
+// real archive (Porte Abri Anti-Nucléaire): the cover's own legacy id
+// differed from the gallery item that happened to be the same underlying
+// photo, so ensureCoverInGallery correctly saw no match and added a second,
+// hidden reference to what became, after resolution, an image already
+// visible in the same gallery. This runs once every id is a real ObjectId,
+// where duplicate identity is unambiguous.
+describe('dropRedundantHiddenDuplicates', () => {
+  it('drops a hidden gallery item whose resolved image duplicates an already-visible one', () => {
+    const blocks = [
+      { type: 'gallery', items: [{ image: 'img1', hidden: false }, { image: 'img1', hidden: true }] },
+    ]
+    expect(dropRedundantHiddenDuplicates(blocks)).toEqual([
+      { type: 'gallery', items: [{ image: 'img1', hidden: false }] },
+    ])
+  })
+
+  it('keeps a hidden item whose image is not visible anywhere else', () => {
+    const blocks = [{ type: 'gallery', items: [{ image: 'img1', hidden: false }, { image: 'img2', hidden: true }] }]
+    expect(dropRedundantHiddenDuplicates(blocks)).toEqual(blocks)
+  })
+
+  it('matches across separate gallery blocks in the same article', () => {
+    const blocks = [
+      { type: 'gallery', items: [{ image: 'img1', hidden: false }] },
+      { type: 'gallery', items: [{ image: 'img1', hidden: true }] },
+    ]
+    expect(dropRedundantHiddenDuplicates(blocks)).toEqual([
+      { type: 'gallery', items: [{ image: 'img1', hidden: false }] },
+      { type: 'gallery', items: [] },
+    ])
+  })
+
+  it('leaves non-gallery blocks untouched', () => {
+    const blocks = [{ type: 'text', value: { fr: 'x', en: '' } }]
+    expect(dropRedundantHiddenDuplicates(blocks)).toEqual(blocks)
   })
 })
 

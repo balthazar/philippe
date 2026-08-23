@@ -20,17 +20,23 @@ const NAV = [
  * return the correct counterpart synchronously, on the very first render,
  * server or client -- see PublicLayout/Header below for how it takes
  * priority over the `translatedPath` prop for exactly that reason.
+ *
+ * Task 27, Part A: articles live at the root now (/:slug, /en/:slug), so a
+ * single-segment path is either a known section (SEGMENTS) or an article
+ * slug -- there is no longer a nested "/section/slug" shape to parse.
  */
 function counterpartPath(pathname, lang, otherLang, preloaded) {
   const stripped = lang === 'en' ? pathname.replace(/^\/en/, '') || '/' : pathname
-  const [, segment, slug] = stripped.split('/')
-  const key = Object.keys(SEGMENTS).find((k) => SEGMENTS[k][lang] === segment)
-  if (!key) return routeFor('home', otherLang)
-  if (slug) {
-    const preloadedPath = preloaded?.[`translatedPath:${key}:${slug}:${lang}`]
-    if (preloadedPath !== undefined) return preloadedPath
-  }
-  return routeFor(key, otherLang, slug)
+  const [, first] = stripped.split('/')
+  const key = Object.keys(SEGMENTS).find((k) => SEGMENTS[k][lang] === first)
+  if (key) return routeFor(key, otherLang)
+  if (!first) return routeFor('home', otherLang)
+  // Not a known section: an article slug living at the root. Prefer the
+  // preloaded counterpart (correct even when the fr/en slugs differ);
+  // otherwise fall back to the same slug string under the other language.
+  const preloadedPath = preloaded?.[`translatedPath:${first}:${lang}`]
+  if (preloadedPath !== undefined) return preloadedPath
+  return routeFor('article', otherLang, first)
 }
 
 const LANG_CODES = ['fr', 'en']
@@ -46,24 +52,33 @@ export function Header({ translatedPath }) {
 
   return (
     <header className="site-header">
-      <Link to={href('home')} className="wordmark">Philippe Gronon</Link>
-      <nav aria-label={lang === 'fr' ? 'Navigation principale' : 'Main navigation'}>
-        {NAV.map((item) => (
-          <NavLink key={item.key} to={href(item.key)}>{item[lang]}</NavLink>
-        ))}
-      </nav>
-      <div className="lang-switch" aria-label={lang === 'fr' ? 'Changer de langue' : 'Change language'}>
-        {LANG_CODES.map((code) =>
-          code === lang ? (
-            <span key={code} className="lang-code active" aria-current="true">
-              {code.toUpperCase()}
-            </span>
-          ) : (
-            <Link key={code} to={toggleHref} className="lang-code" hrefLang={code}>
-              {code.toUpperCase()}
-            </Link>
-          )
-        )}
+      {/*
+        D1: .site-header itself stays full-bleed (its background must span
+        the viewport at any width), but its content is capped and centred
+        the same way .container is, so both align at any width above
+        --container's 1440px instead of the header sitting 60px from the
+        browser edge while the page content sits much further in.
+      */}
+      <div className="site-header-inner">
+        <Link to={href('home')} className="wordmark">Philippe Gronon</Link>
+        <nav aria-label={lang === 'fr' ? 'Navigation principale' : 'Main navigation'}>
+          {NAV.map((item) => (
+            <NavLink key={item.key} to={href(item.key)}>{item[lang]}</NavLink>
+          ))}
+        </nav>
+        <div className="lang-switch" aria-label={lang === 'fr' ? 'Changer de langue' : 'Change language'}>
+          {LANG_CODES.map((code) =>
+            code === lang ? (
+              <span key={code} className="lang-code active" aria-current="true">
+                {code.toUpperCase()}
+              </span>
+            ) : (
+              <Link key={code} to={toggleHref} className="lang-code" hrefLang={code}>
+                {code.toUpperCase()}
+              </Link>
+            )
+          )}
+        </div>
       </div>
     </header>
   )

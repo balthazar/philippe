@@ -37,9 +37,10 @@ describe('Works page', () => {
     expect(screen.getByRole('heading', { name: 'Commandes publiques' })).toBeInTheDocument()
   })
 
+  // Task 27, Part A: articles live at the root now, no /oeuvres/ segment.
   it('links each card to its article', async () => {
     render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
-    await waitFor(() => expect(screen.getByRole('link', { name: /porte/i })).toHaveAttribute('href', '/oeuvres/porte'))
+    await waitFor(() => expect(screen.getByRole('link', { name: /porte/i })).toHaveAttribute('href', '/porte'))
   })
 
   // Task 26, correction to B4: Works previously had no loading guard at

@@ -27,20 +27,21 @@ function localizedRoutes(lang, onTranslatedPath) {
     <>
       <Route index element={<Home />} />
       <Route path={s('works')} element={<Works />} />
-      <Route
-        path={`${s('works')}/:slug`}
-        element={<ArticleDetail routeKey="works" onTranslatedPath={onTranslatedPath} />}
-      />
       <Route path={s('exhibitions')} element={<Exhibitions />} />
-      <Route
-        path={`${s('exhibitions')}/:slug`}
-        element={<ArticleDetail routeKey="exhibitions" onTranslatedPath={onTranslatedPath} />}
-      />
       <Route path={s('biography')} element={<SimplePage pageKey="biography" />} />
       <Route path={s('contact')} element={<SimplePage pageKey="contact" />} />
       <Route path={s('bibliography')} element={<SimplePage pageKey="bibliography" />} />
       <Route path={s('links')} element={<SimplePage pageKey="links" />} />
       <Route path={s('legal')} element={<SimplePage pageKey="legal" />} />
+      {/*
+        Task 27, Part A (SEO-critical): individual articles live at the root
+        now -- works and exhibitions share this one flat slug namespace,
+        matching the URLs the site being replaced used. Ordered LAST among
+        this language's routes so every named section above matches first;
+        otherwise a section path like /contact would resolve here as an
+        article slug instead of its own page.
+      */}
+      <Route path=":slug" element={<ArticleDetail onTranslatedPath={onTranslatedPath} />} />
     </>
   )
 }

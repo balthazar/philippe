@@ -18,6 +18,11 @@ const blockSchema = new mongoose.Schema(
           term: localizedField(),                              // specs
           value: localizedField(),
           span: { type: Number, min: 1, max: 6, default: 1 },      // gallery item width
+          // Task 27, client feedback item 1: a gallery item can be present in
+          // the data (so it can also serve as the article's `cover`) without
+          // showing in the public grid or lightbox. Defaults false so every
+          // pre-existing item stays visible.
+          hidden: { type: Boolean, default: false },              // gallery item
         },
         { _id: false }
       ),

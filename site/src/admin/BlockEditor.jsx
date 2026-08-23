@@ -20,7 +20,11 @@ const LABELS = { text: 'Texte', heading: 'Titre', image: 'Image', gallery: 'Gale
 // text and never passes them through dangerouslySetInnerHTML. Wiring a
 // LocalizedInput here rather than RichText is deliberate, not an oversight.
 
-export function BlockEditor({ blocks = [], lang, onChange }) {
+// Client feedback (task 27), replacing the original plan of keeping a
+// separate cover picker: `onSetCover`/`coverId` are only ever passed from
+// ArticleEditor (pages have no `cover` field at all), so the gallery block's
+// per-item "Cover"/"Hidden from grid" toggles below only render there.
+export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }) {
   // Drag-reorder, in the block-header drag handle only (never the whole
   // fieldset): the block body can hold a RichText/TipTap field, and a
   // draggable block would swallow that field's own text-selection drag
@@ -235,6 +239,40 @@ export function BlockEditor({ blocks = [], lang, onChange }) {
                           <option key={n} value={n}>{n === 1 ? '1 colonne' : `${n} colonnes`}</option>
                         ))}
                       </select>
+                      {/*
+                        Client feedback (task 27): "Cover" is one radio group
+                        across the WHOLE article, not per gallery block --
+                        there is only ever one `article.cover`. Its checked
+                        state is derived from coverId (the article's actual
+                        cover id), never local radio-group state, so it stays
+                        correct even across more than one gallery block.
+                      */}
+                      {onSetCover && (
+                        <span className="gallery-item-toggles">
+                          <label>
+                            <input
+                              type="radio"
+                              name="article-cover"
+                              checked={Boolean(coverId) && item.image?._id === coverId}
+                              onChange={() => onSetCover(item.image)}
+                            />
+                            Couverture
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(item.hidden)}
+                              onChange={(e) =>
+                                replace(i, {
+                                  ...block,
+                                  items: block.items.map((it, k) => (k === j ? { ...it, hidden: e.target.checked } : it)),
+                                })
+                              }
+                            />
+                            Masquer de la grille
+                          </label>
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>

@@ -79,6 +79,43 @@ describe('admin articles', () => {
     expect(second.body.slug.fr).toBe('chassis-presse-2')
   })
 
+  // Task 27, Part A: with articles now living at the root (/:slug), a slug
+  // equal to a section segment would shadow that section's own route.
+  // directAgent() (not loginAgent()), same reasoning as the file's other
+  // direct-auth tests: this file already spends its full 10-login budget
+  // against the shared rate limiter (see the comment on directAgent below).
+  it('rejects a French slug that collides with a reserved URL segment', async () => {
+    const agent = await directAgent()
+    const res = await agent.post('/api/admin/articles').send({ category: 'works', title: { fr: 'T' }, slug: { fr: 'contact' } })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/reserved/i)
+  })
+
+  it('rejects an English slug that collides with a reserved URL segment', async () => {
+    const agent = await directAgent()
+    const res = await agent
+      .post('/api/admin/articles')
+      .send({ category: 'works', title: { fr: 'T' }, slug: { fr: 'porte', en: 'admin' } })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/reserved/i)
+  })
+
+  it('rejects a reserved slug on update too, not only on create', async () => {
+    const a = await Article.create({ category: 'works', slug: { fr: 'ok-slug' }, title: { fr: 'A' } })
+    const agent = await directAgent()
+    const res = await agent.patch(`/api/admin/articles/${a._id}`).send({ slug: { fr: 'oeuvres' } })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/reserved/i)
+    expect((await Article.findById(a._id)).slug.fr).toBe('ok-slug')
+  })
+
+  it('still auto-derives a slug from the title when none is given, unaffected by the reserved-slug guard', async () => {
+    const agent = await directAgent()
+    const res = await agent.post('/api/admin/articles').send({ category: 'works', title: { fr: 'Un Article Normal' } })
+    expect(res.status).toBe(201)
+    expect(res.body.slug.fr).toBe('un-article-normal')
+  })
+
   it('sanitizes HTML in text blocks on write', async () => {
     const agent = await loginAgent()
     const res = await agent.post('/api/admin/articles').send({
