@@ -174,9 +174,25 @@ function dropTrailingHeadings(blocks) {
   return blocks.slice(0, end)
 }
 
+// Task 26, part A2: the Elementor default that a "Heading" widget is dropped
+// onto the page with, never edited. 76 of 115 heading blocks in the archive
+// are exactly this string; the artist confirmed none of it is real content.
+// Matched exactly, not by category or article, so the ~39 genuine exhibition
+// titles (and any other heading whose text merely starts the same way, or
+// carries extra content) survive untouched.
+const PLACEHOLDER_HEADING = 'Ajoutez votre titre ici'
+
+function isPlaceholderHeading(block) {
+  return block.type === 'heading' && block.value.fr.trim() === PLACEHOLDER_HEADING
+}
+
+export function dropPlaceholderHeadings(blocks) {
+  return blocks.filter((b) => !isPlaceholderHeading(b))
+}
+
 export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   const fr = [...walkWidgets(frNodes)].flatMap((w) => widgetToBlocks(w, ctx))
-  if (!enNodes) return dropTrailingHeadings(fr)
+  if (!enNodes) return dropTrailingHeadings(dropPlaceholderHeadings(fr))
   const en = [...walkWidgets(enNodes)].flatMap((w) => widgetToBlocks(w, ctx))
 
   // The merge is positional, so it is only sound when both trees produced the
@@ -184,7 +200,7 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
   // shifted pair coincides on type the English text lands on the wrong French
   // block: a wrong translation that looks right, which is worse than none.
   // On divergence, leave the English side empty and fall back to French.
-  if (en.length !== fr.length) return dropTrailingHeadings(fr)
+  if (en.length !== fr.length) return dropTrailingHeadings(dropPlaceholderHeadings(fr))
 
   const merged = fr.map((block, i) => {
     const other = en[i]
@@ -203,5 +219,5 @@ export function mapElementorToBlocks(frNodes, enNodes, ctx = {}) {
     }
     return block
   })
-  return dropTrailingHeadings(merged)
+  return dropTrailingHeadings(dropPlaceholderHeadings(merged))
 }

@@ -60,6 +60,116 @@ export function assertRowCount(actual, expected, label) {
   }
 }
 
+/** Splits a leading `<p>...</p>` off an HTML string. Returns null when the
+ * string does not begin with exactly that shape (e.g. it starts with a
+ * `<ul>`, or is empty), so a caller can tell "not a leading paragraph" apart
+ * from "a leading paragraph with nothing after it". */
+function splitLeadingParagraph(html) {
+  const match = String(html || '').match(/^\s*<p>([\s\S]*?)<\/p>\s*([\s\S]*)$/)
+  if (!match) return null
+  return { first: match[1].trim(), rest: match[2].trim() }
+}
+
+// A terse process/materials label ("Numérisation, épreuves numériques
+// pigmentaires") never ends in a full stop, exclamation or question mark;
+// a narrative sentence almost always does. This is the one content signal
+// extractSubtitle uses, deliberately narrow, to tell the two apart.
+const TERMINAL_PUNCTUATION_RE = /[.!?]\s*$/
+
+/**
+ * Task 26, part A1. Every works article's first text block is technique/
+ * materials metadata, not prose (the artist's own observation) -- structural
+ * data sitting in a content block. Detected here by an explicit, inspectable
+ * rule rather than a fuzzy heuristic: the first <p> of a works article's
+ * first text block, kept as the subtitle ONLY when that paragraph does not
+ * end in terminal sentence punctuation. Anything that doesn't fit -- no text
+ * block, a block that doesn't open with a single leading paragraph, or a
+ * first paragraph that reads as a real sentence -- is left as a block
+ * untouched and reported as non-matching so it can be checked by eye.
+ *
+ * When the block holds more than the technique line (two real cases in the
+ * archive: a technique line followed by real prose in the very same
+ * Elementor text-editor widget), only the leading paragraph is lifted; the
+ * remainder stays as a block, in place, in both languages.
+ */
+export function extractSubtitle(category, blocks) {
+  const empty = { fr: '', en: '' }
+  if (category !== 'works') return { subtitle: empty, blocks, matched: false, reason: 'not a works article' }
+
+  const idx = blocks.findIndex((b) => b.type === 'text')
+  if (idx === -1) return { subtitle: empty, blocks, matched: false, reason: 'no text block' }
+
+  const block = blocks[idx]
+  const frSplit = splitLeadingParagraph(block.value.fr)
+  if (!frSplit) {
+    return {
+      subtitle: empty, blocks, matched: false,
+      reason: 'first text block does not open with a single leading paragraph',
+    }
+  }
+  if (TERMINAL_PUNCTUATION_RE.test(frSplit.first)) {
+    return {
+      subtitle: empty, blocks, matched: false,
+      reason: 'first paragraph reads as prose (ends in sentence punctuation), not a technique line',
+    }
+  }
+
+  const enSplit = splitLeadingParagraph(block.value.en)
+  const subtitle = {
+    fr: frSplit.first,
+    en: enSplit && !TERMINAL_PUNCTUATION_RE.test(enSplit.first) ? enSplit.first : '',
+  }
+
+  const restFr = frSplit.rest
+  const restEn = enSplit ? enSplit.rest : ''
+  const remainder = restFr || restEn ? [{ ...block, value: { fr: restFr, en: restEn } }] : []
+
+  return {
+    subtitle,
+    blocks: [...blocks.slice(0, idx), ...remainder, ...blocks.slice(idx + 1)],
+    matched: true,
+  }
+}
+
+/**
+ * Task 26, part A3. icone-oeuvres.jpg was the old theme's menu-toggle icon
+ * (a black circle and chevron): pure decoration, never a cover, never in a
+ * gallery, never on a page. Drops any image block, or gallery item, whose
+ * legacy id is in `legacyIdsToPurge` -- a set computed from the extracted
+ * media list by filename (see extractAll), not hardcoded, so a re-run
+ * against a fresh WordPress export still finds it under whatever id it was
+ * assigned there.
+ */
+export function purgeImageBlocks(blocks = [], legacyIdsToPurge) {
+  return blocks
+    .map((block) => {
+      if (block.type === 'image') {
+        return legacyIdsToPurge.has(block.image?.legacyWpId) ? null : block
+      }
+      if (block.type === 'gallery') {
+        const items = (block.items || []).filter((i) => !legacyIdsToPurge.has(i.image?.legacyWpId))
+        if (!items.length) return null
+        return items.length === (block.items || []).length ? block : { ...block, items }
+      }
+      return block
+    })
+    .filter(Boolean)
+}
+
+// Task 26, part B3. /contact carries six blocks in the source data: the
+// mailto, a "Graphisme" credit, a logo image, a text-credit line, a "site
+// créé par" line and a rights line. Reduced to just the mailto through the
+// migration (a content change, not a special case in the renderer): the
+// page stays an ordinary Page document, it just has one block. Matched on
+// the exact sanitized HTML the mailto block produces, scoped to the
+// 'contact' source slug, so no other page's blocks are touched.
+const CONTACT_MAILTO_BLOCK_HTML = '<p><a href="mailto:info@philippegronon.com">info@philippegronon.com</a></p>'
+
+export function reduceContactPageBlocks(sourceSlug, blocks) {
+  if (sourceSlug !== 'contact') return blocks
+  return blocks.filter((b) => b.type === 'text' && b.value.fr.trim() === CONTACT_MAILTO_BLOCK_HTML)
+}
+
 async function metaFor(ids, key) {
   if (!ids.length) return new Map()
   const rows = await query(
@@ -100,31 +210,63 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       WHERE p.post_type = 'attachment'
     `)
 
-    const media = attachments
+    const allMedia = attachments
       .filter((a) => String(a.post_mime_type).startsWith('image/'))
       .map((a) => ({ legacyWpId: a.ID, file: a.file, mime: a.post_mime_type, originalName: a.file.split('/').pop() }))
+
+    // Task 26, part A3: icone-oeuvres.jpg, the old theme's menu-toggle icon,
+    // is decoration only -- never a cover, never in a gallery, never on a
+    // page. Computed by filename against the real extracted media list
+    // (not hardcoded ids), so a re-run against a fresh WordPress export
+    // still finds it under whatever attachment id it gets there.
+    const PURGED_IMAGE_FILENAMES = new Set(['icone-oeuvres.jpg'])
+    const purgedLegacyIds = new Set(
+      allMedia.filter((m) => PURGED_IMAGE_FILENAMES.has(m.originalName)).map((m) => m.legacyWpId)
+    )
+    const media = allMedia.filter((m) => !purgedLegacyIds.has(m.legacyWpId))
+
+    let subtitleMatched = 0
+    const subtitleNonMatches = []
+    let purgedImageBlockCount = 0
 
     const articles = pairByTrid(postRows).map((pair) => {
       const base = parseYearLabel(pair.fr.post_title)
       const en = pair.en && !pair.enOnly ? parseYearLabel(pair.en.post_title) : null
+      const category = mapCategory(pair.fr.category_name)
+      const rawBlocks = mapElementorToBlocks(
+        JSON.parse(elementor.get(pair.fr.ID) || '[]'),
+        JSON.parse((pair.en && !pair.enOnly && elementor.get(pair.en.ID)) || 'null'),
+        { postId: pair.fr.ID }
+      )
+      const purged = purgeImageBlocks(rawBlocks, purgedLegacyIds)
+      purgedImageBlockCount += rawBlocks.length - purged.length
+
+      const { subtitle, blocks, matched, reason } = extractSubtitle(category, purged)
+      if (category === 'works') {
+        if (matched) subtitleMatched += 1
+        else subtitleNonMatches.push({ slug: pair.fr.post_name, reason })
+      }
+
       return {
         legacyWpId: pair.fr.ID,
-        category: mapCategory(pair.fr.category_name),
+        category,
         status: 'published',
         enOnly: pair.enOnly,
         slug: { fr: pair.fr.post_name, en: pair.en ? pair.en.post_name : '' },
         title: { fr: base.title, en: en ? en.title : '' },
+        subtitle,
         yearLabel: { fr: base.yearLabel, en: en ? en.yearLabel : '' },
         yearStart: base.yearStart,
         yearEnd: base.yearEnd,
         coverLegacyId: Number(thumbs.get(pair.fr.ID) || 0) || null,
-        blocks: mapElementorToBlocks(
-          JSON.parse(elementor.get(pair.fr.ID) || '[]'),
-          JSON.parse((pair.en && !pair.enOnly && elementor.get(pair.en.ID)) || 'null'),
-          { postId: pair.fr.ID }
-        ),
+        blocks,
       }
     })
+
+    console.log(
+      `subtitle (works articles): ${subtitleMatched} matched, ${subtitleNonMatches.length} did not` +
+      (subtitleNonMatches.length ? ` (${subtitleNonMatches.map((m) => `${m.slug}: ${m.reason}`).join('; ')})` : '')
+    )
 
     const enOnlySlugs = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
     if (enOnlySlugs.length) {
@@ -144,21 +286,41 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     assertRowCount(pageRows.length, Number(expectedPages), 'published pages')
 
     const pageElementor = await metaFor(pageRows.map((r) => r.ID), '_elementor_data')
-    const pages = pairByTrid(pageRows).map((pair) => ({
-      legacyWpId: pair.fr.ID,
-      sourceSlug: pair.fr.post_name,
-      title: { fr: pair.fr.post_title, en: pair.en ? pair.en.post_title : '' },
-      blocks: mapElementorToBlocks(
+    const pages = pairByTrid(pageRows).map((pair) => {
+      const rawBlocks = mapElementorToBlocks(
         JSON.parse(pageElementor.get(pair.fr.ID) || '[]'),
         JSON.parse((pair.en && !pair.enOnly && pageElementor.get(pair.en.ID)) || 'null'),
         { postId: pair.fr.ID }
-      ),
-    }))
+      )
+      const purged = purgeImageBlocks(rawBlocks, purgedLegacyIds)
+      purgedImageBlockCount += rawBlocks.length - purged.length
+      return {
+        legacyWpId: pair.fr.ID,
+        sourceSlug: pair.fr.post_name,
+        title: { fr: pair.fr.post_title, en: pair.en ? pair.en.post_title : '' },
+        // Task 26, part B3: reduces /contact to just its mailto block. A
+        // no-op for every other page (reduceContactPageBlocks returns its
+        // input unchanged unless sourceSlug === 'contact').
+        blocks: reduceContactPageBlocks(pair.fr.post_name, purged),
+      }
+    })
+
+    if (purgedImageBlockCount) {
+      console.log(`purged ${purgedImageBlockCount} icone-oeuvres.jpg image block(s) total (articles + pages)`)
+    }
 
     await writeFile(`${outDir}/articles.json`, JSON.stringify(articles, null, 2))
     await writeFile(`${outDir}/pages.json`, JSON.stringify(pages, null, 2))
     await writeFile(`${outDir}/media.json`, JSON.stringify(media, null, 2))
-    return { articles: articles.length, pages: pages.length, media: media.length, enOnlySlugs }
+    return {
+      articles: articles.length,
+      pages: pages.length,
+      media: media.length,
+      enOnlySlugs,
+      subtitle: { matched: subtitleMatched, nonMatches: subtitleNonMatches },
+      purgedImageBlockCount,
+      purgedLegacyIds: [...purgedLegacyIds],
+    }
   } finally {
     await close()
   }

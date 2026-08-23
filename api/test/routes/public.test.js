@@ -91,6 +91,19 @@ describe('GET /api/articles/:slug', () => {
     expect(res.body.blocks[1].items[0].term).toBe('Edition')   // English override wins
     expect(res.body.blocks[1].items[0].value).toBe('3')
   })
+
+  it('resolves the subtitle field the same way as title, falling back to French', async () => {
+    // task 26, part A1: subtitle is a localized field beside yearLabel, read
+    // the same way ({ fr, en } -> field[lang] || field.fr). Without
+    // `subtitle` on the schema, mongoose's default strict mode silently
+    // drops it on write and this would come back undefined.
+    await Article.create({
+      category: 'works', status: 'published', slug: { fr: 'avec-sous-titre' }, title: { fr: 'Avec sous-titre' },
+      subtitle: { fr: 'Numérisation, épreuves numériques pigmentaires', en: '' },
+    })
+    const res = await request(createApp()).get('/api/articles/avec-sous-titre?lang=en')
+    expect(res.body.subtitle).toBe('Numérisation, épreuves numériques pigmentaires')
+  })
 })
 
 describe('GET /api/pages/:key', () => {

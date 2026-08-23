@@ -41,4 +41,31 @@ describe('Works page', () => {
     render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
     await waitFor(() => expect(screen.getByRole('link', { name: /porte/i })).toHaveAttribute('href', '/oeuvres/porte'))
   })
+
+  // Task 26, correction to B4: Works previously had no loading guard at
+  // all, so it painted an empty grid immediately, indistinguishable from a
+  // genuinely empty category -- both looked like nothing, and the footer
+  // rode up in both cases. The two must render distinguishably, without a
+  // spinner: a still-loading page reserves space and renders no grid; a
+  // loaded-but-empty page renders the (empty) grid for real.
+  it('reserves space and renders no grid while still loading, distinguishable from a loaded-but-empty category', async () => {
+    // Three separate /articles calls (works, editions, public-orders) share
+    // this same path, distinguished only by the category param, so every
+    // one of them must resolve before usePageData's Promise.all settles.
+    const resolvers = []
+    vi.spyOn(api, 'apiGet').mockImplementation((path) => {
+      if (path === '/articles') return new Promise((resolve) => resolvers.push(resolve))
+      return Promise.resolve({ key: 'works', title: 'Œuvres', blocks: [] })
+    })
+    const { container } = render(<MemoryRouter><LangProvider><Works /></LangProvider></MemoryRouter>)
+
+    const main = container.querySelector('main')
+    expect(main).toBeInTheDocument()
+    expect(main).toHaveAttribute('aria-busy', 'true')
+    expect(container.querySelector('.grid')).not.toBeInTheDocument()
+
+    resolvers.forEach((resolve) => resolve({ items: [], total: 0 }))
+    await waitFor(() => expect(container.querySelector('main')).not.toHaveAttribute('aria-busy'))
+    expect(container.querySelector('.grid')).toBeInTheDocument()
+  })
 })

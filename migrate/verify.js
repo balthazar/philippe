@@ -43,6 +43,44 @@ export function checkArticles(articles) {
   return { failures, warnings }
 }
 
+const PLACEHOLDER_HEADING = 'Ajoutez votre titre ici'
+const PURGED_ORIGINAL_FILENAMES = new Set(['icone-oeuvres.jpg'])
+
+/**
+ * Task 26, part A2. Fails if any article or page still carries the unfilled
+ * Elementor placeholder heading -- confirms the migration's exact-match
+ * drop actually ran, rather than trusting the extraction step blindly.
+ */
+export function checkNoPlaceholderHeadings(articles, pages) {
+  const failures = []
+  const visit = (blocks, label) => {
+    for (const b of blocks || []) {
+      if (b.type === 'heading' && (b.value?.fr || '').trim() === PLACEHOLDER_HEADING) {
+        failures.push(`${label} still carries the unfilled placeholder heading`)
+      }
+    }
+  }
+  for (const a of articles) visit(a.blocks, `article ${a.slug?.fr || a._id}`)
+  for (const p of pages) visit(p.blocks, `page ${p.key}`)
+  return { failures }
+}
+
+/**
+ * Task 26, part A3. Fails if any Image document's legacyUrl still ends in a
+ * purged filename (icone-oeuvres.jpg) -- confirms the old menu-toggle icon
+ * was actually removed from the media library, not just unreferenced.
+ */
+export function checkNoPurgedImageRefs(images) {
+  const failures = []
+  for (const img of images) {
+    const base = (img.legacyUrl || '').split('/').pop()
+    if (PURGED_ORIGINAL_FILENAMES.has(base)) {
+      failures.push(`purged image ${base} is still present in the media library as ${img._id}`)
+    }
+  }
+  return { failures }
+}
+
 /**
  * Walks every block (image and gallery types) in a list of blocks, calling
  * `visit(imageId, locationLabel)` for each image reference found. Shared
@@ -134,6 +172,19 @@ export async function verify({ mongoUri, dbName = 'philippe', mediaRoot }) {
     const fileCheck = await checkImageFiles(images, mediaRoot)
     failures.push(...fileCheck.failures)
 
+    failures.push(...checkNoPlaceholderHeadings(articles, pages).failures)
+    failures.push(...checkNoPurgedImageRefs(images).failures)
+
+    // Coverage note, not a failure: a works article that legitimately has
+    // prose (not a technique line) as its first block is expected to have
+    // no subtitle -- see extractSubtitle's non-matching path in extract.js.
+    const worksWithoutSubtitle = articles
+      .filter((a) => a.category === 'works' && !(a.subtitle?.fr || '').trim())
+      .map((a) => a.slug?.fr || String(a._id))
+    if (worksWithoutSubtitle.length) {
+      warnings.push(`works article(s) with no subtitle: ${worksWithoutSubtitle.join(', ')}`)
+    }
+
     const byCategory = Object.fromEntries(CATEGORIES.map((c) => [c, 0]))
     for (const a of articles) {
       if (a.category in byCategory) byCategory[a.category] += 1
@@ -145,6 +196,7 @@ export async function verify({ mongoUri, dbName = 'philippe', mediaRoot }) {
       pages: pages.length,
       images: images.length,
       byCategory,
+      worksWithSubtitle: articles.filter((a) => a.category === 'works').length - worksWithoutSubtitle.length,
     }
 
     return { ok: failures.length === 0, failures, warnings, report }

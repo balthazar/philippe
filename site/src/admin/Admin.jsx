@@ -13,7 +13,6 @@ function AdminNotFound() {
   return (
     <div className="admin-not-found">
       <p>Page introuvable.</p>
-      <Link to="/admin">Retour aux articles</Link>
     </div>
   )
 }

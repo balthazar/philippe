@@ -81,30 +81,35 @@ export function PageEditor() {
   if (loading) return null
 
   return (
-    <form className="admin-editor" onSubmit={save}>
-      <div className="admin-toolbar">
-        <h1>{PAGE_LABELS[key] || key}</h1>
-        <Link to="/admin/pages">Retour aux pages</Link>
-      </div>
+    // Same container ArticleEditor uses (task 26): .admin-editor-layout owns
+    // the page's horizontal padding so every child of .admin-editor aligns
+    // to the same edge by default.
+    <div className="admin-editor-layout">
+      <form className="admin-editor" onSubmit={save}>
+        <div className="admin-toolbar">
+          <h1>{PAGE_LABELS[key] || key}</h1>
+          <Link to="/admin/pages">Retour aux pages</Link>
+        </div>
 
-      <div className="lang-toggle" role="group" aria-label="Langue du contenu">
-        <button type="button" className={lang === 'fr' ? 'active' : ''} onClick={() => setLang('fr')}>Français</button>
-        <button type="button" className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>English</button>
-      </div>
+        <div className="lang-toggle" role="group" aria-label="Langue du contenu">
+          <button type="button" className={lang === 'fr' ? 'active' : ''} onClick={() => setLang('fr')}>Français</button>
+          <button type="button" className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>English</button>
+        </div>
 
-      {error && <p role="alert" className="admin-error">{error}</p>}
+        {error && <p role="alert" className="admin-error">{error}</p>}
 
-      <LocalizedInput label="Titre" lang={lang} value={page.title} onChange={(title) => update({ title })} />
+        <LocalizedInput label="Titre" lang={lang} value={page.title} onChange={(title) => update({ title })} />
 
-      <fieldset>
-        <legend>Contenu</legend>
-        <BlockEditor blocks={page.blocks} lang={lang} onChange={(blocks) => update({ blocks })} />
-      </fieldset>
+        <fieldset>
+          <legend>Contenu</legend>
+          <BlockEditor blocks={page.blocks} lang={lang} onChange={(blocks) => update({ blocks })} />
+        </fieldset>
 
-      <div className="admin-editor-actions">
-        <button type="submit" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
-        {saved && <span className="save-confirmation">Enregistré</span>}
-      </div>
-    </form>
+        <div className="admin-editor-actions">
+          <button type="submit" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+          {saved && <span className="save-confirmation">Enregistré</span>}
+        </div>
+      </form>
+    </div>
   )
 }

@@ -258,6 +258,59 @@ describe('dropTrailingHeadings (via mapElementorToBlocks)', () => {
   })
 })
 
+// Task 26, part A2: 76 of 115 heading blocks across the archive are the
+// literal, unfilled Elementor placeholder "Ajoutez votre titre ici". They
+// must be dropped on an EXACT string match, not on any inference about
+// which article/category they live in -- the ~39 real exhibition titles
+// (and the biography page's toggle-derived section headings) must survive.
+describe('placeholder heading removal (via mapElementorToBlocks)', () => {
+  it('drops a heading that is exactly the unfilled Elementor placeholder', () => {
+    const nodes = [
+      widget('heading', { title: 'Ajoutez votre titre ici' }),
+      widget('text-editor', { editor: '<p>Corps</p>' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([
+      { type: 'text', value: { fr: '<p>Corps</p>', en: '' } },
+    ])
+  })
+
+  it('keeps a heading with real content, even if it starts the same way', () => {
+    const nodes = [
+      widget('heading', { title: 'Ajoutez votre titre ici et votre sous-titre' }),
+      widget('text-editor', { editor: '<p>Corps</p>' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})[0]).toEqual({
+      type: 'heading', value: { fr: 'Ajoutez votre titre ici et votre sous-titre', en: '' }, level: 2,
+    })
+  })
+
+  it('keeps a genuine exhibition-title heading untouched', () => {
+    const nodes = [
+      widget('heading', { title: 'Rectos / Versos, Galerie Espace Muraille' }),
+      widget('text-editor', { editor: '<p>Corps</p>' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})[0].value.fr).toBe('Rectos / Versos, Galerie Espace Muraille')
+  })
+
+  it('drops several placeholder headings in the same article', () => {
+    const nodes = [
+      widget('heading', { title: 'Ajoutez votre titre ici' }),
+      widget('text-editor', { editor: '<p>Un</p>' }),
+      widget('heading', { title: 'Ajoutez votre titre ici' }),
+      widget('text-editor', { editor: '<p>Deux</p>' }),
+    ]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([
+      { type: 'text', value: { fr: '<p>Un</p>', en: '' } },
+      { type: 'text', value: { fr: '<p>Deux</p>', en: '' } },
+    ])
+  })
+
+  it('drops a placeholder heading even when it is the only block', () => {
+    const nodes = [widget('heading', { title: 'Ajoutez votre titre ici' })]
+    expect(mapElementorToBlocks(nodes, null, {})).toEqual([])
+  })
+})
+
 describe('liftSpecs', () => {
   it('splits a definition list out of surrounding text, preserving order', () => {
     const html = '<p>Avant</p><dl><dt>Tirage</dt><dd>3</dd><dt>Format</dt><dd>50x60</dd></dl><p>Après</p>'

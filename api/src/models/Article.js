@@ -32,6 +32,13 @@ const articleSchema = new mongoose.Schema(
     slug: localizedField(),
     category: { type: String, enum: CATEGORIES, required: true },
     title: localizedField(),
+    // The technique/materials line (task 26, part A1): structural metadata,
+    // not a content block. Same localization rule as every other field:
+    // `fr` is the base, `en` an optional override, read as
+    // `field[lang] || field.fr`. Plain text only, same rule as `yearLabel`
+    // and every heading/specs value -- never rendered through
+    // dangerouslySetInnerHTML.
+    subtitle: localizedField(),
     yearLabel: localizedField(),
     yearStart: Number,
     yearEnd: Number,

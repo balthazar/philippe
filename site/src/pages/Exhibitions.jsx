@@ -17,15 +17,20 @@ export function Exhibitions() {
     ])
     return { items: exhibitions.items, intro }
   })
-  const state = data || { items: [], intro: null }
+
+  // Task 26, correction to B4: see the identical guard in Works.jsx -- a
+  // still-loading page reserves space and renders no grid; a loaded but
+  // genuinely empty category renders the real (empty) grid, so the two are
+  // never indistinguishable.
+  if (!data) return <Container as="main" className="page-main" aria-busy="true" />
 
   return (
-    <Container as="main">
-      {state.intro?.blocks?.length > 0 && (
-        <section className="page-intro"><BlockRenderer blocks={state.intro.blocks} /></section>
+    <Container as="main" className="page-main">
+      {data.intro?.blocks?.length > 0 && (
+        <section className="page-intro"><BlockRenderer blocks={data.intro.blocks} /></section>
       )}
 
-      <ArticleGrid items={state.items} routeKey="exhibitions" />
+      <ArticleGrid items={data.items} routeKey="exhibitions" />
     </Container>
   )
 }

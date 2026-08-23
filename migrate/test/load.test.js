@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, access, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MongoMemoryServer } from 'mongodb-memory-server'
@@ -305,6 +305,131 @@ describe('loadAll', () => {
       const article = await Article.findOne({ legacyWpId: 4001 })
       expect(article.cover).toBeNull()
       expect(article.blocks).toHaveLength(0) // the sole image block referenced the ghost id and was dropped
+    } finally {
+      await disconnect()
+    }
+  }, 60_000)
+
+  it('writes the subtitle field through to the Article document', async () => {
+    // Task 26, part A1: subtitle travels through load.js the same way title
+    // and yearLabel do. Without it in the explicit field list load.js
+    // passes to findOneAndUpdate, extract.js's work would be silently
+    // dropped at load time even with the schema fixed.
+    const media = [{ legacyWpId: 1, file: 'a.png', mime: 'image/png', originalName: 'a.png' }]
+    const articles = [
+      {
+        legacyWpId: 5001,
+        category: 'works',
+        status: 'published',
+        slug: { fr: 'avec-sous-titre', en: '' },
+        title: { fr: 'Avec sous-titre', en: '' },
+        subtitle: { fr: 'Numérisation, épreuves numériques pigmentaires', en: '' },
+        yearLabel: { fr: '2024', en: '' },
+        yearStart: 2024,
+        yearEnd: 2024,
+        coverLegacyId: 1,
+        blocks: [],
+      },
+    ]
+    await writeFile(join(dataDir, 'media.json'), JSON.stringify(media))
+    await writeFile(join(dataDir, 'articles.json'), JSON.stringify(articles))
+    await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+    await writeFile(join(uploadsRoot, 'a.png'), await png(10, 20, 30))
+
+    const dbName = `test-${counter++}`
+    await loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName })
+
+    await connect(mongod.getUri(), dbName)
+    try {
+      const article = await Article.findOne({ legacyWpId: 5001 })
+      expect(article.subtitle.fr).toBe('Numérisation, épreuves numériques pigmentaires')
+    } finally {
+      await disconnect()
+    }
+  }, 60_000)
+
+  it('prunes a previously-imported legacy image (and its files) once nothing references it any more', async () => {
+    // Task 26, part A3: simulates the leftover Mongo state an earlier,
+    // unfixed run would have left for icone-oeuvres.jpg -- extract.js no
+    // longer emits it or any block referencing it, but a load run against
+    // a database populated before that fix must still clean it up, after
+    // confirming (freshly, against the just-loaded state) that nothing
+    // references it any more.
+    await writeFixtures()
+    const dbName = `test-${counter++}`
+    const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+    await loadAll(opts)
+
+    const variantPath = 'or/orphan-thumb.webp'
+    await mkdir(join(mediaRoot, 'or'), { recursive: true })
+    await writeFile(join(mediaRoot, variantPath), 'stale-thumb-bytes')
+
+    await connect(mongod.getUri(), dbName)
+    let orphanId
+    try {
+      const orphan = await Image.create({
+        filename: 'orphanhash',
+        legacyWpId: 99999,
+        legacyUrl: '/wp-content/uploads/2018/04/icone-oeuvres.jpg',
+        width: 300,
+        height: 300,
+        variants: { thumb: { path: variantPath, width: 300, height: 300 } },
+      })
+      orphanId = orphan._id
+    } finally {
+      await disconnect()
+    }
+
+    const result = await loadAll(opts)
+    expect(result.imagesPruned).toBe(1)
+
+    await connect(mongod.getUri(), dbName)
+    try {
+      expect(await Image.findById(orphanId)).toBeNull()
+    } finally {
+      await disconnect()
+    }
+    await expect(access(join(mediaRoot, variantPath))).rejects.toThrow()
+  }, 60_000)
+
+  it('leaves an image alone if something still references it, even when its filename matches a purged name', async () => {
+    // Guards against an over-eager prune: an image whose legacyUrl happens
+    // to end in a purged filename must survive if it is genuinely still
+    // referenced by a current article. The reference has to come through
+    // articles.json (the source of truth loadAll re-upserts blocks from
+    // wholesale on every run), not a direct Mongo write, or the article
+    // upsert earlier in the same run would just overwrite it away again.
+    const media = [
+      { legacyWpId: 1, file: 'a.png', mime: 'image/png', originalName: 'a.png' },
+      { legacyWpId: 7, file: 'icone-oeuvres.jpg', mime: 'image/jpeg', originalName: 'icone-oeuvres.jpg' },
+    ]
+    const articles = [
+      {
+        legacyWpId: 6001,
+        category: 'works',
+        status: 'published',
+        slug: { fr: 'still-used', en: '' },
+        title: { fr: 'Still Used', en: '' },
+        yearLabel: { fr: '2024', en: '' },
+        yearStart: 2024,
+        yearEnd: 2024,
+        coverLegacyId: 1,
+        blocks: [{ type: 'image', image: { legacyWpId: 7 }, caption: { fr: '', en: '' }, size: 'wide' }],
+      },
+    ]
+    await writeFile(join(dataDir, 'media.json'), JSON.stringify(media))
+    await writeFile(join(dataDir, 'articles.json'), JSON.stringify(articles))
+    await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+    await writeFile(join(uploadsRoot, 'a.png'), await png(1, 2, 3))
+    await writeFile(join(uploadsRoot, 'icone-oeuvres.jpg'), await png(4, 5, 6))
+
+    const dbName = `test-${counter++}`
+    const result = await loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName })
+
+    expect(result.imagesPruned).toBe(0)
+    await connect(mongod.getUri(), dbName)
+    try {
+      expect(await Image.findOne({ legacyWpId: 7 })).not.toBeNull()
     } finally {
       await disconnect()
     }

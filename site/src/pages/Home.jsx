@@ -12,16 +12,19 @@ export function Home() {
     return { slides: home.slides, intro: page }
   })
 
-  // While loading, render nothing rather than a spinner.
-  if (!state) return null
-
   return (
     <main>
       {/* Full bleed: rendered outside the gutter Container on purpose, per
-          the client's request that the slideshow span edge to edge. */}
-      <Slideshow slides={state.slides} />
+          the client's request that the slideshow span edge to edge.
 
-      {state.intro?.blocks?.length > 0 && (
+          While loading, this reuses .slideshow's own height rule
+          (calc(100dvh - header height), already known before the fetch
+          resolves) as an empty placeholder, rather than returning null: the
+          page never collapses to nothing, so there's no jump to mask with a
+          spinner or a fade once the real slideshow replaces it. */}
+      {state ? <Slideshow slides={state.slides} /> : <div className="slideshow" aria-hidden="true" />}
+
+      {state?.intro?.blocks?.length > 0 && (
         <Container>
           <section className="page-intro"><BlockRenderer blocks={state.intro.blocks} /></section>
         </Container>

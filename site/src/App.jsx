@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { Routes, Route, Outlet } from 'react-router-dom'
+import { Routes, Route, Outlet, useLocation } from 'react-router-dom'
 import { SEGMENTS } from './routes.js'
 import { Header } from '@/components/Header.jsx'
 import { Footer } from '@/components/Footer.jsx'
@@ -49,11 +49,18 @@ function localizedRoutes(lang, onTranslatedPath) {
 // chrome, via <Outlet/>. /admin (a sibling route, not nested under this
 // one) never passes through here, so it never renders <Header>/<Footer>.
 function PublicLayout({ translatedPath }) {
+  // Task 26, part B4: the slideshow owns the viewport on the homepage
+  // (both languages' index route, "/" and "/en"), so the footer is dropped
+  // there. Every other page keeps it. A pathname check, not a route
+  // restructure -- the <Route> tree below is unchanged.
+  const { pathname } = useLocation()
+  const isHome = pathname === '/' || pathname === '/en'
+
   return (
     <>
       <Header translatedPath={translatedPath} />
       <Outlet />
-      <Footer />
+      {!isHome && <Footer />}
     </>
   )
 }

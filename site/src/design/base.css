@@ -1,6 +1,18 @@
 @import "./tokens.css";
 @import "./fonts.css";
 
+/* Task 26, part B2: the 60px --page-gutter is a client-specified desktop
+   value (see tokens.css); at mobile widths, unchanged, it would eat 120px
+   out of a 375px viewport, squeezing content below a usable measure. This
+   is the one place that value shrinks, cascading to every consumer of the
+   token (.container, .site-header, .slide-caption) instead of overriding
+   each of them individually. */
+@media (max-width: 480px) {
+  :root {
+    --page-gutter: 1.25rem;
+  }
+}
+
 *,
 *::before,
 *::after {
@@ -34,6 +46,13 @@ img,
 picture {
   display: block;
   max-width: 100%;
+  /* Images carry explicit width/height attributes (to prevent layout
+     shift), so whenever CSS constrains the width, the height attribute
+     alone would otherwise hold the image at its intrinsic height and
+     distort it vertically. This is what stretched the works grid and
+     gallery images; the slideshow escaped it only because it sets its own
+     width: auto; height: auto (see .slideshow-image in this file). */
+  height: auto;
 }
 
 .container {
@@ -156,6 +175,34 @@ picture {
 .site-footer .colophon {
   font-size: var(--text-s);
   color: var(--ink-soft);
+  margin: 0;
+}
+
+/* Every public page's <main> reserves at least a full viewport below the
+   header (task 26, correction to B4): the flash the client saw on every
+   page, not just the homepage, was never about content height -- it was
+   the page collapsing to nothing between mount and the fetch resolving, so
+   the footer rode up near the top and then jumped down once data landed.
+   Applied unconditionally (loading or loaded), so a short, loaded page
+   (the reduced /contact, for one) also keeps the footer off the fold
+   instead of the fix only holding during the fetch. */
+.page-main {
+  min-height: calc(100dvh - var(--header-height));
+}
+
+/* A simple page reduced to a single block (task 26, part B3: /contact) is
+   centred both ways in the reserved space above, rather than special-cased
+   by page identity: this is keyed to block count, not to which page it is,
+   so it is not "if pageKey === 'contact'" anywhere in the renderer. */
+.page-main-centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.page-main-centered .block-text {
   margin: 0;
 }
 
@@ -418,6 +465,16 @@ picture {
   font-weight: 400;
 }
 
+/* The technique/materials line (task 26, part A1): structural metadata
+   beside the title, not a content block, so it renders here rather than
+   as the article's first block. Body font, not chrome: it reads as a
+   descriptive caption, not a UI label like .article-year below it. */
+.article-subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-m);
+  color: var(--ink-soft);
+}
+
 .article-year {
   font-family: var(--font-chrome);
   margin: var(--space-1) 0 0;
@@ -425,6 +482,42 @@ picture {
   color: var(--ink-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* Text left, gallery right (task 26, part B2). A real responsive pass for
+   this one page: single column by default (mobile), with the media column
+   pulled ahead of the text column via `order` so the stacked reading order
+   is title, subtitle, then gallery, description below -- not a fixed-width
+   layout with one grudging breakpoint. Only rendered at all when
+   splitArticleLayout (site/src/lib/articleLayout.js) finds a clean
+   text-then-media shape; otherwise the article falls back to the plain
+   single-column BlockRenderer pass this replaces. */
+.article-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.article-media-col {
+  order: -1;
+}
+
+@media (min-width: 768px) {
+  .article-layout {
+    /* Roughly half and half, per the brief -- `gap` itself (the same
+       --gutter used everywhere else content sits side by side) is what
+       keeps the two columns from reading as exactly 50/50 hairline-tight. */
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gutter);
+  }
+
+  .article-text-col,
+  .article-media-col {
+    /* Side by side now, so DOM order (text, then media) is the visual
+       order too: text left, gallery right. */
+    order: 0;
+  }
 }
 
 .article-pager {

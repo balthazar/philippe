@@ -55,6 +55,18 @@ describe('App routing', () => {
     )
   })
 
+  // Task 26, part B4: the slideshow owns the viewport on the homepage, so
+  // the footer is dropped there. Every other page keeps it.
+  it('drops the footer on the homepage but keeps it on other pages', async () => {
+    renderAt('/')
+    await waitFor(() => expect(screen.getByRole('navigation', { name: /navigation principale/i })).toBeInTheDocument())
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument()
+
+    renderAt('/biographie')
+    await waitFor(() => expect(screen.getByText('Né en 1964')).toBeInTheDocument())
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument()
+  })
+
   // Task 20 controller correction 2: /admin must reach the admin shell, not
   // the public 404, and it must never carry the public <Header>/<Footer>.
   it('renders the admin login at /admin, without the public header', async () => {

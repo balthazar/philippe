@@ -13,10 +13,20 @@ export function SimplePage({ pageKey }) {
   const { lang } = useLang()
   const { data: page } = usePageData(`page:${pageKey}:${lang}`, () => apiGet(`/pages/${pageKey}`, { lang }))
 
-  if (!page) return null
+  // Task 26, correction to B4: reserve the page's minimum height while
+  // loading instead of rendering nothing, so the footer never rides up.
+  // Every public page shares .page-main; see base.css.
+  if (!page) return <Container as="main" className="page-main" aria-busy="true" />
+
+  // Task 26, part B3: a page reduced to a single block (currently only
+  // /contact, after the migration strips it down to its mailto) is centred
+  // both ways in the page. Keyed to block count, not to which page this is,
+  // so it is never "if pageKey === 'contact'" here.
+  const isSingleBlock = page.blocks.length === 1
+  const className = `page-main${isSingleBlock ? ' page-main-centered' : ''}`
 
   return (
-    <Container as="main">
+    <Container as="main" className={className}>
       <h1>{page.title}</h1>
       <BlockRenderer blocks={page.blocks} />
     </Container>

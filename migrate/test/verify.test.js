@@ -8,6 +8,8 @@ import {
   checkArticles,
   checkImageRefs,
   checkImageFiles,
+  checkNoPlaceholderHeadings,
+  checkNoPurgedImageRefs,
   verify,
 } from '../verify.js'
 import { connect, disconnect } from '../../api/src/db.js'
@@ -136,6 +138,38 @@ describe('checkImageRefs', () => {
     const pages = [{ key: 'home', blocks: [{ type: 'image', image: 'bbbbbbbbbbbbbbbbbbbbbbbb' }] }]
     const result = checkImageRefs({ articles, pages }, imageIds)
     expect(result.failures).toEqual([])
+  })
+})
+
+describe('checkNoPlaceholderHeadings', () => {
+  it('fails when an article carries the unfilled Elementor placeholder', () => {
+    const articles = [{ slug: { fr: 'a' }, blocks: [{ type: 'heading', value: { fr: 'Ajoutez votre titre ici' } }] }]
+    const result = checkNoPlaceholderHeadings(articles, [])
+    expect(result.failures[0]).toMatch(/a.*placeholder/)
+  })
+
+  it('fails when a page carries the unfilled Elementor placeholder', () => {
+    const pages = [{ key: 'home', blocks: [{ type: 'heading', value: { fr: 'Ajoutez votre titre ici' } }] }]
+    const result = checkNoPlaceholderHeadings([], pages)
+    expect(result.failures[0]).toMatch(/home.*placeholder/)
+  })
+
+  it('passes a real heading untouched', () => {
+    const articles = [{ slug: { fr: 'a' }, blocks: [{ type: 'heading', value: { fr: 'Rectos / Versos' } }] }]
+    expect(checkNoPlaceholderHeadings(articles, []).failures).toEqual([])
+  })
+})
+
+describe('checkNoPurgedImageRefs', () => {
+  it('fails when an Image document for the purged filename still exists', () => {
+    const images = [{ _id: 'x', legacyUrl: '/wp-content/uploads/2018/04/icone-oeuvres.jpg' }]
+    const result = checkNoPurgedImageRefs(images)
+    expect(result.failures[0]).toMatch(/icone-oeuvres\.jpg/)
+  })
+
+  it('passes when no image matches the purged filename', () => {
+    const images = [{ _id: 'x', legacyUrl: '/wp-content/uploads/2018/04/porte.jpg' }]
+    expect(checkNoPurgedImageRefs(images).failures).toEqual([])
   })
 })
 

@@ -6,6 +6,7 @@ import { usePageData } from '@/preload.jsx'
 import { routeFor } from '@/routes.js'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
+import { splitArticleLayout } from '@/lib/articleLayout.js'
 
 /**
  * The public API always resolves `slug` to the requested language and never
@@ -50,23 +51,40 @@ export function ArticleDetail({ routeKey, onTranslatedPath }) {
   if (!article) {
     if (error?.status === 404) {
       return (
-        <Container as="main">
+        <Container as="main" className="page-main">
           <p>{lang === 'fr' ? 'Page introuvable.' : 'Page not found.'}</p>
         </Container>
       )
     }
-    return null
+    // Task 26, correction to B4: reserve the page's minimum height while
+    // loading instead of rendering nothing, so the footer never rides up.
+    return <Container as="main" className="page-main" aria-busy="true" />
   }
 
+  // Task 26, part B2: text left, gallery right on desktop, stacked as
+  // title, subtitle, then gallery on mobile. Only a clean text-then-media
+  // article (the works shape) splits into two columns; see
+  // articleLayout.js for why an interleaved one (a handful of
+  // multi-exhibition-per-year pages) falls back to a single column.
+  const { text, media, twoColumn } = splitArticleLayout(article.blocks)
+
   return (
-    <Container as="main">
+    <Container as="main" className="page-main">
       <article>
         <header className="article-header">
           <h1>{article.title}</h1>
+          {article.subtitle && <p className="article-subtitle">{article.subtitle}</p>}
           {article.yearLabel && <p className="article-year">{article.yearLabel}</p>}
         </header>
 
-        <BlockRenderer blocks={article.blocks} />
+        {twoColumn ? (
+          <div className="article-layout">
+            <div className="article-text-col"><BlockRenderer blocks={text} /></div>
+            <div className="article-media-col"><BlockRenderer blocks={media} /></div>
+          </div>
+        ) : (
+          <BlockRenderer blocks={article.blocks} />
+        )}
 
         <nav className="article-pager" aria-label={lang === 'fr' ? 'Navigation entre œuvres' : 'Article navigation'}>
           {article.prev && (

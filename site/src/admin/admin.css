@@ -204,11 +204,13 @@
   padding: 2rem 1.5rem;
 }
 
-/* Pages index (task 25, section 6) */
+/* Pages index (task 25, section 6). Horizontal padding lives on the page
+   container (.admin-editor-layout, task 26) rather than here, so this list
+   and the toolbar's heading above it align to the same edge by default. */
 .admin-pages-list {
   list-style: none;
   margin: 0;
-  padding: 0 1.5rem 2rem;
+  padding: 0 0 2rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -425,6 +427,10 @@
   display: flex;
   flex-direction: column;
   padding-top: 1.5rem;
+  /* Task 26, part B5: it's a preview of a white page, so it must sit on
+     white -- not the admin's own off-white --surface, which it inherited
+     from .admin's body background before this. */
+  background: #fff;
 }
 
 .admin-preview-header {

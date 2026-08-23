@@ -11,19 +11,25 @@ import { PAGE_LABELS } from './PageEditor.jsx'
  */
 export function PagesIndex() {
   return (
-    <div className="admin-editor">
-      <div className="admin-toolbar">
-        <h1>Pages</h1>
-        <Link to="/admin">Retour aux articles</Link>
-      </div>
+    // Same container ArticleEditor already uses for its single-column
+    // wrapper (task 26): .admin-editor-layout is what owns the page's
+    // horizontal padding, so .admin-editor and everything inside it -- the
+    // toolbar's heading and the list below -- align to the same edge by
+    // default, instead of each child needing its own matching pad.
+    <div className="admin-editor-layout">
+      <div className="admin-editor">
+        <div className="admin-toolbar">
+          <h1>Pages</h1>
+        </div>
 
-      <ul className="admin-pages-list">
-        {Object.entries(PAGE_LABELS).map(([key, label]) => (
-          <li key={key}>
-            <Link to={`/admin/pages/${key}`}>{label}</Link>
-          </li>
-        ))}
-      </ul>
+        <ul className="admin-pages-list">
+          {Object.entries(PAGE_LABELS).map(([key, label]) => (
+            <li key={key}>
+              <Link to={`/admin/pages/${key}`}>{label}</Link>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }

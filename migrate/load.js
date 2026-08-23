@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { connect, disconnect } from '../api/src/db.js'
 import { Article } from '../api/src/models/Article.js'
@@ -71,6 +71,57 @@ export function collectReferencedIds(articles = [], pages = []) {
   }
   for (const page of pages) addBlocks(page.blocks)
   return ids
+}
+
+// Task 26, part A3. icone-oeuvres.jpg (the old theme's menu-toggle icon) is
+// excluded from media.json by extract.js and stripped from every block, so
+// a fresh load never imports it. But a Mongo populated by an earlier,
+// unfixed run can still hold the Image document and its files from before
+// that fix -- this finds any such leftover by filename and, ONLY after
+// confirming freshly (against the article/page state this very load run
+// just wrote) that nothing references it any more, deletes the document and
+// unlinks its variant files, including the `_originals/` master.
+const PURGED_ORIGINAL_FILENAMES = new Set(['icone-oeuvres.jpg'])
+
+function collectUsedImageIds(docs) {
+  const used = new Set()
+  for (const doc of docs) {
+    if (doc.cover) used.add(String(doc.cover))
+    for (const block of doc.blocks || []) {
+      if (block.type === 'image' && block.image) used.add(String(block.image))
+      if (block.type === 'gallery') {
+        for (const item of block.items || []) {
+          if (item.image) used.add(String(item.image))
+        }
+      }
+    }
+  }
+  return used
+}
+
+export async function pruneKnownPurgedImages(mediaRoot) {
+  const all = await Image.find().lean()
+  const candidates = all.filter((img) => PURGED_ORIGINAL_FILENAMES.has((img.legacyUrl || '').split('/').pop()))
+  if (!candidates.length) return { pruned: 0, ids: [] }
+
+  const [articles, pages] = await Promise.all([
+    Article.find().select('cover blocks').lean(),
+    Page.find().select('blocks').lean(),
+  ])
+  const used = collectUsedImageIds([...articles, ...pages])
+
+  const ids = []
+  for (const img of candidates) {
+    if (used.has(String(img._id))) continue // still referenced somewhere; leave it alone
+    await Promise.all(
+      Object.values(img.variants || {})
+        .filter(Boolean)
+        .map((v) => unlink(join(mediaRoot, v.path)).catch(() => {}))
+    )
+    await Image.deleteOne({ _id: img._id })
+    ids.push(String(img._id))
+  }
+  return { pruned: ids.length, ids }
 }
 
 export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbName }) {
@@ -165,6 +216,7 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
           yearLabel: article.yearLabel,
           yearStart: article.yearStart,
           yearEnd: article.yearEnd,
+          subtitle: article.subtitle || { fr: '', en: '' },
           cover: byLegacyId.get(article.coverLegacyId) || null,
           blocks: resolveBlockImages(article.blocks, byLegacyId),
           legacyWpId: article.legacyWpId,
@@ -190,11 +242,15 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
       pageCount += 1
     }
 
+    const { pruned: imagesPruned } = await pruneKnownPurgedImages(mediaRoot)
+    if (imagesPruned) console.log(`pruned ${imagesPruned} leftover legacy image(s) no longer referenced`)
+
     return {
       images: imported,
       imagesDedupedByContent: dedupedByContent,
       imagesSkippedUnreferenced: skippedUnreferenced,
       imagesSkippedMissingFile: skippedMissingFile,
+      imagesPruned,
       unresolvedRefs: { count: noMediaEntryIds.length, ids: noMediaEntryIds },
       articles: articles.length,
       pages: pageCount,

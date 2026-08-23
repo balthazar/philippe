@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { apiGet, apiSend } from '@/api.js'
 import { routeFor } from '@/routes.js'
 import { useSessionExpired } from './session.js'
@@ -180,7 +180,6 @@ export function ArticleEditor() {
                 </button>
               </span>
             )}
-            <Link to="/admin">Retour aux articles</Link>
           </div>
         </div>
 
