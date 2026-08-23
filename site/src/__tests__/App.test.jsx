@@ -59,6 +59,13 @@ describe('App routing', () => {
   // the public 404, and it must never carry the public <Header>/<Footer>.
   it('renders the admin login at /admin, without the public header', async () => {
     vi.spyOn(api, 'apiGet').mockRejectedValue(Object.assign(new Error('nope'), { status: 401 }))
+    // Resolve the lazily-imported admin chunk BEFORE rendering, so React.lazy
+    // has it in the module cache and settles on the first tick. Without this
+    // the dynamic import races waitFor's 1s default: fine when this file runs
+    // alone, and a reliable failure under full-suite load, where the import
+    // lands around 1050-1200ms. Preloading fixes the race rather than hiding
+    // it behind a longer timeout.
+    await import('@/admin/Admin.jsx')
     renderAt('/admin')
     await waitFor(() => expect(screen.getByLabelText(/mot de passe/i)).toBeInTheDocument())
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
