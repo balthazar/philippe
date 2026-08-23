@@ -100,6 +100,34 @@ describe('Slideshow', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
+  // A free-running setInterval keeps counting through a manual navigation, so
+  // a viewer who clicks next partway through an interval can be advanced
+  // again a moment later by the timer they thought they had just pre-empted.
+  // Every slide the viewer chooses must get the full interval.
+  //
+  // t=5000 is the discriminating instant, and the only one that is: it is
+  // where the ORIGINAL interval would fire if it were still running. Asserting
+  // at a later point proves nothing, because with only two slides the show
+  // cycles back and a stale timer lands on the same image a fresh one would.
+  it('restarts the autoplay countdown when the viewer navigates manually', () => {
+    renderShow()
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(screen.getByAltText('porte')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /suivant|next/i }))
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+
+    // t=5000. The pre-empted timer fires here if it was never cleared, which
+    // would bring 'porte' back as the incoming slide.
+    act(() => { vi.advanceTimersByTime(2000) })
+    expect(screen.queryByAltText('porte')).not.toBeInTheDocument()
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+
+    // t=8000, a full fresh interval after the manual move, does advance.
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(screen.getByAltText('porte')).toBeInTheDocument()
+  })
+
   it('pauses autoplay while the pointer is over the caption and controls', () => {
     renderShow()
     fireEvent.mouseEnter(document.querySelector('.slideshow-chrome'))

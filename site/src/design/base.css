@@ -290,32 +290,54 @@ picture {
   opacity: 1;
 }
 
-/* Crossfade, 600ms: only the outgoing image animates, fading from opaque to
-   transparent to reveal the incoming one underneath. `is-leaving` is added a
-   frame after mount so the browser actually transitions the change instead
-   of jumping straight to the end state.
+/* Slide change in two halves, NOT a crossfade: the outgoing work fades to
+   white over --fade-out-ms, then the incoming one fades up over --fade-in-ms.
+   Works here range from about 0.86 to 1.72 in aspect, so two images at
+   partial opacity coincide over only part of their area and the remainder
+   reads as a ghost of one work protruding past the other. Going through white
+   means the two are never on screen together.
 
-   z-index is load-bearing, not decoration. Both images are absolutely
-   positioned in the same stage and the outgoing one is rendered FIRST in the
-   DOM, so without an explicit stacking order the incoming image paints on
-   top of it at full opacity. Fading out an image that is already covered by
-   an opaque one is invisible: only the sliver around the edges, where two
-   different aspect ratios fail to overlap, ever shows the transition. That
-   is exactly the bug this line fixes, and note that jsdom cannot see paint
-   order at all -- the suite was fully green while the fade did nothing on
-   screen, so this one is only ever caught by looking at it. */
+   z-index is load-bearing. Both images are absolutely positioned in the same
+   stage and the outgoing one is rendered FIRST in the DOM, so without an
+   explicit stacking order the incoming image would paint on top of it and the
+   fade-out would happen invisibly behind an opaque image. Note that jsdom
+   cannot see paint order at all: the suite was fully green while the fade did
+   nothing on screen, so this is only ever caught by looking at it.
+
+   `is-leaving` / `is-entered` are applied a frame after mount so the browser
+   transitions the change instead of jumping straight to the end state. The
+   incoming image carries a transition-delay of --fade-out-ms so that a single
+   class flip drives both halves in sequence.
+
+   Kept in sync by hand with FADE_OUT_MS / FADE_IN_MS in Slideshow.jsx. */
 .slideshow-image--outgoing {
   z-index: 1;
-  transition: opacity 600ms ease-in-out;
+  transition: opacity var(--fade-out-ms) ease-in;
 }
 
 .slideshow-image--outgoing.is-leaving {
   opacity: 0;
 }
 
+.slideshow-image--entering {
+  opacity: 0;
+  transition: opacity var(--fade-in-ms) ease-out var(--fade-out-ms);
+}
+
+.slideshow-image--entering.is-entered {
+  opacity: 1;
+}
+
+/* Reduced motion: the component already swaps slides instantly and never
+   mounts an outgoing image, but the incoming image still gets its class, so
+   both transitions must be neutralised or the new work would fade up alone. */
 @media (prefers-reduced-motion: reduce) {
-  .slideshow-image--outgoing {
+  .slideshow-image--outgoing,
+  .slideshow-image--entering {
     transition: none;
+  }
+  .slideshow-image--entering {
+    opacity: 1;
   }
 }
 

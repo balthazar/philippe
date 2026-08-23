@@ -39,6 +39,13 @@
      to the main .container (client-confirmed), so the header and every
      page share the same 60px left/right edge. */
   --header-height: 5rem;
+
+  /* Slide change, in two halves rather than a crossfade. Together they total
+     the 600ms the client specified. Mirrored by FADE_OUT_MS / FADE_IN_MS in
+     Slideshow.jsx, which needs the total to know when to unmount the
+     outgoing image. */
+  --fade-out-ms: 300ms;
+  --fade-in-ms: 300ms;
   --page-gutter: 3.75rem;
 
   /* Chosen against the real archive: tall enough that the tallest works

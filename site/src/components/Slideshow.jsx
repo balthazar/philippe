@@ -7,7 +7,13 @@ const largeVariant = (slide) => slide?.image?.variants?.large
 
 // Client decision: crossfade, 600ms. Not a slide, not a fade through white,
 // no Ken Burns pan/zoom.
-const TRANSITION_MS = 600
+// Two halves of the slide change: the outgoing work fades to white, then the
+// incoming one fades up from it. Kept in sync by hand with --fade-out-ms and
+// --fade-in-ms in base.css; CSS drives the animation, JS only needs to know
+// the total so it knows when to unmount the outgoing image.
+const FADE_OUT_MS = 300
+const FADE_IN_MS = 300
+const TRANSITION_MS = FADE_OUT_MS + FADE_IN_MS
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false)
@@ -54,17 +60,30 @@ export function Slideshow({ slides = [], interval = 3000 }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [move])
 
+  // setTimeout keyed on the current slide, not a free-running setInterval:
+  // the effect re-runs on every slide change, so a manual arrow press, a
+  // keyboard nav or a resumed pause all start a fresh full interval. With an
+  // interval, a viewer who clicked next partway through would be advanced
+  // again by the timer they had just pre-empted, sometimes milliseconds
+  // later. Every slide the viewer lands on gets the whole `interval`.
   useEffect(() => {
     if (reduced || paused || count < 2) return undefined
-    const timer = setInterval(() => move(1), interval)
-    return () => clearInterval(timer)
-  }, [reduced, paused, count, interval, move])
+    const timer = setTimeout(() => move(1), interval)
+    return () => clearTimeout(timer)
+  }, [reduced, paused, count, interval, move, safeIndex])
 
-  // Crossfade: track the previous slide as `outgoing` for TRANSITION_MS while
-  // `currentSlide` renders underneath at full opacity, then drop it. Only the
-  // outgoing image animates (fading 1 -> 0), which reads as a crossfade
-  // because the incoming slide is already opaque beneath it.
+  // Fade out, then fade in -- deliberately NOT a true crossfade. Works in this
+  // archive have very different aspect ratios (roughly 0.86 to 1.72), so two
+  // images overlapping at partial opacity only coincide over part of their
+  // area: the rest reads as a ghost of one work sticking out past the edges of
+  // the other. Fading the outgoing work fully to white first, then bringing
+  // the incoming one up, means the two are never visible at once.
+  //
+  // Split evenly: FADE_OUT_MS then FADE_IN_MS, together TRANSITION_MS. The
+  // incoming image's CSS carries a transition-delay equal to the fade-out, so
+  // both halves are driven by the single class flip below.
   const [outgoing, setOutgoing] = useState(null)
+  const [entering, setEntering] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const prevSlideRef = useRef(null)
   const outgoingTimeoutRef = useRef(null)
@@ -80,11 +99,13 @@ export function Slideshow({ slides = [], interval = 3000 }) {
     if (!prev || !currentSlide || prev === currentSlide || reduced) {
       setOutgoing(null)
       setLeaving(false)
+      setEntering(false)
       return undefined
     }
 
     setOutgoing(prev)
     setLeaving(false)
+    setEntering(true)
     // Let the outgoing image paint once at full opacity before flipping the
     // class that transitions it to 0, so the browser actually animates the
     // change instead of jumping straight to it.
@@ -95,6 +116,7 @@ export function Slideshow({ slides = [], interval = 3000 }) {
     outgoingTimeoutRef.current = setTimeout(() => {
       setOutgoing(null)
       setLeaving(false)
+      setEntering(false)
       outgoingTimeoutRef.current = null
     }, TRANSITION_MS)
 
@@ -148,7 +170,7 @@ export function Slideshow({ slides = [], interval = 3000 }) {
         )}
         <img
           key={`current-${currentLarge?.path}`}
-          className="slideshow-image"
+          className={`slideshow-image${entering ? ' slideshow-image--entering' : ''}${entering && leaving ? ' is-entered' : ''}`}
           src={src(currentLarge)}
           alt={slide.image?.alt || ''}
           width={currentLarge?.width}
