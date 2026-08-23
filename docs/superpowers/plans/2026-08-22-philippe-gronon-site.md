@@ -33,6 +33,13 @@ Every task's requirements implicitly include this section. Values are copied ver
 - **Image sizing is exactly one setting.** The gallery grid: `columns` on each gallery block, 1 to 6, and `span` on each item, 1 to 6, being how many of those columns that image occupies. A span is clamped to the block's column count at render time, so an editor cannot produce a broken grid by lowering `columns` after setting a wide span.
 - **There is no curation flag.** Each work has exactly one image, its `cover`, and that same image serves both the archive grid and the homepage slideshow. The slideshow is simply the most recent published works; nothing is curated twice and nothing is toggled. An earlier draft had a `featured` ("en avant") boolean driving slideshow membership and a double-width card; it was removed as unnecessary.
 - Regexes must never contain literal combining or invisible Unicode characters. Write them as ASCII escape sequences so the source stays reviewable and diff-safe.
+- **The frontend paths written in Tasks 14-24 below are STALE. This bullet is authoritative; the task bodies are not.** The frontend was moved and flattened after those tasks were written. Translate every path before acting on it:
+  - `src/public-site/components/X` and `src/public-site/pages/X` are now `site/src/components/X` and `site/src/pages/X`. There is no `public-site` directory.
+  - `src/lib/X` (frontend only) is now `site/src/X`. `lib/` was flattened one level up, so `src/lib/api.js` is `site/src/api.js`. **`api/src/lib/**` is NOT affected and remains correct as written.**
+  - `src/design/`, `src/admin/`, `src/main.jsx`, `src/App.jsx`, `src/setupTests.js` are all under `site/` now: `site/src/design/`, and so on.
+  - Frontend imports use the `@/` alias, resolving to `site/src/`: `import { Header } from '@/components/Header.jsx'`. The API uses Node subpath imports (`#`). Any relative import shown in a task body (`../../lib/foo.js`) should be written with the alias instead.
+  - Frontend commands run from `site/`, not the repo root.
+  The paths were left unrewritten on purpose: the task bodies also contain `src=` attributes, `srcSet`, a `{src(` destructure, and a Dockerfile `COPY api/src ./src`, so a mechanical find-and-replace produces confidently-wrong paths rather than obviously-broken ones.
 
 ---
 
