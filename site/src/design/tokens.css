@@ -49,17 +49,26 @@
   --card-frame-height: 18rem;
 
   /* Full-bleed homepage slideshow: the image spans the viewport width, so
-     only height needs a cap. Checked against the real works archive (GET
-     /api/articles?category=works): cover aspect ratios (width/height) run
-     from ~0.86 (Observatoires, the tallest) to ~1.72 (the widest,
-     Bibliothèque de l'Assemblée nationale de France's blackboard-like
-     catalogue), the same range --card-frame-height above was chosen
-     against. min() caps two ways: 68dvh leaves room, below a 100dvh
-     viewport, for the header, the caption, and the prev/count/next
-     controls without scrolling; 42rem (672px) stops the image from
-     ballooning on very tall/4K screens where 68dvh alone would still be
-     enormous. dvh rather than vh: vh is locked to the initial viewport and
-     does not shrink when a mobile browser's address bar is on-screen,
-     which can leave the controls just below the fold. */
-  --slide-max-height: min(68dvh, 42rem);
+     only height needs a cap, and that cap should let width become the
+     binding constraint whenever the geometry allows it -- the client's
+     "full bleed, edge to edge" instruction means big, not capped at a
+     comfortable-looking size. So this is 100dvh minus the chrome that
+     actually surrounds the slide, not an arbitrary fraction of the
+     viewport:
+       - var(--header-height) (5rem): the sticky header above the slide.
+       - 4.625rem: the caption + prev/count/next controls block below the
+         image, real-measured via getBoundingClientRect() in the browser
+         at 1440x900 (image bottom to controls bottom = 73.8px = 4.61rem,
+         rounded up to 4.625rem/74px rather than down, so rounding can't
+         clip the controls). Not estimated.
+       - var(--space-2) (1rem): breathing room under the controls so they
+         don't sit flush against the bottom edge of the viewport.
+     No 42rem-style ceiling: that was this component's own earlier
+     invention, not a client requirement, and it was the one thing
+     discarding height the client explicitly asked to use (on a
+     1200px-tall viewport it threw away ~150px). dvh rather than vh: vh is
+     locked to the initial viewport and does not shrink when a mobile
+     browser's address bar is on-screen, which can leave the controls just
+     below the fold. */
+  --slide-max-height: calc(100dvh - var(--header-height) - 4.625rem - var(--space-2));
 }
