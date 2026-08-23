@@ -232,36 +232,85 @@ picture {
    spans the full body width. Deliberately not width: 100vw, since 100vw
    includes the scrollbar's own width, which on a desktop browser with a
    visible scrollbar overflows the body horizontally and adds a spurious
-   scrollbar at the bottom of the page. */
+   scrollbar at the bottom of the page.
+
+   The slideshow is a flex column that owns exactly the space below the
+   header (100dvh minus --header-height; dvh rather than vh so a mobile
+   browser's address bar showing or hiding doesn't leave the controls just
+   below the fold). The image stage below is the only flexible child
+   (flex: 1 1 auto), so however many lines the caption wraps to, it and the
+   controls take their natural height and the image absorbs whatever is
+   left -- no fixed measurement of the chrome is needed or kept. */
 .slideshow {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--header-height));
   position: relative;
   margin: 0 0 var(--space-4);
   text-align: center;
 }
 
+/* The image stage: the flexible child that absorbs whatever height the
+   caption and controls below don't use. min-height: 0 is required -- a
+   flex item's default min-height is auto, which refuses to shrink the
+   item below its content's intrinsic size, and without it the image would
+   push the stage (and the whole page) taller than the space budgeted for
+   it, exactly the overflow this structure exists to prevent. */
+.slideshow-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* Natural aspect, no background panel behind the image: the client
    explicitly rejected a tinted/grey letterbox on the works page, and the
    same rule applies here. object-fit: contain plus the max-width/max-height
-   pair below keep the whole image visible, uncropped, on plain white,
-   whether the work is very wide (a blackboard, aspect ~1.7) or tall and
-   narrow (a thermometer, aspect ~0.86) -- see --slide-max-height in
-   tokens.css for how the height cap was chosen. */
-.slideshow img {
-  display: block;
-  margin: 0 auto;
+   pair keep the whole image visible, uncropped, on plain white, whether the
+   work is very wide (a blackboard, aspect ~1.7) or tall and narrow (a
+   thermometer, aspect ~0.86). Both the outgoing and incoming slide occupy
+   the same cell (absolutely positioned, centered via inset: 0 + margin:
+   auto) so neither moves during the crossfade below. */
+.slideshow-image {
+  position: absolute;
+  inset: 0;
+  margin: auto;
   max-width: 100%;
-  max-height: var(--slide-max-height);
+  max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
+  opacity: 1;
+}
+
+/* Crossfade, 600ms: only the outgoing image animates, fading from opaque to
+   transparent over the incoming one (already opaque underneath), which
+   reads as a crossfade without needing to animate both layers. `is-leaving`
+   is added a frame after mount so the browser actually transitions the
+   change instead of jumping straight to the end state. */
+.slideshow-image--outgoing {
+  transition: opacity 600ms ease-in-out;
+}
+
+.slideshow-image--outgoing.is-leaving {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slideshow-image--outgoing {
+    transition: none;
+  }
 }
 
 /* The caption and controls stay readable and centered under the image
    rather than stretching to the full-bleed viewport edge: padding-inline
    matches the page gutter used everywhere else, so a long caption wraps
-   the same distance from the edge as body copy does on every other page. */
+   the same distance from the edge as body copy does on every other page.
+   flex: 0 0 auto so each takes its natural height, however many lines the
+   caption wraps to -- see .slideshow-stage above for how that height is
+   reclaimed from the image rather than overflowing the page. */
 .slide-caption {
   display: inline-block;
+  flex: 0 0 auto;
   margin-top: var(--space-2);
   padding-inline: var(--page-gutter);
   font-family: var(--font-chrome);
@@ -274,6 +323,7 @@ picture {
 
 .slideshow-controls {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
