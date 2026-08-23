@@ -165,6 +165,45 @@ describe('mapElementorToBlocks', () => {
   })
 })
 
+// A lone heading is legitimately removed by dropTrailingHeadings (it would be
+// labelling content that no longer exists), so each fixture below pairs the
+// heading with a following text block to keep it in the output.
+const body = (headingSettings) => [
+  widget('heading', headingSettings),
+  widget('text-editor', { editor: '<p>Contenu</p>' }),
+]
+
+describe('plain-text entity decoding', () => {
+  // sanitize-html decodes entities while parsing, then re-encodes the three
+  // characters that are unsafe in HTML text (& < >) on the way out. That is
+  // correct for HTML output and wrong for these fields: heading and specs
+  // values are stored and rendered as PLAIN TEXT, never through
+  // dangerouslySetInnerHTML, so anything left escaped reaches the page
+  // literally. The real biography page shipped "BOURSES &amp;amp; RESIDENCES".
+  it('decodes an escaped ampersand in a heading', () => {
+    const blocks = mapElementorToBlocks(body({ title: 'BOURSES &amp; RÉSIDENCES' }), null, {})
+    expect(blocks[0].value.fr).toBe('BOURSES & RÉSIDENCES')
+  })
+
+  it('decodes escaped angle brackets in a heading', () => {
+    const blocks = mapElementorToBlocks(body({ title: '&lt;Verso&gt;' }), null, {})
+    expect(blocks[0].value.fr).toBe('<Verso>')
+  })
+
+  // Order matters: &amp; must be reversed LAST. Reversing it first would turn
+  // "&amp;lt;" into "&lt;" and then into "<", collapsing two levels of
+  // escaping instead of one and inventing markup that was never in the source.
+  it('unescapes exactly one level, so a literal entity name survives', () => {
+    const blocks = mapElementorToBlocks(body({ title: '&amp;lt; is how you write &amp;amp;lt;' }), null, {})
+    expect(blocks[0].value.fr).toBe('&lt; is how you write &amp;lt;')
+  })
+
+  it('leaves text with no entities untouched', () => {
+    const blocks = mapElementorToBlocks(body({ title: 'Observatoires' }), null, {})
+    expect(blocks[0].value.fr).toBe('Observatoires')
+  })
+})
+
 describe('dropTrailingHeadings (via mapElementorToBlocks)', () => {
   it('drops a single trailing heading', () => {
     const nodes = [

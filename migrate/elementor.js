@@ -58,7 +58,25 @@ export function liftSpecs(html) {
   return parts.length ? parts : [{ type: 'text', html }]
 }
 
-const stripTags = (s) => sanitizeHtml(s, { allowedTags: [], allowedAttributes: {} }).trim()
+// sanitize-html decodes entities while parsing and then re-encodes the three
+// characters that are unsafe in HTML text (& < >) on the way out. That is
+// correct when the output is HTML, and wrong here: every stripTags caller
+// stores a field that is rendered as PLAIN TEXT (heading values, specs terms
+// and values, button labels), deliberately never through
+// dangerouslySetInnerHTML, because those fields are not sanitized on write.
+// Left as-is, the biography page shipped a heading reading
+// "BOURSES &amp;amp; RESIDENCES". Note &quot; and numeric entities need no
+// handling: sanitize-html already returns those decoded.
+//
+// &amp; is reversed LAST and that ordering is load-bearing. Reversing it
+// first would turn "&amp;lt;" into "&lt;" and then into "<", collapsing two
+// levels of escaping instead of one and inventing markup the source never had.
+const unescapeTextEntities = (s) => s
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&amp;/g, '&')
+
+const stripTags = (s) => unescapeTextEntities(sanitizeHtml(s, { allowedTags: [], allowedAttributes: {} })).trim()
 
 function galleryIds(settings) {
   // `query_manual_attachment` is how every real wpr-media-grid widget in the
