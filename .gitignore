@@ -13,3 +13,4 @@ migrate/uploads/
 
 # docker-compose.dev.yml volume mounts
 .dev/
+.gstack/
