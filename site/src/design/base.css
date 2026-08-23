@@ -169,6 +169,19 @@ picture {
   font-size: var(--text-l);
 }
 
+/* The 42rem reading measure lives on the block elements themselves (see
+   .block-text / .block-heading / .block-specs below), not on this wrapper, so
+   uncapping .page-intro alone does nothing at all -- the copy stays in a
+   narrow column ranged left inside a full-width parent. Article body copy
+   keeps that measure, because long lines of running text are genuinely hard
+   to read; a short page lede set centred across the page is a different
+   thing and opts out. */
+.page-intro .block-text,
+.page-intro .block-heading,
+.page-intro .block-specs {
+  max-width: none;
+}
+
 .category-section {
   margin-top: var(--space-4);
 }
