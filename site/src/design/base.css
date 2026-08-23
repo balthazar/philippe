@@ -39,7 +39,7 @@ picture {
 .container {
   max-width: var(--container);
   margin-inline: auto;
-  padding-inline: var(--gutter);
+  padding-inline: var(--page-gutter);
 }
 
 .site-header {
@@ -86,6 +86,14 @@ picture {
   letter-spacing: 0.06em;
 }
 
+/* Fade the hover colour change instead of snapping it. On the resting rule
+   (not inside :hover) so the fade is symmetric in and out; scoped away from
+   .active with :not() because the current-page link's colour never changes
+   (it's --ink at rest and on hover alike), so it has nothing to transition. */
+.site-header nav a:not(.active) {
+  transition: color 150ms ease-in;
+}
+
 .site-header nav a:hover,
 .site-header nav a.active {
   color: var(--ink);
@@ -93,15 +101,17 @@ picture {
 
 /* The only separator in the header: a single rule between Contact and FR/EN,
    drawn as a border rather than a literal "|" character so it is not
-   announced by screen readers or selectable as text. */
+   announced by screen readers or selectable as text. .site-header's own
+   `gap` (--space-3) already spaces the rule away from `nav` on its left;
+   padding-left is set to that same --space-3 (not the smaller --space-2)
+   so FR/EN sits the same distance from the rule on its right, centring the
+   rule in the gap instead of crowding it toward `nav`. */
 .site-header .lang-switch {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  /* .site-header's own `gap` already spaces this away from `nav`; this
-     padding is only to keep FR/EN clear of the border it sits against. */
-  padding-left: var(--space-2);
-  border-left: 1px solid var(--rule);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--ink-soft);
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
@@ -109,6 +119,12 @@ picture {
 .site-header .lang-code {
   text-decoration: none;
   color: var(--ink-soft);
+}
+
+/* Same fade as the nav links, same reasoning for excluding .active: see the
+   comment on .site-header nav a:not(.active) above. */
+.site-header .lang-code:not(.active) {
+  transition: color 150ms ease-in;
 }
 
 .site-header .lang-code.active {

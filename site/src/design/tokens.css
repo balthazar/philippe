@@ -35,10 +35,9 @@
      vertically centred inside it, and 60px of horizontal padding. Named
      here (rather than left as bare px in the rule) so the sticky
      .category-section heading offset below can reference the real header
-     height instead of a hand-measured guess. --page-gutter is currently
-     used only by the header; the main .container still uses --gutter, its
-     own separate clamp, until the client confirms whether the page as a
-     whole should move to this 60px figure too. */
+     height instead of a hand-measured guess. --page-gutter is also applied
+     to the main .container (client-confirmed), so the header and every
+     page share the same 60px left/right edge. */
   --header-height: 5rem;
   --page-gutter: 3.75rem;
 
