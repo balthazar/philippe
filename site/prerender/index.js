@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { SEGMENTS } from '../src/routes.js'
+import { SEGMENTS, routeFor } from '../src/routes.js'
 
 // 8080 is the in-cluster port production uses (Traefik ingress routes /api
 // there). Locally the API runs on 8090 (site/vite.config.js's dev proxy
@@ -34,6 +34,7 @@ export function collectRoutes({ articles, pageKeys }) {
 const SITE_NAME = 'Philippe Gronon'
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
 const routeLang = (route) => (route === '/en' || route.startsWith('/en/') ? 'en' : 'fr')
+const sectionFor = (category) => (category === 'exhibitions' ? 'exhibitions' : 'works')
 
 // Reads one language out of a {fr, en} localized field, falling back to
 // French, and always to '' (never to the field object itself: title/
@@ -57,12 +58,19 @@ function pageKeyForRoute(route) {
   return null
 }
 
+// Shared by headFor and preloadFor: which merged article record (if any) a
+// route belongs to. A route matches on either language's slug, since the fr
+// and en URLs for the same article share nothing but that slug segment.
+function findArticleMatch(route, content) {
+  return (content.articles || []).find(
+    (a) => route.endsWith(`/${a.slug?.fr}`) || (a.slug?.en && route.endsWith(`/${a.slug.en}`))
+  )
+}
+
 /** Builds the per-route head tags: title, description, canonical, hreflang, OG. */
 export function headFor(route, content, site = SITE) {
   const lang = routeLang(route)
-  const match = (content.articles || []).find(
-    (a) => route.endsWith(`/${a.slug?.fr}`) || (a.slug?.en && route.endsWith(`/${a.slug.en}`))
-  )
+  const match = findArticleMatch(route, content)
 
   const tags = []
   let description = ''
@@ -73,7 +81,7 @@ export function headFor(route, content, site = SITE) {
     tags.push(`<title>${esc(year ? `${title}, ${year}` : title)} | ${SITE_NAME}</title>`)
     description = localize(match.seoDescription, lang)
 
-    const section = match.category === 'exhibitions' ? 'exhibitions' : 'works'
+    const section = sectionFor(match.category)
     if (match.slug?.fr) {
       const fr = `${site}/${SEGMENTS[section].fr}/${match.slug.fr}`
       tags.push(`<link rel="alternate" hreflang="fr" href="${fr}">`)
@@ -107,16 +115,46 @@ export function headFor(route, content, site = SITE) {
   return tags.join('\n')
 }
 
+// Fix round 1: an article page's language-toggle link (Header, via
+// ArticleDetail's onTranslatedPath) used to be wrong in the prerendered HTML
+// until a client-side effect corrected it after hydration, because the
+// counterpart slug was only ever known at fetch time, never at render time.
+// But headFor's `content.articles` already carries both languages' slugs for
+// every article (see mergeArticleLists below), so the counterpart route can
+// be computed here and handed to entry-server.jsx's render() as preload data,
+// under the exact key ArticleDetail's usePageData call reads
+// (`translatedPath:<section>:<slug>:<lang>`). See src/main.jsx for how this
+// same value reaches the client at hydration time (window.__PRELOAD__), which
+// is what keeps this from becoming a hydration mismatch instead of a fix.
+export function preloadFor(route, content) {
+  const lang = routeLang(route)
+  const match = findArticleMatch(route, content)
+  if (!match) return {}
+
+  const section = sectionFor(match.category)
+  const otherLang = lang === 'fr' ? 'en' : 'fr'
+  const ownSlug = match.slug?.[lang]
+  const otherSlug = match.slug?.[otherLang]
+  if (!ownSlug || !otherSlug) return {}
+
+  return { [`translatedPath:${section}:${ownSlug}:${lang}`]: routeFor(section, otherLang, otherSlug) }
+}
+
+// `<` -> < also escapes `</script>`, so embedded preload JSON can't
+// terminate the script tag it's embedded in (or smuggle markup into it).
+const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
+
 // Pure string transform, unit-tested directly (prerender/__tests__/routes.test.js)
 // against generated-file contents rather than a live `document`: an earlier
 // <html lang> test on this project passed for the wrong reason because it
 // read a shared `document` that state bled into between cases. This has no
 // such shared, mutable state to bleed.
-export function pageHtml(route, template, head, bodyHtml) {
+export function pageHtml(route, template, head, bodyHtml, preload = {}) {
   return template
     .replace(/<html lang="[^"]*"/, `<html lang="${routeLang(route)}"`)
     .replace('</head>', `${head}\n</head>`)
     .replace('<div id="root"></div>', `<div id="root">${bodyHtml}</div>`)
+    .replace('</body>', `<script>window.__PRELOAD__=${safeJson(preload)}</script>\n</body>`)
 }
 
 async function fetchJson(path) {
@@ -132,7 +170,20 @@ async function fetchJson(path) {
 // collectRoutes/headFor need, without ever reading the admin API or Mongo
 // directly (controller correction 3): every one of these calls hits the same
 // published-only public endpoints the site itself uses.
-async function fetchArticles() {
+//
+// Fix round 1: this used to also zero out `slug.en` whenever it resolved to
+// the same string as `slug.fr`, on the theory that an identical slug meant
+// "no translation exists" (the API falls back to French when English is
+// empty, so it can't tell the two cases apart). That was wrong: on this
+// site, an identical fr/en slug is the *normal* case for content the client
+// said doesn't need translating (e.g. exhibition titles), not a signal of a
+// missing page. It silently dropped 28 real, published English routes (all
+// 25 exhibitions, plus 3 works) from the site and the sitemap. There is
+// nothing to infer here: fr and en are always fetched and kept exactly as
+// the API returns them, so /oeuvres/x and /en/works/x are always both
+// emitted, matching the running site's own EN toggle, which shows the same
+// French text under lang="en" whenever no translation exists.
+export function mergeArticleLists(frItems, enItems) {
   const merged = new Map()
   const put = (item, lang) => {
     const id = String(item._id)
@@ -149,41 +200,26 @@ async function fetchArticles() {
     entry.yearLabel[lang] = item.yearLabel
     merged.set(id, entry)
   }
+  frItems.forEach((item) => put(item, 'fr'))
+  enItems.forEach((item) => put(item, 'en'))
+  return [...merged.values()]
+}
 
+async function fetchArticles() {
+  const merged = []
   for (const category of CATEGORIES) {
     const [fr, en] = await Promise.all([
       fetchJson(`/articles?category=${category}&lang=fr`),
       fetchJson(`/articles?category=${category}&lang=en`),
     ])
-    fr.items.forEach((item) => put(item, 'fr'))
-    en.items.forEach((item) => put(item, 'en'))
-  }
-
-  const articles = [...merged.values()]
-
-  // The public API always resolves a localized field to one plain string per
-  // request, falling back to French whenever English is empty
-  // (api/src/lib/localize.js: `field[lang] || field.fr`), and it never
-  // exposes the raw {fr, en} pair (locked by Task 9: "every response is
-  // language-resolved, plain strings, not {fr, en}", per
-  // src/pages/ArticleDetail.jsx's own comment on this). So an article with
-  // no real English slug is indistinguishable, through this API, from one
-  // whose English slug is coincidentally identical to its French one.
-  // Confirmed against the live local data: 3 of 34 "works" articles resolve
-  // to the exact same slug for both languages. Treating "identical resolved
-  // slug" as "no translation" is a heuristic, not a certainty, but it fails
-  // toward the safer outcome: skipping a would-be English URL rather than
-  // publishing an English page whose content is silently just the French
-  // article again. See task-22-report.md for how this was verified.
-  for (const a of articles) {
-    if (a.slug.en && a.slug.en === a.slug.fr) a.slug.en = ''
+    merged.push(...mergeArticleLists(fr.items, en.items))
   }
 
   // seoDescription isn't in the list projection (LIST_FIELDS in
   // api/src/routes/public.js), only on the single-article endpoint, so it
   // takes one more published-only request per article, per language.
   await Promise.all(
-    articles.map(async (a) => {
+    merged.map(async (a) => {
       const slug = a.slug.fr || a.slug.en
       const [fr, en] = await Promise.all([
         fetchJson(`/articles/${slug}?lang=fr`).catch(() => null),
@@ -193,7 +229,7 @@ async function fetchArticles() {
     })
   )
 
-  return articles
+  return merged
 }
 
 async function fetchPages() {
@@ -234,8 +270,9 @@ async function main() {
   const routes = collectRoutes({ articles: content.articles, pageKeys: PAGE_KEYS })
 
   for (const route of routes) {
-    const { html } = render(route, {})
-    const page = pageHtml(route, template, headFor(route, content, SITE), html)
+    const preload = preloadFor(route, content)
+    const { html } = render(route, preload)
+    const page = pageHtml(route, template, headFor(route, content, SITE), html, preload)
     const out = join(DIST, route === '/' ? 'index.html' : `${route.replace(/^\//, '')}/index.html`)
     await mkdir(dirname(out), { recursive: true })
     await writeFile(out, page)

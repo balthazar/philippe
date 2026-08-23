@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { LangProvider } from '@/lang.jsx'
+import { PreloadProvider } from '@/preload.jsx'
 import { Header } from '../Header.jsx'
 
 const renderAt = (path) =>
@@ -42,6 +43,23 @@ describe('Header', () => {
   it('links the inactive language to the counterpart path', () => {
     renderAt('/oeuvres')
     expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/works')
+  })
+
+  // Fix round 1 (Task 22): on an article page, the naive counterpartPath
+  // guess (same slug, other language prefix) is wrong whenever the two
+  // languages have different slugs. Without the `translatedPath` prop
+  // (which real ArticleDetail only ever sets from a *client* effect --
+  // never during SSR), this pins that the preload path, read straight from
+  // context, is what makes the link right on the very first render instead.
+  it('prefers a preloaded translatedPath over the naive same-slug guess, with no translatedPath prop set', () => {
+    render(
+      <MemoryRouter initialEntries={['/oeuvres/tableaux-electriques-2007-2010']}>
+        <PreloadProvider value={{ 'translatedPath:works:tableaux-electriques-2007-2010:fr': '/en/works/switchboards-2007-2010' }}>
+          <LangProvider><Header /></LangProvider>
+        </PreloadProvider>
+      </MemoryRouter>
+    )
+    expect(screen.getByRole('link', { name: 'EN' })).toHaveAttribute('href', '/en/works/switchboards-2007-2010')
   })
 
   it('sets the document language to match the route', () => {

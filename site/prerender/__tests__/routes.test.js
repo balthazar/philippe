@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { collectRoutes, headFor, pageHtml } from '../index.js'
+import { collectRoutes, headFor, pageHtml, mergeArticleLists, preloadFor } from '../index.js'
 
 describe('collectRoutes', () => {
   it('emits both languages for every static page and article', () => {
@@ -21,10 +21,51 @@ describe('collectRoutes', () => {
     expect(routes.filter((r) => r.startsWith('/en/works/'))).toEqual([])
   })
 
+  // Fix round 1: a real, live-data bug. "Identical fr/en slug" was being
+  // read as "no English translation exists" and silently dropped the
+  // English route for 28 published articles (all 25 exhibitions, plus 3
+  // works) -- the client explicitly said some titles (exhibition years,
+  // proper names like "Martyrs") don't need translating, so an identical
+  // slug in both languages is the *normal* case here, not a missing-page
+  // signal. Both routes must exist regardless of whether the slug strings
+  // happen to match.
+  it('emits both routes for an article whose French and English slugs are identical', () => {
+    const routes = collectRoutes({
+      articles: [{ category: 'exhibitions', slug: { fr: 'martyrs-2015-2021', en: 'martyrs-2015-2021' } }],
+      pageKeys: [],
+    })
+    expect(routes).toContain('/expositions/martyrs-2015-2021')
+    expect(routes).toContain('/en/exhibitions/martyrs-2015-2021')
+  })
+
   it('never emits an admin or not-found route', () => {
     const routes = collectRoutes({ articles: [], pageKeys: ['biography'] })
     expect(routes.some((r) => r.startsWith('/admin'))).toBe(false)
     expect(routes).not.toContain('/404')
+  })
+})
+
+// Fix round 1: mergeArticleLists is where the same-slug-implies-untranslated
+// heuristic used to live (it zeroed out `slug.en` whenever it equalled
+// `slug.fr`). It no longer infers anything -- it keeps exactly what the
+// public API returned for each language, even when the two calls happen to
+// resolve to the same string (the API itself falls back fr -> en when a
+// translation is missing, so an identical slug there is expected, not a
+// signal to act on).
+describe('mergeArticleLists', () => {
+  it('keeps an identical fr/en slug rather than treating it as untranslated', () => {
+    const frItems = [{ _id: 'a1', category: 'exhibitions', slug: 'martyrs-2015-2021', title: 'Martyrs', yearLabel: '2015-2021' }]
+    const enItems = [{ _id: 'a1', category: 'exhibitions', slug: 'martyrs-2015-2021', title: 'Martyrs', yearLabel: '2015-2021' }]
+    const [merged] = mergeArticleLists(frItems, enItems)
+    expect(merged.slug).toEqual({ fr: 'martyrs-2015-2021', en: 'martyrs-2015-2021' })
+  })
+
+  it('merges distinct fr and en list entries for the same article by _id', () => {
+    const frItems = [{ _id: 'a1', category: 'works', slug: 'tableaux-electriques-2007-2010', title: 'Tableaux Électriques', yearLabel: '2007-2010', cover: { variants: {} } }]
+    const enItems = [{ _id: 'a1', category: 'works', slug: 'switchboards-2007-2010', title: 'Switchboards', yearLabel: '2007-2010', cover: { variants: {} } }]
+    const [merged] = mergeArticleLists(frItems, enItems)
+    expect(merged.slug).toEqual({ fr: 'tableaux-electriques-2007-2010', en: 'switchboards-2007-2010' })
+    expect(merged.title).toEqual({ fr: 'Tableaux Électriques', en: 'Switchboards' })
   })
 })
 
@@ -150,6 +191,47 @@ describe('headFor', () => {
   })
 })
 
+// Fix round 1: preloadFor computes the article-page language-toggle href at
+// build time, from the same merged article data headFor uses, so it can be
+// rendered correctly server-side instead of only being correct after a
+// client effect runs post-hydration.
+describe('preloadFor', () => {
+  const content = {
+    articles: [{
+      category: 'works',
+      slug: { fr: 'tableaux-electriques-2007-2010', en: 'switchboards-2007-2010' },
+      title: { fr: 'Tableaux Électriques', en: 'Switchboards' },
+    }],
+  }
+
+  it('preloads the French route with a key-value pair pointing at the English counterpart', () => {
+    const preload = preloadFor('/oeuvres/tableaux-electriques-2007-2010', content)
+    expect(preload).toEqual({
+      'translatedPath:works:tableaux-electriques-2007-2010:fr': '/en/works/switchboards-2007-2010',
+    })
+  })
+
+  it('preloads the English route pointing back at the French counterpart', () => {
+    const preload = preloadFor('/en/works/switchboards-2007-2010', content)
+    expect(preload).toEqual({
+      'translatedPath:works:switchboards-2007-2010:en': '/oeuvres/tableaux-electriques-2007-2010',
+    })
+  })
+
+  // The identical-slug case (Fix round 1): the counterpart still resolves,
+  // it's just the same string under the other language prefix.
+  it('preloads a same-slug article to its own slug under the other language prefix', () => {
+    const sameSlug = { articles: [{ category: 'exhibitions', slug: { fr: 'martyrs-2015-2021', en: 'martyrs-2015-2021' } }] }
+    expect(preloadFor('/expositions/martyrs-2015-2021', sameSlug)).toEqual({
+      'translatedPath:exhibitions:martyrs-2015-2021:fr': '/en/exhibitions/martyrs-2015-2021',
+    })
+  })
+
+  it('returns an empty object for a non-article route', () => {
+    expect(preloadFor('/biographie', content)).toEqual({})
+  })
+})
+
 // Controller correction 2: every prerendered file must carry the correct
 // <html lang>, and the earlier bug on this project was a test that could not
 // tell the attribute being set from it being merely present already. This
@@ -181,5 +263,27 @@ describe('pageHtml', () => {
     const out = pageHtml('/biographie', TEMPLATE, '<meta name="test" content="1">', '<main>content</main>')
     expect(out).toContain('<meta name="test" content="1">\n</head>')
     expect(out).toContain('<div id="root"><main>content</main></div>')
+  })
+
+  // Fix round 1: the client (main.jsx) reads window.__PRELOAD__ to seed the
+  // same data the server used, so its first render matches the server's
+  // exactly -- without this, preloadFor's translatedPath fix would trade a
+  // stale-until-hydration link for an outright hydration mismatch instead.
+  it('embeds the preload data as window.__PRELOAD__ before </body>', () => {
+    const out = pageHtml('/oeuvres/porte', TEMPLATE, '', '', { 'translatedPath:works:porte:fr': '/en/works/door' })
+    expect(out).toContain('<script>window.__PRELOAD__={"translatedPath:works:porte:fr":"/en/works/door"}</script>')
+  })
+
+  it('embeds an empty preload object when none is given', () => {
+    const out = pageHtml('/biographie', TEMPLATE, '', '')
+    expect(out).toContain('<script>window.__PRELOAD__={}</script>')
+  })
+
+  it('escapes "<" in preloaded values so they cannot close the script tag early', () => {
+    const out = pageHtml('/oeuvres/porte', TEMPLATE, '', '', { evil: '</script><script>alert(1)' })
+    expect(out).not.toContain('</script><script>alert(1)')
+    // Escaping the leading "<" is enough: "</script>" cannot start without
+    // it, even though ">" itself is left alone.
+    expect(out).toContain('\\u003c/script>\\u003cscript>alert(1)')
   })
 })

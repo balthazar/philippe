@@ -15,15 +15,22 @@ import '@/design/base.css'
 
 const root = document.getElementById('root')
 
+// prerender/index.js embeds a small, targeted preload object per route (Fix
+// round 1: today just each article's counterpart-language href, not full
+// page content -- see preload.jsx's own comment on why full content preload
+// stays a follow-up) as window.__PRELOAD__, right before </body>. Reading it
+// here is what keeps the client's first render identical to what the server
+// sent: usePageData resolves synchronously from this object on mount, so
+// nothing has to wait for an effect to fetch the same data again, and
+// hydration has nothing to reconcile. A plain `vite build` shell (no
+// prerender) or the dev server never sets this global, so `|| {}` is the
+// correct fallback there.
+const preloaded = window.__PRELOAD__ || {}
+
 const app = (
   <React.StrictMode>
     <BrowserRouter>
-      {/* Task 22's prerender always calls render(route, {}): no content is
-          preloaded today (see preload.jsx), only the shell and route chrome,
-          so this provider's default {} is correct for both the prerendered
-          and the plain-dev-server case. Every page's own usePageData() call
-          fetches its content after mount either way. */}
-      <PreloadProvider value={{}}>
+      <PreloadProvider value={preloaded}>
         <LangProvider>
           <App />
         </LangProvider>
