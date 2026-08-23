@@ -30,7 +30,6 @@ export function checkArticles(articles) {
   const seen = { fr: new Set(), en: new Set() }
   for (const a of articles) {
     const name = a.slug?.fr || String(a._id)
-    if (!a.cover) failures.push(`article ${name} has no cover`)
     if (!a.blocks?.length) failures.push(`article ${name} has no blocks`)
     if (!a.slug?.en) warnings.push(`article ${name} has no English slug`)
     for (const lang of ['fr', 'en']) {
@@ -41,6 +40,42 @@ export function checkArticles(articles) {
     }
   }
   return { failures, warnings }
+}
+
+/**
+ * Coordinator correction, task 29: replaces the old (wrong) "every article
+ * has a cover" invariant, which happily passed a rebuild where all 25
+ * exhibition articles shared a single work's cover image -- a real but bad
+ * WordPress `_thumbnail_id` (see extract.js's coverLegacyIdFor). The real
+ * invariant is category-specific: a `works` article must have a cover, and
+ * that cover must be one of its own gallery images (never a dangling
+ * reference to a picture the article doesn't otherwise show); an
+ * `exhibitions` article -- a set of installation photographs with no single
+ * representative image -- must have no cover at all. Editions and
+ * public-orders are untouched by the bug this replaces and are left
+ * unchecked here, same as before.
+ */
+export function checkCovers(articles) {
+  const failures = []
+  for (const a of articles) {
+    const name = a.slug?.fr || String(a._id)
+    if (a.category === 'exhibitions') {
+      if (a.cover) failures.push(`exhibition article ${name} has a cover (exhibitions should have none)`)
+      continue
+    }
+    if (a.category === 'works') {
+      if (!a.cover) {
+        failures.push(`works article ${name} has no cover`)
+        continue
+      }
+      const coverId = String(a.cover)
+      const inOwnGallery = (a.blocks || []).some(
+        (b) => b.type === 'gallery' && (b.items || []).some((it) => it.image != null && String(it.image) === coverId)
+      )
+      if (!inOwnGallery) failures.push(`works article ${name}'s cover is not among its own gallery images`)
+    }
+  }
+  return { failures }
 }
 
 const PLACEHOLDER_HEADING = 'Ajoutez votre titre ici'
@@ -165,6 +200,8 @@ export async function verify({ mongoUri, dbName = 'philippe', mediaRoot }) {
     const articleCheck = checkArticles(articles)
     failures.push(...articleCheck.failures)
     warnings.push(...articleCheck.warnings)
+
+    failures.push(...checkCovers(articles).failures)
 
     const imageIds = new Set(images.map((img) => String(img._id)))
     failures.push(...checkImageRefs({ articles, pages }, imageIds).failures)

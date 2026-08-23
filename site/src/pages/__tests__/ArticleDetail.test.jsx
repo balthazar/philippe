@@ -198,5 +198,115 @@ describe('ArticleDetail', () => {
       await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument())
       expect(spy).not.toHaveBeenCalledWith('/articles', expect.anything())
     })
+
+    // Task 29, part 1: the timeline already marks its own year current
+    // (checked above) -- an h1 repeating the year beside it is a duplicate
+    // label, not new information.
+    it('renders no year heading for an exhibition article', async () => {
+      mockExhibitionApi()
+      renderAt('/oeuvres/2023')
+      await screen.findByRole('link', { name: '2023' })
+      expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+    })
+
+    // Task 29, part 2 and 3: an exhibition entry is heading, gallery, credit
+    // (the credit reordered in the DATA, not the renderer -- see migrate/
+    // extract.js's moveCreditsAfterGallery); rendered stacked, full width,
+    // in that exact source order -- never the works-style two-column split
+    // (.article-layout), which is what produced the huge vertical gaps the
+    // client saw (a couple of short text lines beside a tall gallery).
+    it('renders an exhibition entry stacked full width, in heading/gallery/credit order, not the works two-column split', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation((path, params = {}) => {
+        if (path === '/articles/2023') {
+          return Promise.resolve({
+            slug: '2023', title: '2023', category: 'exhibitions',
+            blocks: [
+              { type: 'heading', value: 'Rectos / Versos, Galerie Espace Muraille', level: 2 },
+              { type: 'gallery', columns: 3, items: [] },
+              { type: 'text', value: '<p>© Luca Fascini 2023</p>' },
+            ],
+          })
+        }
+        if (path === '/articles') {
+          expect(params.category).toBe('exhibitions')
+          return Promise.resolve({ items: [{ _id: '1', slug: '2023', title: '2023' }], total: 1 })
+        }
+        return Promise.reject(Object.assign(new Error('unexpected path'), { status: 404 }))
+      })
+
+      const { container } = renderAt('/oeuvres/2023')
+      await waitFor(() => expect(screen.getByText('Rectos / Versos, Galerie Espace Muraille')).toBeInTheDocument())
+
+      expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
+
+      const content = container.querySelector('.exhibitions-content')
+      expect([...content.children].map((el) => el.className)).toEqual(['block-heading', 'block-gallery', 'block-text'])
+    })
+
+    // The plain, no-credit shape (10 of the 25 years: just a heading then a
+    // gallery) is exactly what splitArticleLayout's text-then-media
+    // heuristic mistakes for the works shape (a short text column beside a
+    // tall gallery) -- the actual bug the client saw as huge vertical gaps.
+    // Exhibitions must never take that path, regardless of how clean a
+    // single entry's own heading+gallery pair looks in isolation.
+    it('never splits a plain heading+gallery entry into the works two-column layout', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation((path, params = {}) => {
+        if (path === '/articles/2021') {
+          return Promise.resolve({
+            slug: '2021', title: '2021', category: 'exhibitions',
+            blocks: [
+              { type: 'heading', value: 'Musée Untel', level: 2 },
+              { type: 'gallery', columns: 3, items: [] },
+            ],
+          })
+        }
+        if (path === '/articles') {
+          expect(params.category).toBe('exhibitions')
+          return Promise.resolve({ items: [{ _id: '1', slug: '2021', title: '2021' }], total: 1 })
+        }
+        return Promise.reject(Object.assign(new Error('unexpected path'), { status: 404 }))
+      })
+
+      const { container } = renderAt('/oeuvres/2021')
+      await waitFor(() => expect(screen.getByText('Musée Untel')).toBeInTheDocument())
+
+      expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
+      expect(container.querySelector('.article-text-col')).not.toBeInTheDocument()
+      const content = container.querySelector('.exhibitions-content')
+      expect([...content.children].map((el) => el.className)).toEqual(['block-heading', 'block-gallery'])
+    })
+
+    // A year with more than one entry (e.g. "hghg") renders every entry the
+    // same way, one after another down the page -- not split into columns
+    // the moment a second heading/gallery pair appears.
+    it('stacks multiple entries in the same year one after another, in source order', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation((path, params = {}) => {
+        if (path === '/articles/2019') {
+          return Promise.resolve({
+            slug: '2019', title: '2019', category: 'exhibitions',
+            blocks: [
+              { type: 'heading', value: 'Premier lieu', level: 2 },
+              { type: 'gallery', columns: 3, items: [] },
+              { type: 'heading', value: 'Second lieu', level: 2 },
+              { type: 'gallery', columns: 3, items: [] },
+            ],
+          })
+        }
+        if (path === '/articles') {
+          expect(params.category).toBe('exhibitions')
+          return Promise.resolve({ items: [{ _id: '1', slug: '2019', title: '2019' }], total: 1 })
+        }
+        return Promise.reject(Object.assign(new Error('unexpected path'), { status: 404 }))
+      })
+
+      const { container } = renderAt('/oeuvres/2019')
+      await waitFor(() => expect(screen.getByText('Second lieu')).toBeInTheDocument())
+
+      expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
+      const content = container.querySelector('.exhibitions-content')
+      expect([...content.children].map((el) => el.className)).toEqual([
+        'block-heading', 'block-gallery', 'block-heading', 'block-gallery',
+      ])
+    })
   })
 })

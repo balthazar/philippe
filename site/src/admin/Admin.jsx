@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Routes, Route, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './useAuth.js'
 import { Login } from './Login.jsx'
@@ -8,6 +8,7 @@ import { MediaLibrary } from './MediaLibrary.jsx'
 import { PageEditor } from './PageEditor.jsx'
 import { PagesIndex } from './PagesIndex.jsx'
 import { SessionExpiredProvider } from './session.js'
+import { Modal } from '@/components/Modal.jsx'
 import './admin.css'
 
 function AdminNotFound() {
@@ -33,6 +34,9 @@ export default function Admin() {
   // browser confirm() (consistent with ConfirmDelete.jsx): null when no nav
   // is pending, otherwise the function that performs it once confirmed.
   const [pendingNav, setPendingNav] = useState(null)
+  // Task 29, client feedback: initial focus goes on the safe action
+  // (Annuler), never the destructive one (Quitter) -- see Modal.jsx.
+  const cancelNavRef = useRef(null)
 
   const guard = (perform) => (e) => {
     if (unsavedCount > 0) {
@@ -94,21 +98,32 @@ export default function Admin() {
           makes any unsaved field edits moot, so it intentionally skips
           this). Closing the tab, reloading, or typing a new URL are
           covered separately, by ArticleEditor's own beforeunload listener.
+
+          Task 29, client feedback: a real warning modal over a dimmed
+          backdrop, not two small buttons in the header chrome -- built on
+          the same Modal primitive as ConfirmDelete (see Modal.jsx), so
+          there is one place, not two, responsible for focus trapping,
+          focus restore, and treating Escape/backdrop-click as cancel.
         */}
         {pendingNav && (
-          <span className="unsaved-nav-confirm" role="group" aria-label="Modifications non enregistrées">
-            <span className="unsaved-nav-confirm-prompt">Modifications non enregistrées. Quitter quand même ?</span>
-            <button
-              type="button"
-              className="button-danger"
-              onClick={() => { const perform = pendingNav; setPendingNav(null); perform() }}
-            >
-              Quitter
-            </button>
-            <button type="button" className="admin-row-button" onClick={() => setPendingNav(null)}>
-              Annuler
-            </button>
-          </span>
+          <Modal titleId="unsaved-nav-title" onCancel={() => setPendingNav(null)} initialFocusRef={cancelNavRef}>
+            <h2 id="unsaved-nav-title">Modifications non enregistrées</h2>
+            <p>
+              {`${unsavedCount} modification${unsavedCount > 1 ? 's' : ''} non enregistrée${unsavedCount > 1 ? 's' : ''}. Quitter quand même ?`}
+            </p>
+            <div className="modal-actions">
+              <button ref={cancelNavRef} type="button" className="admin-row-button" onClick={() => setPendingNav(null)}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="button-danger"
+                onClick={() => { const perform = pendingNav; setPendingNav(null); perform() }}
+              >
+                Quitter
+              </button>
+            </div>
+          </Modal>
         )}
       </nav>
       {/*

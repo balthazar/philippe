@@ -247,6 +247,60 @@ export function reduceContactPageBlocks(sourceSlug, blocks) {
   return blocks.filter((b) => b.type === 'text' && b.value.fr.trim() === CONTACT_MAILTO_BLOCK_HTML)
 }
 
+// Task 29, coordinator correction: every exhibition post in the live
+// WordPress database carries the literal same `_thumbnail_id` (14693) -- the
+// featured image of an entirely different work, "Porte-Abri-Anti-Nucleaire"
+// -- not 25 independent real choices (confirmed directly against the
+// archive: see the task report). An exhibition year is a set of
+// installation photographs; unlike a work, it has no single representative
+// image, so it gets no cover at all, regardless of what WordPress recorded.
+// Every other category is unaffected and keeps its own real, distinct
+// thumbnail exactly as before.
+export function coverLegacyIdFor(category, rawThumbnailId) {
+  if (category === 'exhibitions') return null
+  return Number(rawThumbnailId || 0) || null
+}
+
+// Task 29, part 3. Source order in the archive is heading, credit, gallery;
+// the wanted reading order is heading, gallery, credit -- fixed here, at
+// extraction time, not in the site renderer (see the task brief: rendering
+// order must never disagree with the stored block order, or the admin's own
+// preview and block list would show the artist one thing and the public
+// page another). Deliberately conservative: only a text block that
+// immediately precedes a gallery AND reads as a photo credit moves. A "©" is
+// the one reliable, inspectable marker for "this is a credit line" -- every
+// other text block, including one that merely happens to sit before a
+// gallery, is left exactly where it is.
+const CREDIT_MARK = '©'
+
+function isCreditText(block) {
+  return block.type === 'text' && String(block.value?.fr || '').includes(CREDIT_MARK)
+}
+
+export function moveCreditsAfterGallery(blocks = []) {
+  const out = []
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i]
+    const next = blocks[i + 1]
+    if (isCreditText(block) && next?.type === 'gallery') {
+      out.push(next, block)
+      i += 1 // both blocks are placed; skip the gallery on the next iteration
+    } else {
+      out.push(block)
+    }
+  }
+  return out
+}
+
+/** Counts how many credit blocks moveCreditsAfterGallery is about to move, for the extraction report. */
+function countCreditsBeforeGallery(blocks = []) {
+  let n = 0
+  for (let i = 0; i < blocks.length - 1; i += 1) {
+    if (isCreditText(blocks[i]) && blocks[i + 1]?.type === 'gallery') n += 1
+  }
+  return n
+}
+
 async function metaFor(ids, key) {
   if (!ids.length) return new Map()
   const rows = await query(
@@ -308,6 +362,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     let emptyTextBlocksRemoved = 0
     let subtitleDuplicateBlocksRemoved = 0
     let coversFoldedIntoGallery = 0
+    let creditBlocksMoved = 0
 
     const articles = pairByTrid(postRows).map((pair) => {
       const base = parseYearLabel(pair.fr.post_title)
@@ -338,9 +393,13 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       const deduped = removeSubtitleDuplicateBlocks(afterSubtitle, subtitle)
       subtitleDuplicateBlocksRemoved += afterSubtitle.length - deduped.length
 
-      const coverLegacyId = Number(thumbs.get(pair.fr.ID) || 0) || null
-      const withCover = ensureCoverInGallery({ coverLegacyId, blocks: deduped })
-      if (withCover !== deduped) coversFoldedIntoGallery += 1
+      // Task 29, part 3: heading, credit, gallery -> heading, gallery, credit.
+      creditBlocksMoved += countCreditsBeforeGallery(deduped)
+      const reordered = moveCreditsAfterGallery(deduped)
+
+      const coverLegacyId = coverLegacyIdFor(category, thumbs.get(pair.fr.ID))
+      const withCover = ensureCoverInGallery({ coverLegacyId, blocks: reordered })
+      if (withCover !== reordered) coversFoldedIntoGallery += 1
 
       return {
         legacyWpId: pair.fr.ID,
@@ -364,7 +423,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     )
     console.log(
       `blocks removed: ${emptyTextBlocksRemoved} empty text block(s), ${subtitleDuplicateBlocksRemoved} subtitle-duplicate block(s); ` +
-      `${coversFoldedIntoGallery} cover(s) folded into their gallery as a hidden item`
+      `${coversFoldedIntoGallery} cover(s) folded into their gallery as a hidden item; ` +
+      `${creditBlocksMoved} credit block(s) moved after their gallery`
     )
 
     const enOnlySlugs = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
@@ -424,6 +484,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       emptyTextBlocksRemoved,
       subtitleDuplicateBlocksRemoved,
       coversFoldedIntoGallery,
+      creditBlocksMoved,
     }
   } finally {
     await close()

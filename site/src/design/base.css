@@ -85,19 +85,22 @@ picture {
   padding-inline: var(--page-gutter);
   /* Set once here, so every piece of header text (wordmark, nav links,
      FR/EN) inherits the same size/weight/family rather than repeating it
-     per element, where one selector can be missed. Only letter-spacing (the
-     wordmark tracks wider than nav/lang-switch) and color (active vs
-     inactive state) vary below. */
+     per element, where one selector can be missed. Only color (active vs
+     inactive state) varies below.
+     Task 29 (client typography pass): letter-spacing used to vary too (the
+     wordmark tracked wider than nav/lang-switch); the client took it to 0
+     everywhere in the header, so it moved up here as one shared value
+     instead of three separate per-element rules that now happen to agree. */
   font-family: var(--font-chrome);
   font-size: var(--text-l);
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .site-header .wordmark {
   text-decoration: none;
   white-space: nowrap;
-  letter-spacing: 0.08em;
 }
 
 /* Wordmark alone on the left; nav and the language toggle are pushed into
@@ -113,7 +116,6 @@ picture {
 .site-header nav a {
   text-decoration: none;
   color: var(--ink-soft);
-  letter-spacing: 0.06em;
 }
 
 /* Fade the hover colour change instead of snapping it. On the resting rule
@@ -142,7 +144,6 @@ picture {
   gap: var(--space-1);
   padding-left: var(--space-3);
   border-left: 3px solid var(--ink-soft);
-  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -495,20 +496,28 @@ picture {
   margin: var(--space-4) 0 var(--space-3);
 }
 
+/* Task 29 (client typography pass): chrome font, uppercase, 700 weight,
+   16px (var(--text-l), not a bare 16px so it stays on the shared type
+   scale), literal black (--ink-strong, not --ink -- see tokens.css). */
 .article-header h1 {
   margin: 0;
-  font-size: var(--text-xl);
-  font-weight: 400;
+  font-family: var(--font-chrome);
+  font-size: var(--text-l);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink-strong);
 }
 
 /* The technique/materials line (task 26, part A1): structural metadata
    beside the title, not a content block, so it renders here rather than
    as the article's first block. Body font, not chrome: it reads as a
-   descriptive caption, not a UI label like .article-year below it. */
+   descriptive caption, not a UI label like .article-year below it.
+   Task 29: size and colour brought up to match the body copy (16px,
+   literal black) per client spec -- family stays --font-body, untouched. */
 .article-subtitle {
   margin: var(--space-1) 0 0;
-  font-size: var(--text-m);
-  color: var(--ink-soft);
+  font-size: var(--text-l);
+  color: var(--ink-strong);
 }
 
 .article-year {
@@ -614,6 +623,17 @@ picture {
   padding: 0 0 var(--space-1);
   list-style: none;
   overflow-x: auto;
+  /* Task 29, part 4: the client dislikes the timeline's own scrollbar --
+     hidden on both axes (mobile's horizontal row here, the desktop column
+     below), replaced by edge auto-scroll (ExhibitionsTimeline.jsx) plus the
+     fade below. The scrollING itself is untouched: this only hides the
+     browser's own scrollbar chrome, wheel/trackpad/touch/keyboard all keep
+     working exactly as before. */
+  scrollbar-width: none;
+}
+
+.exhibitions-timeline ol::-webkit-scrollbar {
+  display: none;
 }
 
 @media (min-width: 768px) {
@@ -622,6 +642,11 @@ picture {
     top: var(--header-height);
     max-height: calc(100dvh - var(--header-height));
     overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .exhibitions-timeline::-webkit-scrollbar {
+    display: none;
   }
 
   .exhibitions-timeline ol {
@@ -630,6 +655,55 @@ picture {
     padding: 0;
     overflow-x: visible;
   }
+
+  /* Task 29, part 4: discoverability for the edge auto-scroll above --
+     "make it obvious there is more above or below than is currently
+     shown". Pure CSS, the classic dual-gradient "scroll shadow" trick, not
+     JS: a cover gradient (matching the page background, --paper) painted
+     with background-attachment: local so it scrolls WITH the list, sits
+     directly over a fade gradient painted with background-attachment:
+     scroll so it stays fixed at the visible edge. At the very top (or
+     bottom) of the list the two align exactly and the cover hides the fade
+     completely; scrolling away from that edge slides the cover aside and
+     reveals it. This is why it shows only on an edge that truly has more
+     content -- and why it's already correct on first paint, before this
+     file's own JS (or any JS) has attached anything. */
+  .exhibitions-timeline {
+    background-image:
+      linear-gradient(var(--paper) 40%, transparent),
+      linear-gradient(transparent, var(--paper) 60%),
+      linear-gradient(var(--ink-soft), transparent),
+      linear-gradient(transparent, var(--ink-soft));
+    background-position: top, bottom, top, bottom;
+    background-repeat: no-repeat;
+    background-size: 100% 2.5rem, 100% 2.5rem, 100% 0.75rem, 100% 0.75rem;
+    background-attachment: local, local, scroll, scroll;
+  }
+}
+
+.exhibitions-timeline li {
+  /* Lays the tick mark (::before, below) and the year link side by side on
+     one line -- the tick is the first thing in source/paint order, so it
+     sits to the year's left without any markup of its own. */
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Task 29, client feedback: a short tick beside each year, so the list
+   reads as an actual timeline rather than a stack of links. A ::before, not
+   markup: pure decoration that carries no information the year doesn't
+   already give, so it can never enter the accessibility tree, the link's
+   accessible name, or its hit area. Kept thin and muted -- this is
+   navigation, not ornament -- so the current year still reads as current by
+   weight (aria-current's font-weight: 700 below) rather than competing
+   with the tick. */
+.exhibitions-timeline li::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0.75rem;
+  height: 1px;
+  background: var(--ink-soft);
 }
 
 .exhibitions-timeline a {
@@ -686,8 +760,22 @@ picture {
    transform-origin: left anchors that growth at the text's own left edge
    so it only ever reaches rightward, never left. Verified in-browser
    (getBoundingClientRect against the column's own rect at hover), not just
-   reasoned about -- see the task report. */
-.exhibitions-timeline a {
+   reasoned about -- see the task report.
+
+   Task 29, client feedback: the tick (::before, above) grows from these
+   exact same trigger selectors -- :hover/:focus-within on the target `li`,
+   the adjacent-sibling combinator for the next one, :has(+ :hover) for the
+   previous one -- reusing them rather than a parallel set, so the tick can
+   never drift out of step with the year. It grows with scaleX(), not
+   scale(): a plain scale() would also grow the tick's 1px height into a
+   visible bar, and animating width (the alternative to any transform)
+   would reflow the row on every hover. transform-origin: left keeps that
+   growth anchored at the tick's own left edge, matching the <a> fix above
+   for the identical reason -- growing from the centre would push the tick
+   leftward out of the column, which is exactly the clipping bug that fix
+   corrected for the year text itself. */
+.exhibitions-timeline a,
+.exhibitions-timeline li::before {
   transform-origin: left center;
   transition: transform 150ms ease;
 }
@@ -697,6 +785,11 @@ picture {
   transform: scale(1.35);
 }
 
+.exhibitions-timeline li:hover::before,
+.exhibitions-timeline li:focus-within::before {
+  transform: scaleX(1.35);
+}
+
 .exhibitions-timeline li:hover + li > a,
 .exhibitions-timeline li:focus-within + li > a,
 .exhibitions-timeline li:has(+ li:hover) > a,
@@ -704,8 +797,16 @@ picture {
   transform: scale(1.15);
 }
 
+.exhibitions-timeline li:hover + li::before,
+.exhibitions-timeline li:focus-within + li::before,
+.exhibitions-timeline li:has(+ li:hover)::before,
+.exhibitions-timeline li:has(+ li:focus-within)::before {
+  transform: scaleX(1.15);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .exhibitions-timeline a {
+  .exhibitions-timeline a,
+  .exhibitions-timeline li::before {
     transition: none;
   }
 
@@ -714,7 +815,13 @@ picture {
   .exhibitions-timeline li:hover + li > a,
   .exhibitions-timeline li:focus-within + li > a,
   .exhibitions-timeline li:has(+ li:hover) > a,
-  .exhibitions-timeline li:has(+ li:focus-within) > a {
+  .exhibitions-timeline li:has(+ li:focus-within) > a,
+  .exhibitions-timeline li:hover::before,
+  .exhibitions-timeline li:focus-within::before,
+  .exhibitions-timeline li:hover + li::before,
+  .exhibitions-timeline li:focus-within + li::before,
+  .exhibitions-timeline li:has(+ li:hover)::before,
+  .exhibitions-timeline li:has(+ li:focus-within)::before {
     transform: none;
   }
 }
@@ -725,9 +832,15 @@ picture {
 
 /* Blocks */
 
+/* Task 29 (client typography pass): 16px (var(--text-l), the body default
+   is --text-m/13px), literal black (--ink-strong, not --ink -- see
+   tokens.css). Body text stays range-left; the client did not ask for
+   justification, so none is added here. */
 .block-text {
   max-width: 42rem;
   margin: 0 0 var(--space-3);
+  font-size: var(--text-l);
+  color: var(--ink-strong);
 }
 
 .block-text p {

@@ -4,6 +4,13 @@
      links and the inactive language use --ink-soft. */
   --ink: #3B3E35;
   --ink-soft: #9D9F9A;
+  /* Task 29 (client typography pass): the article title, subtitle and body
+     copy are specified as literal black, distinct from --ink above (the
+     dark olive-grey used for the wordmark/nav chrome) -- read literally
+     ("black" said three times), not folded into --ink, so the two can
+     still be told apart at a glance and changed independently if the
+     client meant --ink after all. */
+  --ink-strong: #000;
   --paper: #fff;
   --rule: #d9d4cc;
 

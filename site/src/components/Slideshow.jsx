@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
+import { usePrefersReducedMotion } from '@/lib/usePrefersReducedMotion.js'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
 const largeVariant = (slide) => slide?.image?.variants?.large
@@ -14,19 +15,6 @@ const largeVariant = (slide) => slide?.image?.variants?.large
 const FADE_OUT_MS = 300
 const FADE_IN_MS = 300
 const TRANSITION_MS = FADE_OUT_MS + FADE_IN_MS
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-    if (!mq) return undefined
-    setReduced(mq.matches)
-    const onChange = (e) => setReduced(e.matches)
-    mq.addEventListener?.('change', onChange)
-    return () => mq.removeEventListener?.('change', onChange)
-  }, [])
-  return reduced
-}
 
 export function Slideshow({ slides = [], interval = 5000 }) {
   const { href, lang } = useLang()

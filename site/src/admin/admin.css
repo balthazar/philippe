@@ -548,17 +548,6 @@
   cursor: default;
 }
 
-.confirm-delete {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.confirm-delete-prompt {
-  font-size: 0.85rem;
-  color: var(--ink);
-}
-
 .save-confirmation {
   color: var(--confirm);
   font-size: 0.9rem;
@@ -572,20 +561,50 @@
   font-size: 0.85rem;
 }
 
-/* Task 28, client feedback: the in-app "leave with unsaved changes?"
-   prompt in the admin nav, styled the same as .confirm-delete/
-   .confirm-delete-prompt so it reads as the same family of in-page
-   confirmation rather than a new pattern. */
-.unsaved-nav-confirm {
-  display: inline-flex;
+/* Task 29, client feedback: the shared Modal primitive (site/src/components/
+   Modal.jsx) behind both ConfirmDelete and the admin nav's unsaved-changes
+   warning -- replaces the two previous inline, backdrop-less prompts
+   (.confirm-delete, .unsaved-nav-confirm) with one real dialog: a dimmed
+   backdrop the click-to-cancel behaviour is attached to, and a centred box
+   with its own focus trap (see useDialogA11y.js). Portaled to
+   document.body, so it sits above everything regardless of where in the
+   admin DOM it was triggered from (a table row, in ConfirmDelete's case). */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-left: 0.75rem;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgb(0 0 0 / 45%);
 }
 
-.unsaved-nav-confirm-prompt {
-  font-size: 0.85rem;
+.modal {
+  max-width: 26rem;
+  width: 100%;
+  padding: 1.5rem;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 25%);
+}
+
+.modal h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.modal p {
+  margin: 0;
+  font-size: 0.9rem;
   color: var(--ink);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
 }
 
 /* Preview pane. Task 27, Part C2: `top: 1.5rem` (with a shorter max-height

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks,
   reduceContactPageBlocks, removeEmptyTextBlocks, removeSubtitleDuplicateBlocks, ensureCoverInGallery,
+  coverLegacyIdFor, moveCreditsAfterGallery,
 } from '../extract.js'
 
 describe('mapCategory', () => {
@@ -329,6 +330,77 @@ describe('reduceContactPageBlocks', () => {
   it('leaves every other page untouched', () => {
     const blocks = [mailto, credit, logo]
     expect(reduceContactPageBlocks('biographie', blocks)).toEqual(blocks)
+  })
+})
+
+// Coordinator correction, task 29: every exhibition post in the live
+// WordPress database carries the literal same _thumbnail_id (14693) -- a
+// work's own image, "Porte-Abri-Anti-Nucleaire" -- not 25 independent real
+// choices. An exhibition year is a set of installation photographs; it has
+// no single representative image, so it must never get a cover at all.
+// Works (and editions/public-orders, unaffected by this bug) keep their own
+// real, distinct thumbnail as before.
+describe('coverLegacyIdFor', () => {
+  it('never assigns a cover to an exhibition article, even when a thumbnail id is present', () => {
+    expect(coverLegacyIdFor('exhibitions', '14693')).toBeNull()
+  })
+
+  it('assigns the numeric thumbnail id to a works article', () => {
+    expect(coverLegacyIdFor('works', '14494')).toBe(14494)
+  })
+
+  it('leaves editions/public-orders behaviour unchanged (any non-exhibitions category)', () => {
+    expect(coverLegacyIdFor('editions', '15970')).toBe(15970)
+    expect(coverLegacyIdFor('public-orders', '16010')).toBe(16010)
+  })
+
+  it('returns null for a works article with no thumbnail meta at all', () => {
+    expect(coverLegacyIdFor('works', undefined)).toBeNull()
+  })
+})
+
+// Task 29, part 3: source order is heading, credit, gallery; the wanted
+// reading order is heading, gallery, credit. Fixed here, at extraction time,
+// so the admin's block list and the public page can never disagree (see the
+// task brief). Deliberately conservative: only a text block that
+// immediately precedes a gallery AND reads as a photo credit (marked by a
+// "©", the one reliable signal) moves. Everything else -- including a text
+// block that merely happens to sit before a gallery -- stays put.
+describe('moveCreditsAfterGallery', () => {
+  const heading = { type: 'heading', value: { fr: 'Rectos / Versos', en: '' }, level: 2 }
+  const credit = { type: 'text', value: { fr: '<p>© Luca Fascini 2023</p>', en: '' } }
+  const gallery = { type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 1 } }] }
+
+  it('moves a credit that immediately precedes a gallery to just after it', () => {
+    expect(moveCreditsAfterGallery([heading, credit, gallery])).toEqual([heading, gallery, credit])
+  })
+
+  it('leaves a non-credit text block immediately before a gallery untouched', () => {
+    const prose = { type: 'text', value: { fr: '<p>Some description</p>', en: '' } }
+    expect(moveCreditsAfterGallery([heading, prose, gallery])).toEqual([heading, prose, gallery])
+  })
+
+  it('leaves a credit block untouched when it is not immediately followed by a gallery', () => {
+    const trailing = { type: 'text', value: { fr: '<p>© trailing, no gallery after</p>', en: '' } }
+    expect(moveCreditsAfterGallery([heading, trailing])).toEqual([heading, trailing])
+  })
+
+  it('leaves a credit block untouched when another block (not a gallery) follows it', () => {
+    const another = { type: 'heading', value: { fr: 'Suite', en: '' }, level: 3 }
+    expect(moveCreditsAfterGallery([credit, another, gallery])).toEqual([credit, another, gallery])
+  })
+
+  it('reorders every entry independently in a multi-entry year (heading, credit, gallery x2)', () => {
+    const heading2 = { type: 'heading', value: { fr: 'Second venue', en: '' }, level: 2 }
+    const credit2 = { type: 'text', value: { fr: '<p>© Second Photographer</p>', en: '' } }
+    const gallery2 = { type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 2 } }] }
+    const input = [heading, credit, gallery, heading2, credit2, gallery2]
+    expect(moveCreditsAfterGallery(input)).toEqual([heading, gallery, credit, heading2, gallery2, credit2])
+  })
+
+  it('leaves a block sequence with no credit-before-gallery adjacency completely unchanged', () => {
+    const blocks = [heading, gallery]
+    expect(moveCreditsAfterGallery(blocks)).toEqual(blocks)
   })
 })
 

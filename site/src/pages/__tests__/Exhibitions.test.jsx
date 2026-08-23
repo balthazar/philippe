@@ -54,8 +54,17 @@ describe('Exhibitions page', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: '2024' })).toHaveAttribute('aria-current', 'true'))
     expect(screen.getByRole('link', { name: '2023' })).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('link', { name: '1989' })).not.toHaveAttribute('aria-current')
-    expect(screen.getByRole('heading', { level: 1, name: '2024' })).toBeInTheDocument()
     expect(screen.getByText('2024 content')).toBeInTheDocument()
+  })
+
+  // Task 29, part 1: the timeline already marks 2024 as the current year
+  // (aria-current, checked above) -- repeating it as a page heading beside
+  // the timeline is a duplicate label, not new information.
+  it('renders no duplicate year heading beside the timeline', async () => {
+    const { container } = renderPage()
+    await waitFor(() => expect(screen.getByText('2024 content')).toBeInTheDocument())
+    expect(container.querySelector('.exhibitions-content h1')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1, name: '2024' })).not.toBeInTheDocument()
   })
 
   // Coordinator feedback (task 27): same reasoning as Works.jsx.

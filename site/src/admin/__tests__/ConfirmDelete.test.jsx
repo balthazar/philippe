@@ -29,4 +29,40 @@ describe('ConfirmDelete', () => {
     expect(screen.getByRole('button', { name: 'Supprimer' })).toBeInTheDocument()
     expect(screen.queryByText('Supprimer « Porte » ?')).not.toBeInTheDocument()
   })
+
+  // Task 29, client feedback: the confirmation is now the shared Modal --
+  // a real, labelled dialog, not an inline group.
+  it('shows the confirmation as a labelled dialog', async () => {
+    render(<ConfirmDelete label="Porte" onConfirm={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveAccessibleName('Confirmer la suppression')
+  })
+
+  it('puts initial focus on Annuler, not Confirmer', async () => {
+    render(<ConfirmDelete label="Porte" onConfirm={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    expect(screen.getByRole('button', { name: 'Annuler' })).toHaveFocus()
+  })
+
+  it('cancels on Escape without calling onConfirm', async () => {
+    const onConfirm = vi.fn()
+    const user = userEvent.setup()
+    render(<ConfirmDelete label="Porte" onConfirm={onConfirm} />)
+    await user.click(screen.getByRole('button', { name: 'Supprimer' }))
+    await user.keyboard('{Escape}')
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Supprimer' })).toBeInTheDocument()
+  })
+
+  it('cancels on a backdrop click without calling onConfirm', async () => {
+    const onConfirm = vi.fn()
+    const user = userEvent.setup()
+    render(<ConfirmDelete label="Porte" onConfirm={onConfirm} />)
+    await user.click(screen.getByRole('button', { name: 'Supprimer' }))
+    // eslint-disable-next-line testing-library/no-node-access -- the backdrop itself has no accessible role
+    await user.click(document.querySelector('.modal-backdrop'))
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Supprimer' })).toBeInTheDocument()
+  })
 })

@@ -6,6 +6,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server'
 import {
   checkCounts,
   checkArticles,
+  checkCovers,
   checkImageRefs,
   checkImageFiles,
   checkNoPlaceholderHeadings,
@@ -32,11 +33,6 @@ describe('checkCounts', () => {
 })
 
 describe('checkArticles', () => {
-  it('fails an article with no cover', () => {
-    const result = checkArticles([{ slug: { fr: 'a' }, cover: null, blocks: [{ type: 'text' }] }])
-    expect(result.failures[0]).toMatch(/a.*cover/)
-  })
-
   it('fails an article with no blocks', () => {
     const result = checkArticles([{ slug: { fr: 'b' }, cover: 'x', blocks: [] }])
     expect(result.failures[0]).toMatch(/b.*blocks/)
@@ -73,6 +69,58 @@ describe('checkArticles', () => {
     ]
     const result = checkArticles(articles)
     expect(result.failures).toEqual([])
+  })
+})
+
+// Coordinator correction, task 29: the migration used to assign every
+// exhibition article the same work's cover image (a bad WordPress
+// _thumbnail_id shared by all 25 exhibition posts -- see extract.js's
+// coverLegacyIdFor), and the old checkArticles cover assertion ("every
+// article has a cover") would happily pass a rebuild that reintroduced that
+// exact bug. The real invariant: a works article must have a cover, and
+// that cover must be one of its own gallery images; an exhibition article
+// must have none at all.
+describe('checkCovers', () => {
+  it('fails a works article with no cover', () => {
+    const result = checkCovers([{ slug: { fr: 'a' }, category: 'works', cover: null, blocks: [] }])
+    expect(result.failures[0]).toMatch(/a.*cover/)
+  })
+
+  it('fails a works article whose cover is not among its own gallery images', () => {
+    const articles = [{
+      slug: { fr: 'a' },
+      category: 'works',
+      cover: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+      blocks: [{ type: 'gallery', items: [{ image: 'bbbbbbbbbbbbbbbbbbbbbbbb' }] }],
+    }]
+    const result = checkCovers(articles)
+    expect(result.failures[0]).toMatch(/a.*gallery/)
+  })
+
+  it('passes a works article whose cover is among its own gallery images', () => {
+    const articles = [{
+      slug: { fr: 'a' },
+      category: 'works',
+      cover: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+      blocks: [{ type: 'gallery', items: [{ image: 'aaaaaaaaaaaaaaaaaaaaaaaa', hidden: true }] }],
+    }]
+    expect(checkCovers(articles).failures).toEqual([])
+  })
+
+  it('fails an exhibition article that has a cover at all', () => {
+    const articles = [{
+      slug: { fr: '2023' },
+      category: 'exhibitions',
+      cover: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+      blocks: [{ type: 'gallery', items: [{ image: 'aaaaaaaaaaaaaaaaaaaaaaaa' }] }],
+    }]
+    const result = checkCovers(articles)
+    expect(result.failures[0]).toMatch(/2023.*cover/)
+  })
+
+  it('passes an exhibition article with no cover', () => {
+    const articles = [{ slug: { fr: '2023' }, category: 'exhibitions', cover: null, blocks: [] }]
+    expect(checkCovers(articles).failures).toEqual([])
   })
 })
 
@@ -281,7 +329,10 @@ describe('verify (integration)', () => {
           slug: { fr: `fr-${i}`, en: i === 0 ? '' : `en-${i}` },
           category: 'works',
           cover: image._id,
-          blocks: [{ type: 'image', image: image._id }],
+          // The cover must be one of the article's own gallery images
+          // (task 29 correction) -- a plain `image` block would no longer
+          // satisfy checkCovers.
+          blocks: [{ type: 'gallery', items: [{ image: image._id }] }],
           status: 'published',
           legacyWpId: 1000 + i,
         })
