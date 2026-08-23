@@ -61,6 +61,10 @@ export function ArticleList() {
 
   const togglePublish = useCallback(async (article) => {
     const status = article.status === 'published' ? 'draft' : 'published'
+    // Clear any banner from a previous failure first. Without this the alert
+    // from one failed action stays on screen through every later success,
+    // telling the artist something is broken long after it stopped being.
+    setError('')
     try {
       const updated = await apiSend('PATCH', `/admin/articles/${article._id}`, { status })
       setArticles((prev) => prev.map((a) => (a._id === article._id ? { ...a, status: updated.status } : a)))
@@ -88,6 +92,7 @@ export function ArticleList() {
     const [moved] = reorderedCategory.splice(fromIndex, 1)
     reorderedCategory.splice(toIndex, 0, moved)
 
+    setError('')
     const previous = articles
     let cursor = 0
     setArticles(previous.map((a) => (a.category === category ? reorderedCategory[cursor++] : a)))

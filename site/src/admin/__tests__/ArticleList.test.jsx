@@ -54,6 +54,26 @@ describe('ArticleList', () => {
     await waitFor(() => expect(screen.getByText('Brouillon')).toBeInTheDocument())
   })
 
+  // A banner from one failed action used to stay on screen through every
+  // later success, telling the artist something was broken long after it
+  // had stopped being.
+  it('clears a previous error banner once a later action succeeds', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0]], total: 1 })
+    vi.spyOn(api, 'apiSend')
+      .mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 500 }))
+      .mockResolvedValueOnce({ ...ITEMS[0], status: 'draft' })
+    renderList()
+
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /dépublier/i }))
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /dépublier/i }))
+    await waitFor(() => expect(screen.getByText('Brouillon')).toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('reorders within a category on drag-drop and posts the new order', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0], ITEMS[1]], total: 2 })
     const send = vi.spyOn(api, 'apiSend').mockResolvedValue({ ok: true })
