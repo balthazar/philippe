@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
+import { usePageData } from '@/preload.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 
@@ -11,17 +11,7 @@ import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 // nothing on this page bypasses React's default escaping.
 export function SimplePage({ pageKey }) {
   const { lang } = useLang()
-  const [page, setPage] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setPage(null)
-    apiGet(`/pages/${pageKey}`, { lang }).then((data) => {
-      if (cancelled) return
-      setPage(data)
-    })
-    return () => { cancelled = true }
-  }, [pageKey, lang])
+  const { data: page } = usePageData(`page:${pageKey}:${lang}`, () => apiGet(`/pages/${pageKey}`, { lang }))
 
   if (!page) return null
 

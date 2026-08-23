@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
+import { usePageData } from '@/preload.jsx'
 import { ArticleGrid } from '@/components/ArticleGrid.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
@@ -12,21 +12,16 @@ const SECTION_LABELS = {
 
 export function Works() {
   const { lang } = useLang()
-  const [state, setState] = useState({ works: [], editions: [], 'public-orders': [], intro: null })
-
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
+  const { data } = usePageData(`works:${lang}`, async () => {
+    const [works, editions, orders, intro] = await Promise.all([
       apiGet('/articles', { category: 'works', lang }),
       apiGet('/articles', { category: 'editions', lang }),
       apiGet('/articles', { category: 'public-orders', lang }),
       apiGet('/pages/works', { lang }),
-    ]).then(([works, editions, orders, intro]) => {
-      if (cancelled) return
-      setState({ works: works.items, editions: editions.items, 'public-orders': orders.items, intro })
-    })
-    return () => { cancelled = true }
-  }, [lang])
+    ])
+    return { works: works.items, editions: editions.items, 'public-orders': orders.items, intro }
+  })
+  const state = data || { works: [], editions: [], 'public-orders': [], intro: null }
 
   return (
     <Container as="main">

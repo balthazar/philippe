@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
+import { usePageData } from '@/preload.jsx'
 import { routeFor } from '@/routes.js'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
@@ -13,29 +14,19 @@ import { BlockRenderer } from '@/components/BlockRenderer.jsx'
  * matches on slug.fr OR slug.en regardless of the `lang` query param, so
  * re-fetching the same slug with `lang=otherLang` returns the very same
  * article, this time resolved into the other language, including its slug
- * in that language. That's the only field this second fetch is for.
+ * in that language. That's the only field this second fetch is for, so it
+ * stays a plain effect rather than going through usePageData: it drives the
+ * header's language-toggle href, not this page's own content.
  */
 export function ArticleDetail({ routeKey, onTranslatedPath }) {
   const { slug } = useParams()
   const { lang, otherLang, href } = useLang()
-  const [article, setArticle] = useState(null)
-  const [status, setStatus] = useState('loading')
+  const { data: article, error } = usePageData(`article:${routeKey}:${slug}:${lang}`, () =>
+    apiGet(`/articles/${slug}`, { lang })
+  )
 
   useEffect(() => {
     let cancelled = false
-    setStatus('loading')
-    setArticle(null)
-
-    apiGet(`/articles/${slug}`, { lang })
-      .then((data) => {
-        if (cancelled) return
-        setArticle(data)
-        setStatus('ready')
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setStatus(err?.status === 404 ? 'not-found' : 'error')
-      })
 
     apiGet(`/articles/${slug}`, { lang: otherLang })
       .then((data) => {
@@ -48,16 +39,21 @@ export function ArticleDetail({ routeKey, onTranslatedPath }) {
       cancelled = true
       onTranslatedPath?.(null)
     }
-  }, [slug, lang, otherLang, routeKey])
+  }, [slug, otherLang, routeKey])
 
-  if (status === 'loading' || status === 'error') return null
-
-  if (status === 'not-found') {
-    return (
-      <Container as="main">
-        <p>{lang === 'fr' ? 'Page introuvable.' : 'Page not found.'}</p>
-      </Container>
-    )
+  // `article` is checked before `error`: usePageData does not clear a stale
+  // error from a previous key when a later fetch for a new key succeeds, so
+  // checking data first is what keeps a slug change from one that 404s to
+  // one that exists from getting stuck showing "not found".
+  if (!article) {
+    if (error?.status === 404) {
+      return (
+        <Container as="main">
+          <p>{lang === 'fr' ? 'Page introuvable.' : 'Page not found.'}</p>
+        </Container>
+      )
+    }
+    return null
   }
 
   return (

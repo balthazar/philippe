@@ -18,6 +18,16 @@ export default defineConfig({
       '/media': process.env.VITE_API_PROXY || 'http://localhost:8090',
     },
   },
+  // `vite preview` serves the real production build (dist/), used to verify
+  // the prerendered output (Task 22) the way `vite dev` never can. It has
+  // its own proxy config, separate from `server` above, or /api and /media
+  // 404 against the static file server and every page looks stuck loading.
+  preview: {
+    proxy: {
+      '/api': process.env.VITE_API_PROXY || 'http://localhost:8090',
+      '/media': process.env.VITE_API_PROXY || 'http://localhost:8090',
+    },
+  },
   test: {
     environment: 'jsdom',
     // The package ships a ./vitest export (see its package.json "exports"
@@ -30,6 +40,8 @@ export default defineConfig({
     // root also discovers api/test/** (node-only, needs mongodb-memory-server)
     // and migrate/**, and a filter like `-- routes` collides with
     // api/test/routes/*.test.js since that path also contains "routes".
-    include: ['src/**/*.test.{js,jsx}'],
+    // prerender/**/*.test.js (Task 22) is included the same way, alongside
+    // src/**: it is this app's own build step, not a separate package.
+    include: ['src/**/*.test.{js,jsx}', 'prerender/**/*.test.js'],
   },
 })

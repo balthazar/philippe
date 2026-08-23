@@ -1,0 +1,263 @@
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { SEGMENTS } from '../src/routes.js'
+
+// 8080 is the in-cluster port production uses (Traefik ingress routes /api
+// there). Locally the API runs on 8090 (site/vite.config.js's dev proxy
+// comment explains why 8080 is taken on this machine): set
+// PRERENDER_API_URL=http://localhost:8090/api when running this locally.
+const API = process.env.PRERENDER_API_URL || 'http://localhost:8080/api'
+const SITE = process.env.SITE_URL || 'https://philippe.natazar.org'
+const DIST = 'dist'
+
+const CATEGORIES = ['works', 'exhibitions', 'editions', 'public-orders']
+// 'home' is deliberately excluded from the pageKeys handed to collectRoutes
+// (below): SEGMENTS.home is {fr: '', en: ''} and '/' + '/en' are already
+// seeded directly, so adding it there would emit a spurious '/en/' route.
+// It is still fetched into content.pages for headFor's title/description.
+const PAGE_KEYS = ['works', 'exhibitions', 'biography', 'contact', 'bibliography', 'links', 'legal']
+const CONTENT_PAGE_KEYS = ['home', ...PAGE_KEYS]
+
+export function collectRoutes({ articles, pageKeys }) {
+  const routes = ['/', '/en']
+  for (const key of pageKeys) {
+    routes.push(`/${SEGMENTS[key].fr}`, `/en/${SEGMENTS[key].en}`)
+  }
+  for (const a of articles) {
+    const section = a.category === 'exhibitions' ? 'exhibitions' : 'works'
+    if (a.slug?.fr) routes.push(`/${SEGMENTS[section].fr}/${a.slug.fr}`)
+    if (a.slug?.en) routes.push(`/en/${SEGMENTS[section].en}/${a.slug.en}`)
+  }
+  return [...new Set(routes)]
+}
+
+const SITE_NAME = 'Philippe Gronon'
+const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
+const routeLang = (route) => (route === '/en' || route.startsWith('/en/') ? 'en' : 'fr')
+
+// Reads one language out of a {fr, en} localized field, falling back to
+// French, and always to '' (never to the field object itself: title/
+// yearLabel/seoDescription/etc. can legitimately be empty in both languages
+// at once, e.g. an admin who never filled in seoDescription, and `x.fr ||
+// x.en || x` would then return the {fr, en} object itself, since an object
+// is truthy even when both its fields are '' -- caught in manual QA as a
+// literal "[object Object]" in a prerendered <meta> tag).
+const localize = (field, lang) => (typeof field === 'string' ? field : field?.[lang] || field?.fr || '')
+
+// Maps a non-article route back to the pageKey whose /pages/:key content
+// (title, seoDescription) it should carry, or null for anything unknown
+// (matches SEGMENTS, the single source of truth for the URL scheme).
+function pageKeyForRoute(route) {
+  if (route === '/' || route === '/en') return 'home'
+  for (const key of Object.keys(SEGMENTS)) {
+    if (key === 'home') continue
+    const seg = SEGMENTS[key]
+    if (route === `/${seg.fr}` || route === `/en/${seg.en}`) return key
+  }
+  return null
+}
+
+/** Builds the per-route head tags: title, description, canonical, hreflang, OG. */
+export function headFor(route, content, site = SITE) {
+  const lang = routeLang(route)
+  const match = (content.articles || []).find(
+    (a) => route.endsWith(`/${a.slug?.fr}`) || (a.slug?.en && route.endsWith(`/${a.slug.en}`))
+  )
+
+  const tags = []
+  let description = ''
+
+  if (match) {
+    const title = localize(match.title, lang)
+    const year = localize(match.yearLabel, lang)
+    tags.push(`<title>${esc(year ? `${title}, ${year}` : title)} | ${SITE_NAME}</title>`)
+    description = localize(match.seoDescription, lang)
+
+    const section = match.category === 'exhibitions' ? 'exhibitions' : 'works'
+    if (match.slug?.fr) {
+      const fr = `${site}/${SEGMENTS[section].fr}/${match.slug.fr}`
+      tags.push(`<link rel="alternate" hreflang="fr" href="${fr}">`)
+    }
+    if (match.slug?.en) {
+      const en = `${site}/en/${SEGMENTS[section].en}/${match.slug.en}`
+      tags.push(`<link rel="alternate" hreflang="en" href="${en}">`)
+    }
+    const cover = match.cover?.variants?.medium?.path
+    if (cover) tags.push(`<meta property="og:image" content="${site}/media/${cover}">`)
+  } else {
+    const pageKey = pageKeyForRoute(route)
+    const page = pageKey && content.pages?.[pageKey]
+    if (page) {
+      const title = localize(page.title, lang)
+      tags.push(`<title>${esc(title)} | ${SITE_NAME}</title>`)
+      description = localize(page.seoDescription, lang)
+    } else {
+      tags.push(`<title>${SITE_NAME}</title>`)
+    }
+  }
+
+  if (description) {
+    tags.push(`<meta name="description" content="${esc(description)}">`)
+    tags.push(`<meta property="og:description" content="${esc(description)}">`)
+  }
+
+  tags.push(`<link rel="canonical" href="${site}${route}">`)
+  tags.push(`<meta property="og:site_name" content="${SITE_NAME}">`)
+  tags.push(`<meta property="og:url" content="${site}${route}">`)
+  return tags.join('\n')
+}
+
+// Pure string transform, unit-tested directly (prerender/__tests__/routes.test.js)
+// against generated-file contents rather than a live `document`: an earlier
+// <html lang> test on this project passed for the wrong reason because it
+// read a shared `document` that state bled into between cases. This has no
+// such shared, mutable state to bleed.
+export function pageHtml(route, template, head, bodyHtml) {
+  return template
+    .replace(/<html lang="[^"]*"/, `<html lang="${routeLang(route)}"`)
+    .replace('</head>', `${head}\n</head>`)
+    .replace('<div id="root"></div>', `<div id="root">${bodyHtml}</div>`)
+}
+
+async function fetchJson(path) {
+  const res = await fetch(`${API}${path}`)
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`)
+  return res.json()
+}
+
+// The public API resolves every localized field to the requested language
+// (api/src/routes/public.js: resolveDoc), so a single list call can't tell us
+// both an article's French and English slug/title/yearLabel. Fetching each
+// category in both languages and merging by _id recovers the {fr, en} shape
+// collectRoutes/headFor need, without ever reading the admin API or Mongo
+// directly (controller correction 3): every one of these calls hits the same
+// published-only public endpoints the site itself uses.
+async function fetchArticles() {
+  const merged = new Map()
+  const put = (item, lang) => {
+    const id = String(item._id)
+    const entry = merged.get(id) || {
+      _id: id,
+      category: item.category,
+      cover: item.cover,
+      slug: { fr: '', en: '' },
+      title: { fr: '', en: '' },
+      yearLabel: { fr: '', en: '' },
+    }
+    entry.slug[lang] = item.slug
+    entry.title[lang] = item.title
+    entry.yearLabel[lang] = item.yearLabel
+    merged.set(id, entry)
+  }
+
+  for (const category of CATEGORIES) {
+    const [fr, en] = await Promise.all([
+      fetchJson(`/articles?category=${category}&lang=fr`),
+      fetchJson(`/articles?category=${category}&lang=en`),
+    ])
+    fr.items.forEach((item) => put(item, 'fr'))
+    en.items.forEach((item) => put(item, 'en'))
+  }
+
+  const articles = [...merged.values()]
+
+  // The public API always resolves a localized field to one plain string per
+  // request, falling back to French whenever English is empty
+  // (api/src/lib/localize.js: `field[lang] || field.fr`), and it never
+  // exposes the raw {fr, en} pair (locked by Task 9: "every response is
+  // language-resolved, plain strings, not {fr, en}", per
+  // src/pages/ArticleDetail.jsx's own comment on this). So an article with
+  // no real English slug is indistinguishable, through this API, from one
+  // whose English slug is coincidentally identical to its French one.
+  // Confirmed against the live local data: 3 of 34 "works" articles resolve
+  // to the exact same slug for both languages. Treating "identical resolved
+  // slug" as "no translation" is a heuristic, not a certainty, but it fails
+  // toward the safer outcome: skipping a would-be English URL rather than
+  // publishing an English page whose content is silently just the French
+  // article again. See task-22-report.md for how this was verified.
+  for (const a of articles) {
+    if (a.slug.en && a.slug.en === a.slug.fr) a.slug.en = ''
+  }
+
+  // seoDescription isn't in the list projection (LIST_FIELDS in
+  // api/src/routes/public.js), only on the single-article endpoint, so it
+  // takes one more published-only request per article, per language.
+  await Promise.all(
+    articles.map(async (a) => {
+      const slug = a.slug.fr || a.slug.en
+      const [fr, en] = await Promise.all([
+        fetchJson(`/articles/${slug}?lang=fr`).catch(() => null),
+        fetchJson(`/articles/${slug}?lang=en`).catch(() => null),
+      ])
+      a.seoDescription = { fr: fr?.seoDescription || '', en: en?.seoDescription || '' }
+    })
+  )
+
+  return articles
+}
+
+async function fetchPages() {
+  const pages = {}
+  await Promise.all(
+    CONTENT_PAGE_KEYS.map(async (key) => {
+      const [fr, en] = await Promise.all([fetchJson(`/pages/${key}?lang=fr`), fetchJson(`/pages/${key}?lang=en`)])
+      pages[key] = {
+        title: { fr: fr.title, en: en.title },
+        seoDescription: { fr: fr.seoDescription, en: en.seoDescription },
+      }
+    })
+  )
+  return pages
+}
+
+async function main() {
+  const template = await readFile(join(DIST, 'index.html'), 'utf8')
+
+  let content
+  try {
+    const [articles, pages] = await Promise.all([fetchArticles(), fetchPages()])
+    content = { articles, pages }
+  } catch (err) {
+    // A missing API must not break the deploy: ship the SPA shell and move on.
+    console.warn(`prerender skipped, API unreachable at ${API}: ${err.message}`)
+    return
+  }
+
+  // A computed specifier, not a string literal: this file is also loaded
+  // under Vite (by vitest, to unit-test collectRoutes/headFor/pageHtml), and
+  // Vite's import-analysis statically resolves literal dynamic-import
+  // specifiers at transform time, which fails before dist-server/ exists
+  // (it's a build artifact from `npm run build:ssr`). A computed specifier
+  // resolves only when main() actually runs, under plain Node.
+  const entryServerUrl = new URL('../dist-server/entry-server.js', import.meta.url)
+  const { render } = await import(entryServerUrl.href)
+  const routes = collectRoutes({ articles: content.articles, pageKeys: PAGE_KEYS })
+
+  for (const route of routes) {
+    const { html } = render(route, {})
+    const page = pageHtml(route, template, headFor(route, content, SITE), html)
+    const out = join(DIST, route === '/' ? 'index.html' : `${route.replace(/^\//, '')}/index.html`)
+    await mkdir(dirname(out), { recursive: true })
+    await writeFile(out, page)
+  }
+
+  // The admin bundle is lazily loaded and never prerendered (App.jsx: /admin/*
+  // is a sibling of the public layout route). It still needs its own served
+  // file so a static host's SPA fallback doesn't hand out a public route's
+  // prerendered <head> (title/canonical/OG for some article) to /admin.
+  // Controller correction 3: noindex here, on top of robots.txt's Disallow,
+  // since a Disallow alone doesn't guarantee a linked-to page stays unindexed.
+  const adminPage = template.replace('</head>', '<meta name="robots" content="noindex">\n</head>')
+  await mkdir(join(DIST, 'admin'), { recursive: true })
+  await writeFile(join(DIST, 'admin', 'index.html'), adminPage)
+
+  // Sitemap/robots cover public routes only: no /admin, no 404, no draft
+  // article (drafts never reach `routes` at all, since fetchArticles only
+  // ever calls the public API's published-only endpoints).
+  const urls = routes.map((r) => `  <url><loc>${SITE}${r}</loc></url>`).join('\n')
+  await writeFile(join(DIST, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`)
+  await writeFile(join(DIST, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: ${SITE}/sitemap.xml\n`)
+  console.log(`prerendered ${routes.length} routes`)
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) main()

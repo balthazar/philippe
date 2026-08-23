@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
+import { usePageData } from '@/preload.jsx'
 import { ArticleGrid } from '@/components/ArticleGrid.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
@@ -10,19 +10,14 @@ import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 // createdAt desc (api/src/routes/public.js), so no client-side sort here.
 export function Exhibitions() {
   const { lang } = useLang()
-  const [state, setState] = useState({ items: [], intro: null })
-
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
+  const { data } = usePageData(`exhibitions:${lang}`, async () => {
+    const [exhibitions, intro] = await Promise.all([
       apiGet('/articles', { category: 'exhibitions', lang }),
       apiGet('/pages/exhibitions', { lang }),
-    ]).then(([exhibitions, intro]) => {
-      if (cancelled) return
-      setState({ items: exhibitions.items, intro })
-    })
-    return () => { cancelled = true }
-  }, [lang])
+    ])
+    return { items: exhibitions.items, intro }
+  })
+  const state = data || { items: [], intro: null }
 
   return (
     <Container as="main">

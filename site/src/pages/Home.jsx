@@ -1,22 +1,16 @@
-import { useEffect, useState } from 'react'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
+import { usePageData } from '@/preload.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 import { Slideshow } from '@/components/Slideshow.jsx'
 
 export function Home() {
   const { lang } = useLang()
-  const [state, setState] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([apiGet('/home', { lang }), apiGet('/pages/home', { lang })]).then(([home, page]) => {
-      if (cancelled) return
-      setState({ slides: home.slides, intro: page })
-    })
-    return () => { cancelled = true }
-  }, [lang])
+  const { data: state } = usePageData(`home:${lang}`, async () => {
+    const [home, page] = await Promise.all([apiGet('/home', { lang }), apiGet('/pages/home', { lang })])
+    return { slides: home.slides, intro: page }
+  })
 
   // While loading, render nothing rather than a spinner.
   if (!state) return null
