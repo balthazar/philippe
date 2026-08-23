@@ -483,6 +483,36 @@
   cursor: pointer;
 }
 
+/* Client feedback (task 27, item 4): "Nouvel article" (ArticleList.jsx) had
+   no button styling at all -- a bare link, browser-underlined, icon and
+   text with no gap between them. This is the shared base every plain
+   `.button` link/button in the admin gets; `.image-picker-upload` below
+   layers its own dark fill on top (a second class, higher specificity),
+   overriding only color/background, not this shared shape. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--ink);
+}
+
+.button svg {
+  flex: 0 0 auto;
+}
+
 /* Destructive actions (task 25, client feedback item 3): text buttons, not
    icons -- these are one-off controls in prose-like admin chrome, not a
    dense toolbar, so a plain red label reads clearer than another icon. */
@@ -808,37 +838,123 @@
   flex: 1;
 }
 
-.gallery-columns,
-.gallery-spans li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* Task 27, client feedback item 1: the "Cover" / "Hidden from grid" toggles
-   sit alongside the span selector on the same row, in their own tight
-   sub-group. */
-.gallery-item-toggles {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.8rem;
+/* Task 27, client feedback item 5: the gallery block's own column-count
+   field, moved into the block header beside the move arrows. A plain
+   native select, sized to match the icon buttons beside it. */
+.gallery-columns-control select {
+  height: 1.75rem;
+  padding: 0 0.35rem;
+  font-size: 0.78rem;
   color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-right: 0.35rem;
 }
 
-.gallery-item-toggles label {
+/* Task 27, client feedback item 5: the gallery editor's own image grid,
+   replacing the plain thumbnail row -- every tile the same size, ending in
+   an empty "+" tile that opens the media library (ImagePicker's gridStyle
+   mode). */
+.gallery-editor-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+
+.gallery-editor-tile {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.gallery-editor-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Icon controls overlay the tile's bottom edge, visible at rest (not only
+   on hover): four unlabelled-looking icons per image is a lot to discover
+   by accident, so they stay on screen. */
+.gallery-editor-tile-controls {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.25rem;
+  background: rgba(59, 62, 53, 0.72);
+}
+
+.gallery-editor-tile-controls button {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  color: #fff;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
 }
 
-.gallery-spans {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.gallery-editor-tile-controls button:hover {
+  border-color: #fff;
+}
+
+/* Star (cover) / Eye (hidden) pressed state: a filled icon, not a second
+   icon shape -- the same convention the lang-toggle and rich-text toolbar
+   buttons already use. */
+.gallery-editor-tile-controls button.active {
+  color: var(--surface);
+  background: var(--ink);
+}
+
+.gallery-editor-tile-controls button.active svg {
+  fill: currentColor;
+}
+
+.gallery-editor-tile-controls button.icon-button-danger:hover {
+  color: #ff9d9d;
+  border-color: #ff9d9d;
+}
+
+/* The trailing "+" tile: an empty grey placeholder, visually part of the
+   same grid, rather than a separate labelled control above or below it. */
+.gallery-editor-add {
+  background: var(--surface);
+  border: 1px dashed var(--line);
+}
+
+.gallery-editor-add button {
+  width: 100%;
+  height: 100%;
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.gallery-editor-add button:hover {
+  color: var(--ink);
+}
+
+.image-picker-grid-style .image-picker-library {
+  margin-top: 0.75rem;
 }
 
 /* RichText */
@@ -994,6 +1110,10 @@
   padding: 0.5rem 1rem;
   background: var(--ink);
   color: #fff;
+  /* No border, unlike the plain .button base above: a dark-filled button
+     never had one, and the base rule's --line border would otherwise show
+     through as a mismatched hairline on top of this fill. */
+  border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;

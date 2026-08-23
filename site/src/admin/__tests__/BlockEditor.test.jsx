@@ -21,6 +21,19 @@ describe('BlockEditor', () => {
     expect(onChange).toHaveBeenLastCalledWith([...blocks, { type: 'text', value: { fr: '', en: '' } }])
   })
 
+  // Client feedback: "Ajouter un bloc" (append) and "Insérer un bloc"
+  // (per-gap insert) do nearly the same thing and must look the same.
+  it('gives the append control the same design as the per-gap insert control', () => {
+    render(<BlockEditor blocks={blocks} lang="fr" onChange={() => {}} />)
+    const appendSelect = screen.getByLabelText(/ajouter un bloc/i)
+    const insertSelects = screen.getAllByLabelText(/insérer un bloc/i)
+    expect(appendSelect).toHaveClass('block-insert-select')
+    expect(appendSelect.closest('.block-insert-point')).toBeInTheDocument()
+    for (const select of insertSelects) {
+      expect(select).toHaveClass('block-insert-select')
+    }
+  })
+
   it('moves a block up', async () => {
     const onChange = vi.fn()
     render(<BlockEditor blocks={blocks} lang="fr" onChange={onChange} />)
@@ -130,7 +143,10 @@ describe('BlockEditor', () => {
 // live in the gallery without appearing in the public grid. Only rendered
 // when `onSetCover` is passed (ArticleEditor) -- PageEditor's pages have no
 // `cover` field at all, so its BlockEditor usage omits it.
-describe('BlockEditor gallery cover and hidden toggles', () => {
+// Client feedback (task 27, item 5): replaced with icon buttons -- Star
+// (cover), Eye (hidden), Width (span, cycling), Trash (remove) -- each with
+// its own aria-label/title, consistent with the block header icons.
+describe('BlockEditor gallery item icon controls', () => {
   const galleryBlocks = [
     {
       type: 'gallery',
@@ -142,33 +158,29 @@ describe('BlockEditor gallery cover and hidden toggles', () => {
     },
   ]
 
-  it('marks the item matching coverId as the checked cover radio', () => {
+  it('marks the item matching coverId as the pressed cover button', () => {
     render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={() => {}} coverId="img2" />)
-    const radios = screen.getAllByRole('radio', { name: /couverture/i })
-    expect(radios[0]).not.toBeChecked()
-    expect(radios[1]).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Définir comme couverture' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Couverture actuelle' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('calls onSetCover with the item image when its cover radio is chosen', async () => {
+  it('calls onSetCover with the item image when its cover button is clicked', async () => {
     const onSetCover = vi.fn()
     render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={onSetCover} coverId={null} />)
-    const radios = screen.getAllByRole('radio', { name: /couverture/i })
-    await userEvent.click(radios[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Définir comme couverture' })[0])
     expect(onSetCover).toHaveBeenCalledWith({ _id: 'img1' })
   })
 
-  it("reflects each item's hidden state in its own checkbox", () => {
+  it("reflects each item's hidden state in its own eye button", () => {
     render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} onSetCover={() => {}} coverId={null} />)
-    const checkboxes = screen.getAllByRole('checkbox', { name: /masquer/i })
-    expect(checkboxes[0]).not.toBeChecked()
-    expect(checkboxes[1]).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Masquer de la grille' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Afficher dans la grille' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it("toggles an item's hidden flag via onChange, leaving the rest of the item untouched", async () => {
     const onChange = vi.fn()
     render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={onChange} onSetCover={() => {}} coverId={null} />)
-    const checkboxes = screen.getAllByRole('checkbox', { name: /masquer/i })
-    await userEvent.click(checkboxes[0])
+    await userEvent.click(screen.getByRole('button', { name: 'Masquer de la grille' }))
     expect(onChange).toHaveBeenLastCalledWith([
       {
         ...galleryBlocks[0],
@@ -177,9 +189,53 @@ describe('BlockEditor gallery cover and hidden toggles', () => {
     ])
   })
 
-  it('does not render cover/hidden toggles when onSetCover is not provided (e.g. PageEditor)', () => {
+  it('does not render the cover button when onSetCover is not provided (e.g. PageEditor)', () => {
     render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} />)
-    expect(screen.queryByRole('radio', { name: /couverture/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: /masquer/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /couverture/i })).not.toBeInTheDocument()
+    // Hidden and width stay available even without a cover concept.
+    expect(screen.getAllByRole('button', { name: /masquer|afficher/i })).toHaveLength(2)
+  })
+
+  it("cycles an item's width (span) on click, wrapping back to 1 past the column count", async () => {
+    const onChange = vi.fn()
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={onChange} />)
+    const widthButtons = screen.getAllByRole('button', { name: /largeur/i })
+    expect(widthButtons[0]).toHaveAttribute('aria-label', 'Largeur : 1 colonne')
+
+    await userEvent.click(widthButtons[0])
+    expect(onChange).toHaveBeenLastCalledWith([
+      { ...galleryBlocks[0], items: [{ ...galleryBlocks[0].items[0], span: 2 }, galleryBlocks[0].items[1]] },
+    ])
+  })
+
+  it('clamps a span wider than the column count instead of offering it', () => {
+    const wideSpan = [{ type: 'gallery', columns: 2, items: [{ image: { _id: 'img1' }, span: 5 }] }]
+    render(<BlockEditor blocks={wideSpan} lang="fr" onChange={() => {}} />)
+    expect(screen.getByRole('button', { name: /largeur/i })).toHaveAttribute('aria-label', 'Largeur : 2 colonnes')
+  })
+
+  it('removes an item via its trash button', async () => {
+    const onChange = vi.fn()
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={onChange} />)
+    await userEvent.click(screen.getAllByRole('button', { name: /retirer/i })[0])
+    expect(onChange).toHaveBeenLastCalledWith([{ ...galleryBlocks[0], items: [galleryBlocks[0].items[1]] }])
+  })
+
+  it('renders an empty "+" tile as the last cell to add an image, opening the library', async () => {
+    render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} />)
+    const addTile = screen.getByRole('button', { name: 'Ajouter une image' })
+    expect(addTile.closest('.gallery-editor-add')).toBeInTheDocument()
+    await userEvent.click(addTile)
+    expect(screen.getByRole('button', { name: 'Fermer la médiathèque' })).toBeInTheDocument()
+  })
+
+  // Client feedback (task 27, item 5): out of the block body and into the
+  // header, beside the move arrows.
+  it('puts the column-count select in the block header, beside the move arrows', () => {
+    const { container } = render(<BlockEditor blocks={galleryBlocks} lang="fr" onChange={() => {}} />)
+    const legend = container.querySelector('.block-editor-legend')
+    const columnsControl = legend.querySelector('.gallery-columns-control')
+    expect(columnsControl).toBeInTheDocument()
+    expect(container.querySelector('.gallery-columns')).not.toBeInTheDocument()
   })
 })

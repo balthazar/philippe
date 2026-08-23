@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { RichText } from './RichText.jsx'
 import { ImagePicker } from './ImagePicker.jsx'
-import { ArrowUpIcon, ArrowDownIcon, TrashIcon } from './icons.jsx'
+import { ArrowUpIcon, ArrowDownIcon, TrashIcon, StarIcon, EyeIcon, WidthIcon } from './icons.jsx'
 
 const EMPTY = {
   text: { type: 'text', value: { fr: '', en: '' } },
@@ -125,6 +125,25 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
                 ⠿
               </span>
               <span className="block-type-label">{LABELS[block.type] || block.type}</span>
+              {/*
+                Client feedback (task 27, item 5): the column-count field
+                moves out of the block body and into the header, beside the
+                move arrows -- gallery blocks only.
+              */}
+              {block.type === 'gallery' && (
+                <span className="gallery-columns-control">
+                  <label htmlFor={`columns-${i}`} className="sr-only">Colonnes</label>
+                  <select
+                    id={`columns-${i}`}
+                    value={block.columns || 3}
+                    onChange={(e) => replace(i, { ...block, columns: Number(e.target.value) })}
+                  >
+                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                      <option key={n} value={n}>{n} col.</option>
+                    ))}
+                  </select>
+                </span>
+              )}
               <span className="block-editor-controls">
                 <button
                   type="button"
@@ -192,91 +211,95 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
             )}
 
             {block.type === 'gallery' && (
-              <>
-                <ImagePicker
-                  multiple
-                  value={block.items.map((it) => it.image)}
-                  onChange={(images) =>
-                    replace(i, {
-                      ...block,
-                      // Preserve each existing item's caption/span when the
-                      // selection changes; only brand-new images get a fresh
-                      // default entry.
-                      items: images.map((image) => {
-                        const existing = block.items.find((it) => it.image?._id === image?._id)
-                        return existing || { image, caption: { fr: '', en: '' }, span: 1 }
-                      }),
-                    })
-                  }
-                />
-                <div className="gallery-columns">
-                  <label htmlFor={`columns-${i}`}>Colonnes</label>
-                  <select
-                    id={`columns-${i}`}
-                    value={block.columns || 3}
-                    onChange={(e) => replace(i, { ...block, columns: Number(e.target.value) })}
-                  >
-                    {[1, 2, 3, 4, 5, 6].map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
-                <ul className="gallery-spans">
-                  {block.items.map((item, j) => (
-                    <li key={j}>
-                      <label htmlFor={`span-${i}-${j}`}>Largeur</label>
-                      <select
-                        id={`span-${i}-${j}`}
-                        // Clamped to the block's own column count: never offer,
-                        // or silently keep, a span wider than the gallery
-                        // itself. Lowering `columns` after a wide span was set
-                        // must not be able to produce a broken grid (task
-                        // brief, gallery sizing rules).
-                        value={Math.min(item.span || 1, block.columns || 3)}
-                        onChange={(e) => replace(i, { ...block, items: block.items.map((it, k) => (k === j ? { ...it, span: Number(e.target.value) } : it)) })}
+              // Client feedback (task 27, item 5): per-image controls are
+              // icons now, consistent with the block header icons above --
+              // Trash to remove, Star to set as cover, Eye to hide from the
+              // public grid, and a Width icon that cycles the item's own
+              // span. The grid's own trailing "+" tile (ImagePicker's
+              // gridStyle) replaces the separate "Choisir une image"
+              // button. Column count moved to the block header (above);
+              // this body is the image grid alone now.
+              <ImagePicker
+                multiple
+                gridStyle
+                value={block.items.map((it) => it.image)}
+                onChange={(images) =>
+                  replace(i, {
+                    ...block,
+                    // Preserve each existing item's caption/span/hidden when
+                    // the selection changes; only brand-new images get a
+                    // fresh default entry.
+                    items: images.map((image) => {
+                      const existing = block.items.find((it) => it.image?._id === image?._id)
+                      return existing || { image, caption: { fr: '', en: '' }, span: 1 }
+                    }),
+                  })
+                }
+                renderExtra={(image, j) => {
+                  const item = block.items[j] || {}
+                  const columns = block.columns || 3
+                  // Clamped to the block's own column count: a span wider
+                  // than the gallery itself must never be offered, or kept,
+                  // after `columns` is lowered (task brief, gallery sizing
+                  // rules) -- the cycle wraps within that same clamp.
+                  const span = Math.min(item.span || 1, columns)
+                  const isCover = Boolean(coverId) && image?._id === coverId
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`Largeur : ${span} colonne${span > 1 ? 's' : ''}`}
+                        title={`Largeur : ${span} colonne${span > 1 ? 's' : ''}`}
+                        onClick={() =>
+                          replace(i, {
+                            ...block,
+                            items: block.items.map((it, k) => (k === j ? { ...it, span: (span % columns) + 1 } : it)),
+                          })
+                        }
                       >
-                        {Array.from({ length: block.columns || 3 }, (_, n) => n + 1).map((n) => (
-                          <option key={n} value={n}>{n === 1 ? '1 colonne' : `${n} colonnes`}</option>
-                        ))}
-                      </select>
+                        <WidthIcon />
+                      </button>
                       {/*
-                        Client feedback (task 27): "Cover" is one radio group
-                        across the WHOLE article, not per gallery block --
-                        there is only ever one `article.cover`. Its checked
-                        state is derived from coverId (the article's actual
-                        cover id), never local radio-group state, so it stays
-                        correct even across more than one gallery block.
+                        Client feedback (task 27): "Cover" acts on the WHOLE
+                        article, not per gallery block -- there is only ever
+                        one `article.cover`. `isCover` is derived from
+                        coverId (the article's actual cover id), never local
+                        state, so it stays correct even across more than one
+                        gallery block. Only rendered when onSetCover is
+                        passed (ArticleEditor) -- PageEditor's pages have no
+                        `cover` field at all.
                       */}
                       {onSetCover && (
-                        <span className="gallery-item-toggles">
-                          <label>
-                            <input
-                              type="radio"
-                              name="article-cover"
-                              checked={Boolean(coverId) && item.image?._id === coverId}
-                              onChange={() => onSetCover(item.image)}
-                            />
-                            Couverture
-                          </label>
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(item.hidden)}
-                              onChange={(e) =>
-                                replace(i, {
-                                  ...block,
-                                  items: block.items.map((it, k) => (k === j ? { ...it, hidden: e.target.checked } : it)),
-                                })
-                              }
-                            />
-                            Masquer de la grille
-                          </label>
-                        </span>
+                        <button
+                          type="button"
+                          className={isCover ? 'active' : ''}
+                          aria-pressed={isCover}
+                          aria-label={isCover ? 'Couverture actuelle' : 'Définir comme couverture'}
+                          title={isCover ? 'Couverture actuelle' : 'Définir comme couverture'}
+                          onClick={() => onSetCover(image)}
+                        >
+                          <StarIcon />
+                        </button>
                       )}
-                    </li>
-                  ))}
-                </ul>
-              </>
+                      <button
+                        type="button"
+                        className={item.hidden ? 'active' : ''}
+                        aria-pressed={Boolean(item.hidden)}
+                        aria-label={item.hidden ? 'Afficher dans la grille' : 'Masquer de la grille'}
+                        title={item.hidden ? 'Afficher dans la grille' : 'Masquer de la grille'}
+                        onClick={() =>
+                          replace(i, {
+                            ...block,
+                            items: block.items.map((it, k) => (k === j ? { ...it, hidden: !it.hidden } : it)),
+                          })
+                        }
+                      >
+                        <EyeIcon />
+                      </button>
+                    </>
+                  )
+                }}
+              />
             )}
 
             {block.type === 'specs' && (
@@ -300,13 +323,25 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
         )
       })}
 
-      <label htmlFor="add-block">Ajouter un bloc</label>
-      <select id="add-block" value="" onChange={(e) => e.target.value && onChange([...blocks, structuredClone(EMPTY[e.target.value])])}>
-        <option value="">…</option>
-        {Object.keys(EMPTY).map((type) => (
-          <option key={type} value={type}>{LABELS[type]}</option>
-        ))}
-      </select>
+      {/*
+        Client feedback: this append control did nearly the same thing as
+        the per-gap "Insérer un bloc" select above and looked nothing like
+        it. Same markup, same classes, same "+ <label>" first option.
+      */}
+      <div className="block-insert-point">
+        <label htmlFor="add-block" className="sr-only">Ajouter un bloc</label>
+        <select
+          id="add-block"
+          className="block-insert-select"
+          value=""
+          onChange={(e) => e.target.value && onChange([...blocks, structuredClone(EMPTY[e.target.value])])}
+        >
+          <option value="">+ Ajouter un bloc</option>
+          {Object.keys(EMPTY).map((type) => (
+            <option key={type} value={type}>{LABELS[type]}</option>
+          ))}
+        </select>
+      </div>
     </div>
   )
 }

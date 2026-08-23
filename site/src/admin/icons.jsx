@@ -138,3 +138,37 @@ export function ExternalLinkIcon(props) {
     </svg>
   )
 }
+
+// Task 27, client feedback item 5: gallery-item controls, replacing the
+// text "Retirer" button and the Cover radio / Hidden checkbox. `active`
+// (a filled star / a filled eye) is a CSS state on the surrounding button
+// (see admin.css), not a second icon shape -- the same convention the
+// lang-toggle and rich-text toolbar buttons already use.
+export function StarIcon(props) {
+  return (
+    <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7z" />
+    </svg>
+  )
+}
+
+export function EyeIcon(props) {
+  return (
+    <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+// Cycles a gallery item's column span. The label conveys the current value
+// (e.g. "Largeur : 2 colonnes") -- this icon's shape never changes.
+export function WidthIcon(props) {
+  return (
+    <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <polyline points="7 8 3 12 7 16" />
+      <polyline points="17 8 21 12 17 16" />
+    </svg>
+  )
+}

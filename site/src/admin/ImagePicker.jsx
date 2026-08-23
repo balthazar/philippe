@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiGet, apiUpload } from '@/api.js'
 import { useSessionExpired } from './session.js'
+import { PlusIcon, TrashIcon } from './icons.jsx'
 
 const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.variants.thumb.path}` : '')
 
@@ -10,8 +11,16 @@ const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.vari
  * image objects and onChange receives an array, in the order chosen -- used
  * by the gallery block, which needs to preserve that order and each item's
  * own span (BlockEditor does the merge against the previous items list).
+ *
+ * `gridStyle` (task 27, client feedback item 5): multiple mode only. Renders
+ * the selection as a grid of tiles ending in an empty "+" tile that opens
+ * the library, instead of the plain thumbnail-plus-"Retirer" row and its
+ * separate "Choisir une image" button -- the gallery block's own editor.
+ * `renderExtra(image, index)`, also grid-only, lets the caller (BlockEditor)
+ * inject gallery-specific controls (Cover/Hidden/Width) into each tile,
+ * since this component only ever knows about images, never those concepts.
  */
-export function ImagePicker({ value, onChange, multiple = false }) {
+export function ImagePicker({ value, onChange, multiple = false, gridStyle = false, renderExtra }) {
   const onSessionExpired = useSessionExpired()
   const [images, setImages] = useState([])
   const [open, setOpen] = useState(false)
@@ -64,6 +73,71 @@ export function ImagePicker({ value, onChange, multiple = false }) {
     }
   }
 
+  const library = open && (
+    <div className="image-picker-library">
+      {error && <p role="alert" className="admin-error">{error}</p>}
+      <label className="image-picker-upload">
+        Envoyer une image
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/tiff"
+          disabled={uploading}
+          onChange={(e) => upload(e.target.files?.[0])}
+        />
+      </label>
+      <ul className="image-picker-grid">
+        {images.map((image) => (
+          <li key={image._id}>
+            <button
+              type="button"
+              className={selectedIds.has(image._id) ? 'selected' : ''}
+              onClick={() => toggle(image)}
+            >
+              {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+
+  if (multiple && gridStyle) {
+    return (
+      <div className="image-picker image-picker-grid-style">
+        <ul className="gallery-editor-grid">
+          {selected.map((image, index) => (
+            <li key={image._id} className="gallery-editor-tile">
+              {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
+              <div className="gallery-editor-tile-controls">
+                {renderExtra?.(image, index)}
+                <button
+                  type="button"
+                  className="icon-button-danger"
+                  aria-label={`Retirer ${image.alt?.fr || 'cette image'}`}
+                  title={`Retirer ${image.alt?.fr || 'cette image'}`}
+                  onClick={() => toggle(image)}
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            </li>
+          ))}
+          <li className="gallery-editor-tile gallery-editor-add">
+            <button
+              type="button"
+              aria-label={open ? 'Fermer la médiathèque' : 'Ajouter une image'}
+              title={open ? 'Fermer la médiathèque' : 'Ajouter une image'}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <PlusIcon />
+            </button>
+          </li>
+        </ul>
+        {library}
+      </div>
+    )
+  }
+
   return (
     <div className="image-picker">
       <div className="image-picker-selection">
@@ -82,33 +156,7 @@ export function ImagePicker({ value, onChange, multiple = false }) {
         {open ? 'Fermer la médiathèque' : 'Choisir une image'}
       </button>
 
-      {open && (
-        <div className="image-picker-library">
-          {error && <p role="alert" className="admin-error">{error}</p>}
-          <label className="image-picker-upload">
-            Envoyer une image
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/tiff"
-              disabled={uploading}
-              onChange={(e) => upload(e.target.files?.[0])}
-            />
-          </label>
-          <ul className="image-picker-grid">
-            {images.map((image) => (
-              <li key={image._id}>
-                <button
-                  type="button"
-                  className={selectedIds.has(image._id) ? 'selected' : ''}
-                  onClick={() => toggle(image)}
-                >
-                  {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {library}
     </div>
   )
 }

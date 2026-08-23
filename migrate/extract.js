@@ -138,6 +138,20 @@ export function extractSubtitle(category, blocks) {
   return { subtitle: empty, blocks, matched: false, reason: lastReason }
 }
 
+// Coordinator feedback: a real archive miss
+// (tableaux-chrysler-building-new-york-2004) had a `<br />` inside the
+// duplicate block where the extracted subtitle has a plain space -- exact
+// string comparison never matched, so the duplicate survived. Tags are
+// stripped TO a space (never to nothing, or "a<br/>b" would collapse into
+// "ab" and no longer separate the two words either), runs of whitespace
+// collapsed to one space, and both sides trimmed, before comparing.
+function normalizeForCompare(text) {
+  return String(text || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 // Client feedback (task 27): the technique line lifted into `subtitle` above
 // sometimes appears a SECOND time elsewhere in the article, as its own
 // separate text block (measured: 30 of 63 articles). extractSubtitle only
@@ -147,10 +161,11 @@ export function extractSubtitle(category, blocks) {
 // position, since position is what left these duplicates behind.
 export function removeSubtitleDuplicateBlocks(blocks, subtitle) {
   if (!subtitle?.fr) return blocks
+  const target = normalizeForCompare(subtitle.fr)
   return blocks.filter((b) => {
     if (b.type !== 'text') return true
     const split = splitLeadingParagraph(b.value?.fr)
-    return !(split && !split.rest && split.first === subtitle.fr)
+    return !(split && !split.rest && normalizeForCompare(split.first) === target)
   })
 }
 

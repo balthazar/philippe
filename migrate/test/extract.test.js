@@ -200,6 +200,21 @@ describe('removeSubtitleDuplicateBlocks', () => {
     const blocks = [textBlock('<p>x</p>')]
     expect(removeSubtitleDuplicateBlocks(blocks, { fr: '', en: '' })).toEqual(blocks)
   })
+
+  // Coordinator feedback: a real archive miss (tableaux-chrysler-building-
+  // new-york-2004). The duplicate block had a <br /> where the extracted
+  // subtitle has a plain space -- `<p>...argentiques<br />Cibachrome...</p>`
+  // vs "...argentiques Cibachrome...". Exact-string comparison never
+  // matched, so the duplicate survived. Tags must be stripped TO
+  // whitespace (not to nothing), runs of whitespace collapsed to one
+  // space, and both sides trimmed, before comparing.
+  it('normalizes a <br /> inside the duplicate block to whitespace before comparing', () => {
+    const blocks = [
+      textBlock('<p>Photographies couleur, tirages argentiques<br />Cibachrome montés sous Diasec</p>'),
+    ]
+    const subtitle = { fr: 'Photographies couleur, tirages argentiques Cibachrome montés sous Diasec', en: '' }
+    expect(removeSubtitleDuplicateBlocks(blocks, subtitle)).toEqual([])
+  })
 })
 
 // Client feedback (task 27): 26 articles carry a text block whose fr and en
