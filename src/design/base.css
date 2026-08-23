@@ -1,4 +1,5 @@
 @import "./tokens.css";
+@import "./fonts.css";
 
 *,
 *::before,
@@ -84,6 +85,7 @@ picture {
   letter-spacing: 0.06em;
 }
 
+.site-header nav a:hover,
 .site-header nav a.active {
   color: var(--ink);
 }

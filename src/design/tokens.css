@@ -1,6 +1,9 @@
 :root {
-  --ink: #14110f;
-  --ink-soft: #5d5751;
+  /* Client-supplied colours, not invented placeholders: wordmark, the
+     active language, and link hover/active state use --ink; resting nav
+     links and the inactive language use --ink-soft. */
+  --ink: #3B3E35;
+  --ink-soft: #9D9F9A;
   --paper: #fff;
   --rule: #d9d4cc;
 
