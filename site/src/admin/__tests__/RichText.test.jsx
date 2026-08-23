@@ -55,7 +55,11 @@ describe('RichText', () => {
 
     expect(doc.querySelector('strong')).toBeTruthy()
     expect(doc.querySelector('em')).toBeTruthy()
-    expect(doc.querySelector('a[href="https://example.com"]')).toBeTruthy()
+    const link = doc.querySelector('a[href="https://example.com"]')
+    expect(link).toBeTruthy()
+    // href and nothing else: the Link extension's defaults would otherwise add
+    // target and rel, which fall outside the server's `a[href]` whitelist.
+    expect([...link.attributes].map((a) => a.name).sort()).toEqual(['href'])
     expect(doc.querySelectorAll('ul li')).toHaveLength(2)
     expect(doc.querySelector('ol li')).toBeTruthy()
     expect(doc.querySelector('blockquote')).toBeTruthy()

@@ -30,7 +30,17 @@ const extensions = [
     horizontalRule: false,
     strike: false,
   }),
-  Link.configure({ openOnClick: false }),
+  // HTMLAttributes must be nulled explicitly. @tiptap/extension-link defaults
+  // to { target: '_blank', rel: 'noopener noreferrer nofollow' } and merges
+  // them into every rendered <a>, which is markup beyond the server's `a[href]`
+  // whitelist. The sanitizer would strip them on save, so nothing breaks, but
+  // this file claims the editor can only ever produce whitelist-safe markup and
+  // that claim has to actually be true -- otherwise the next person trusts a
+  // guarantee the code does not keep.
+  Link.configure({
+    openOnClick: false,
+    HTMLAttributes: { target: null, rel: null, class: null },
+  }),
 ]
 
 export function RichText({ value, onChange }) {
