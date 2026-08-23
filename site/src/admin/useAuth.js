@@ -31,5 +31,12 @@ export function useAuth() {
     setUser(null)
   }, [])
 
-  return { user, loading, login, logout }
+  // Client-side only, no network call: drops the cached user so <Admin>
+  // falls back to <Login/>. For when an admin page's own request comes back
+  // 401 (the 12-hour session cookie expired while the page was open) --
+  // there is no cookie left to usefully log out of, just a stale `user` to
+  // clear so the UI reflects reality instead of hanging.
+  const clearSession = useCallback(() => setUser(null), [])
+
+  return { user, loading, login, logout, clearSession }
 }

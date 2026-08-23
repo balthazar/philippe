@@ -123,3 +123,16 @@
   background: #f0e6d2;
   color: #8a5a00;
 }
+
+.admin-error {
+  margin: 0 1.5rem 1rem;
+  padding: 0.6rem 0.9rem;
+  background: #fdeaea;
+  color: #b00020;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.admin-not-found {
+  padding: 2rem 1.5rem;
+}

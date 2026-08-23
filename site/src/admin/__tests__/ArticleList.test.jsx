@@ -76,4 +76,53 @@ describe('ArticleList', () => {
       expect(send).toHaveBeenCalledWith('POST', '/admin/articles/reorder', { ids: ['2', '1'] })
     )
   })
+
+  it('shows an error and stops loading when the initial fetch fails for a non-401 reason', async () => {
+    vi.spyOn(api, 'apiGet').mockRejectedValue(Object.assign(new Error('down'), { status: 500 }))
+    renderList()
+
+    // loading must never be left true on a failed request: this is the
+    // "hangs on a blank page" bug, so assert the visible error rather than
+    // just the absence of a spinner.
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/impossible de charger/i))
+  })
+
+  it('shows an error and leaves the badge unchanged when the publish toggle fails', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0]], total: 1 })
+    vi.spyOn(api, 'apiSend').mockRejectedValue(Object.assign(new Error('down'), { status: 500 }))
+    renderList()
+
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /dépublier/i }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    // Still "Publié": a failed PATCH must not silently leave the button
+    // looking like nothing happened, but it also must not flip the badge
+    // to a state the server never confirmed.
+    expect(screen.getByText('Publié')).toBeInTheDocument()
+  })
+
+  it('reverts the optimistic reorder and shows an error when the reorder POST fails', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [ITEMS[0], ITEMS[1]], total: 2 })
+    const send = vi.spyOn(api, 'apiSend').mockRejectedValue(Object.assign(new Error('down'), { status: 500 }))
+    renderList()
+
+    await waitFor(() => expect(screen.getByText('Porte')).toBeInTheDocument())
+
+    const rows = screen.getAllByRole('listitem')
+    const dataTransfer = { setData: vi.fn(), getData: vi.fn() }
+    fireEvent.dragStart(rows[0], { dataTransfer })
+    fireEvent.dragOver(rows[1], { dataTransfer })
+    fireEvent.drop(rows[1], { dataTransfer })
+
+    await waitFor(() => expect(send).toHaveBeenCalledWith('POST', '/admin/articles/reorder', { ids: ['2', '1'] }))
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+    // Reverted: "Porte" (article 1) leads again, matching what the server
+    // actually has, instead of staying on the optimistic order that never
+    // made it to the server.
+    const revertedRows = screen.getAllByRole('listitem')
+    expect(revertedRows[0]).toHaveTextContent('Porte')
+    expect(revertedRows[1]).toHaveTextContent('Fenêtre')
+  })
 })

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, Outlet } from 'react-router-dom'
 import { SEGMENTS } from './routes.js'
 import { Header } from '@/components/Header.jsx'
 import { Footer } from '@/components/Footer.jsx'
@@ -45,35 +45,39 @@ function localizedRoutes(lang, onTranslatedPath) {
   )
 }
 
-export default function App() {
-  const { pathname } = useLocation()
-  const [translatedPath, setTranslatedPath] = useState(null)
-
-  // Admin is its own branch, entirely apart from the public <Routes> tree
-  // below: it owns absolute-path matching in its own internal <Routes> (see
-  // Admin.jsx and Login.test.jsx, which renders <Admin/> standalone and
-  // relies on that), and it never renders the public <Header>/<Footer>.
-  // Checked first, before any public routing runs, so "/admin" can never be
-  // swallowed as a French section slug by the "/" branch below (nesting it
-  // as a <Route path="/admin/*"> inside the same <Routes> would strip the
-  // "/admin" prefix before Admin's own absolute routes ever saw it).
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    return (
-      <Suspense fallback={null}>
-        <Admin />
-      </Suspense>
-    )
-  }
-
+// A layout route: wraps only the public branches below it in the public
+// chrome, via <Outlet/>. /admin (a sibling route, not nested under this
+// one) never passes through here, so it never renders <Header>/<Footer>.
+function PublicLayout({ translatedPath }) {
   return (
     <>
       <Header translatedPath={translatedPath} />
-      <Routes>
+      <Outlet />
+      <Footer />
+    </>
+  )
+}
+
+export default function App() {
+  const [translatedPath, setTranslatedPath] = useState(null)
+
+  return (
+    <Routes>
+      {/*
+        Ordered first (React Router ranks explicit static segments over a
+        "/" index/param branch regardless of order, but first is also
+        clearest): /admin owns its own absolute-vs-relative route context
+        via this real <Route>, so Admin.jsx's own <Routes> can use ordinary
+        relative paths (index, articles/new, ...), the same as every other
+        route table in this app. It is a sibling of the public layout route
+        below, not nested under it, so it never renders the public chrome.
+      */}
+      <Route path="/admin/*" element={<Suspense fallback={null}><Admin /></Suspense>} />
+      <Route element={<PublicLayout translatedPath={translatedPath} />}>
         <Route path="/">{localizedRoutes('fr', setTranslatedPath)}</Route>
         <Route path="/en">{localizedRoutes('en', setTranslatedPath)}</Route>
         <Route path="*" element={<NotFound />} />
-      </Routes>
-      <Footer />
-    </>
+      </Route>
+    </Routes>
   )
 }

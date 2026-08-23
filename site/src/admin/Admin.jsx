@@ -5,10 +5,20 @@ import { ArticleList } from './ArticleList.jsx'
 import { ArticleEditor } from './ArticleEditor.jsx'
 import { MediaLibrary } from './MediaLibrary.jsx'
 import { PageEditor } from './PageEditor.jsx'
+import { SessionExpiredProvider } from './session.js'
 import './admin.css'
 
+function AdminNotFound() {
+  return (
+    <div className="admin-not-found">
+      <p>Page introuvable.</p>
+      <Link to="/admin">Retour aux articles</Link>
+    </div>
+  )
+}
+
 export default function Admin() {
-  const { user, loading, login, logout } = useAuth()
+  const { user, loading, login, logout, clearSession } = useAuth()
   if (loading) return null
   if (!user) return <Login onLogin={login} />
 
@@ -21,19 +31,24 @@ export default function Admin() {
         <button type="button" onClick={logout}>Déconnexion</button>
       </nav>
       {/*
-        Absolute paths, not relative/index: Admin is rendered directly (not
-        nested inside a matched <Route path="/admin/*">, see App.jsx), so
-        there is no ancestor route stripping an "/admin" prefix from the
-        location before these are matched. Login.test.jsx renders <Admin/>
-        standalone at "/admin" and relies on that.
+        Relative route paths: <Admin/> is only ever mounted nested inside a
+        matched <Route path="/admin/*"> (see App.jsx's layout-route setup),
+        so route context here has parentPathnameBase "/admin" and these
+        resolve against it, the same way the rest of the app's routes do.
+        That also means Task 21's admin pages get real route context for
+        free: a relative <Link> written inside any of them resolves
+        correctly, rather than needing to be hand-written absolute.
       */}
-      <Routes>
-        <Route path="/admin" element={<ArticleList />} />
-        <Route path="/admin/articles/new" element={<ArticleEditor />} />
-        <Route path="/admin/articles/:id" element={<ArticleEditor />} />
-        <Route path="/admin/media" element={<MediaLibrary />} />
-        <Route path="/admin/pages/:key" element={<PageEditor />} />
-      </Routes>
+      <SessionExpiredProvider value={clearSession}>
+        <Routes>
+          <Route index element={<ArticleList />} />
+          <Route path="articles/new" element={<ArticleEditor />} />
+          <Route path="articles/:id" element={<ArticleEditor />} />
+          <Route path="media" element={<MediaLibrary />} />
+          <Route path="pages/:key" element={<PageEditor />} />
+          <Route path="*" element={<AdminNotFound />} />
+        </Routes>
+      </SessionExpiredProvider>
     </div>
   )
 }
