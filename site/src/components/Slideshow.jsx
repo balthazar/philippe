@@ -132,8 +132,6 @@ export function Slideshow({ slides = [], interval = 3000 }) {
       className="slideshow"
       aria-roledescription="carousel"
       aria-label={lang === 'fr' ? 'Diaporama des œuvres récentes' : 'Recent works slideshow'}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
     >
@@ -157,16 +155,29 @@ export function Slideshow({ slides = [], interval = 3000 }) {
           height={currentLarge?.height}
         />
       </div>
-      {slide.article?.slug && (
-        <Link to={href('works', slide.article.slug)} className="slide-caption">
-          {caption}
-          {year ? ` | ${year}` : ''}
-        </Link>
-      )}
-      <div className="slideshow-controls">
-        <button type="button" onClick={() => move(-1)} aria-label={lang === 'fr' ? 'Précédent' : 'Previous'}>‹</button>
-        <span aria-live="polite">{safeIndex + 1} / {count}</span>
-        <button type="button" onClick={() => move(1)} aria-label={lang === 'fr' ? 'Suivant' : 'Next'}>›</button>
+      {/* Hover-pause lives on this strip, NOT on the <section>. The section
+          is full-bleed and 100dvh tall, so a pointer anywhere on the page
+          would sit inside it and pause autoplay permanently -- the slideshow
+          would simply never advance for anyone using a mouse. Pausing while
+          the pointer is over the caption and controls still covers the case
+          that matters: someone reading the title or reaching for an arrow.
+          Keyboard users get the same via onFocusCapture on the section. */}
+      <div
+        className="slideshow-chrome"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+      >
+        {slide.article?.slug && (
+          <Link to={href('works', slide.article.slug)} className="slide-caption">
+            {caption}
+            {year ? ` | ${year}` : ''}
+          </Link>
+        )}
+        <div className="slideshow-controls">
+          <button type="button" onClick={() => move(-1)} aria-label={lang === 'fr' ? 'Précédent' : 'Previous'}>‹</button>
+          <span aria-live="polite">{safeIndex + 1} / {count}</span>
+          <button type="button" onClick={() => move(1)} aria-label={lang === 'fr' ? 'Suivant' : 'Next'}>›</button>
+        </div>
       </div>
     </section>
   )

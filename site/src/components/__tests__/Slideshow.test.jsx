@@ -100,13 +100,32 @@ describe('Slideshow', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
-  it('pauses autoplay on mouse hover and resumes on mouse leave', () => {
+  it('pauses autoplay while the pointer is over the caption and controls', () => {
     renderShow()
-    fireEvent.mouseEnter(document.querySelector('.slideshow'))
+    fireEvent.mouseEnter(document.querySelector('.slideshow-chrome'))
     act(() => { vi.advanceTimersByTime(5000) })
     expect(screen.getByAltText('porte')).toBeInTheDocument()
 
-    fireEvent.mouseLeave(document.querySelector('.slideshow'))
+    fireEvent.mouseLeave(document.querySelector('.slideshow-chrome'))
+    act(() => { vi.advanceTimersByTime(5000) })
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  // Regression guard. Hover-pause used to sit on the <section>, which is
+  // full-bleed and 100dvh tall once the slideshow became the whole homepage.
+  // A pointer resting anywhere on the page therefore paused autoplay
+  // permanently and the slideshow never advanced for any mouse user. The
+  // pause target must stay small.
+  it('does not pause autoplay when the pointer is over the image stage', () => {
+    renderShow()
+    fireEvent.mouseEnter(document.querySelector('.slideshow-stage'))
+    act(() => { vi.advanceTimersByTime(5000) })
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  it('does not pause autoplay when the pointer is over the section itself', () => {
+    renderShow()
+    fireEvent.mouseEnter(document.querySelector('.slideshow'))
     act(() => { vi.advanceTimersByTime(5000) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
   })

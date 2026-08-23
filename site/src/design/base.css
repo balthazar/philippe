@@ -246,8 +246,16 @@ picture {
   flex-direction: column;
   height: calc(100dvh - var(--header-height));
   position: relative;
-  margin: 0 0 var(--space-4);
+  margin: 0;
   text-align: center;
+}
+
+/* Wraps the caption and controls so hover-pause has a small target instead
+   of the whole viewport -- see the comment in Slideshow.jsx. Deliberately
+   just a block: the caption centers on the inherited text-align and the
+   controls center themselves, so no layout changes by introducing it. */
+.slideshow-chrome {
+  flex: 0 0 auto;
 }
 
 /* The image stage: the flexible child that absorbs whatever height the
@@ -283,11 +291,21 @@ picture {
 }
 
 /* Crossfade, 600ms: only the outgoing image animates, fading from opaque to
-   transparent over the incoming one (already opaque underneath), which
-   reads as a crossfade without needing to animate both layers. `is-leaving`
-   is added a frame after mount so the browser actually transitions the
-   change instead of jumping straight to the end state. */
+   transparent to reveal the incoming one underneath. `is-leaving` is added a
+   frame after mount so the browser actually transitions the change instead
+   of jumping straight to the end state.
+
+   z-index is load-bearing, not decoration. Both images are absolutely
+   positioned in the same stage and the outgoing one is rendered FIRST in the
+   DOM, so without an explicit stacking order the incoming image paints on
+   top of it at full opacity. Fading out an image that is already covered by
+   an opaque one is invisible: only the sliver around the edges, where two
+   different aspect ratios fail to overlap, ever shows the transition. That
+   is exactly the bug this line fixes, and note that jsdom cannot see paint
+   order at all -- the suite was fully green while the fade did nothing on
+   screen, so this one is only ever caught by looking at it. */
 .slideshow-image--outgoing {
+  z-index: 1;
   transition: opacity 600ms ease-in-out;
 }
 
