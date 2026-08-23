@@ -159,9 +159,14 @@ picture {
   margin: 0;
 }
 
+/* Page intro copy spans the full gutter-to-gutter width and centers, rather
+   than sitting in a 42rem measure ranged left. On a page that is otherwise a
+   centered grid of centered captions, a left-ranged column of text was the
+   only thing on the page not on the centre line. */
 .page-intro {
-  max-width: 42rem;
   margin: var(--space-4) 0 var(--space-3);
+  text-align: center;
+  font-size: var(--text-l);
 }
 
 .category-section {
@@ -216,8 +221,13 @@ picture {
 }
 
 .card-caption {
+  /* display: block is what makes the text-align below do anything at all.
+     This is a <span>, so it is inline by default, and text-align does not
+     apply to an inline box -- it aligns inline content INSIDE a block. The
+     rule sat here inert and the captions were quietly left-aligned. */
+  display: block;
   font-family: var(--font-chrome);
-  font-size: var(--text-s);
+  font-size: var(--text-m);
   line-height: 1.4;
   text-align: center;
   text-transform: uppercase;
