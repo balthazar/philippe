@@ -28,7 +28,7 @@ function usePrefersReducedMotion() {
   return reduced
 }
 
-export function Slideshow({ slides = [], interval = 3000 }) {
+export function Slideshow({ slides = [], interval = 5000 }) {
   const { href, lang } = useLang()
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)

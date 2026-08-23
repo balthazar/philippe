@@ -43,9 +43,9 @@ describe('Slideshow', () => {
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
   })
 
-  it('defaults to a 3000ms autoplay interval when none is passed', () => {
+  it('defaults to a 5000ms autoplay interval when none is passed', () => {
     render(<MemoryRouter><LangProvider><Slideshow slides={slides} /></LangProvider></MemoryRouter>)
-    act(() => { vi.advanceTimersByTime(2999) })
+    act(() => { vi.advanceTimersByTime(4999) })
     expect(screen.getByAltText('porte')).toBeInTheDocument()
     act(() => { vi.advanceTimersByTime(1) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
