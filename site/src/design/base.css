@@ -159,13 +159,12 @@ picture {
   margin: 0;
 }
 
-/* Page intro copy spans the full gutter-to-gutter width and centers, rather
-   than sitting in a 42rem measure ranged left. On a page that is otherwise a
-   centered grid of centered captions, a left-ranged column of text was the
-   only thing on the page not on the centre line. */
+/* Page intro copy spans the full gutter-to-gutter width rather than sitting
+   in a 42rem measure. Ranged left, not centred: centred paragraphs give a
+   ragged left edge that is harder to read and fights the flush-left grid of
+   works below. */
 .page-intro {
   margin: var(--space-4) 0 var(--space-3);
-  text-align: center;
   font-size: var(--text-l);
 }
 
