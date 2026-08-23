@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: philippe-web
+  namespace: apps
+  labels: { app: philippe-web }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: philippe-web }
+  template:
+    metadata:
+      labels: { app: philippe-web }
+    spec:
+      imagePullSecrets:
+        - name: ghcr-creds
+      containers:
+        - name: philippe-web
+          image: ghcr.io/goobernetics/philippe-web:latest
+          ports: [{ containerPort: 8080 }]
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 300m, memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: philippe-web
+  namespace: apps
+  labels: { app: philippe-web }
+spec:
+  type: ClusterIP
+  selector: { app: philippe-web }
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: philippe
+  namespace: apps
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: philippe.natazar.org
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: philippe-api, port: { number: 80 } } }
+          - path: /media
+            pathType: Prefix
+            backend: { service: { name: philippe-api, port: { number: 80 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: philippe-web, port: { number: 80 } } }

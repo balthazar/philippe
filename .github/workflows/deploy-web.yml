@@ -1,0 +1,115 @@
+# The prerender step in the web image's build runs against a live API
+# (PRERENDER_API_URL below), so in production the philippe-api Deployment
+# must already be rolled out before this workflow's build runs. This
+# workflow does not enforce that ordering itself: it is an operational
+# constraint on the order the two Deployments are first applied to the
+# cluster (Task 24), not something a single push can encode.
+name: Web
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'site/src/**'
+      - 'site/prerender/**'
+      - 'site/package.json'
+      - 'site/package-lock.json'
+      - 'Dockerfile'
+      - 'nginx.conf'
+      - 'k8s/web.yaml'
+      - '.github/workflows/deploy-web.yml'
+
+concurrency:
+  group: deploy-web-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/philippe-web
+  KUBE_NAMESPACE: apps
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Run tests
+        working-directory: site
+        run: npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          build-args: |
+            PRERENDER_API_URL=https://philippe.natazar.org/api
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Configure kubeconfig from base64
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${KUBECONFIG_B64}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Roll forward Web image
+        run: |
+          kubectl -n "$KUBE_NAMESPACE" set image deployment/philippe-web \
+            philippe-web=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Wait for Web rollout
+        run: kubectl -n "$KUBE_NAMESPACE" rollout status deploy/philippe-web --timeout=180s

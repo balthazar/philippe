@@ -232,6 +232,26 @@ async function fetchArticles() {
   return merged
 }
 
+// Controller correction 4: fetchJson already throws on a non-2xx response or
+// a connection failure, which main() below treats as "API unreachable" and
+// degrades to shipping the bare SPA shell (see the catch around
+// fetchArticles/fetchPages). That path does not catch a *reachable* API that
+// answers 200 with an (almost) empty list -- that would fall through this
+// function entirely and quietly emit a couple dozen static-page routes with
+// zero articles, exit 0, and ship a near-empty site. The real archive has 63
+// articles and 142 routes; these floors sit well below either, so ordinary
+// growth or shrinkage of the archive never trips them, only a catastrophic
+// result does.
+export function checkFloor({ articleCount, routeCount, articleFloor = 10, routeFloor = 30 }) {
+  if (articleCount < articleFloor) {
+    return `prerender aborted: API returned only ${articleCount} article(s) (expected on the order of dozens); refusing to ship a near-empty site`
+  }
+  if (routeCount < routeFloor) {
+    return `prerender aborted: only ${routeCount} route(s) collected (expected on the order of a hundred); refusing to ship a near-empty site`
+  }
+  return null
+}
+
 async function fetchPages() {
   const pages = {}
   await Promise.all(
@@ -259,6 +279,15 @@ async function main() {
     return
   }
 
+  const routes = collectRoutes({ articles: content.articles, pageKeys: PAGE_KEYS })
+
+  const floorFailure = checkFloor({ articleCount: content.articles.length, routeCount: routes.length })
+  if (floorFailure) {
+    console.error(floorFailure)
+    process.exitCode = 1
+    return
+  }
+
   // A computed specifier, not a string literal: this file is also loaded
   // under Vite (by vitest, to unit-test collectRoutes/headFor/pageHtml), and
   // Vite's import-analysis statically resolves literal dynamic-import
@@ -267,7 +296,6 @@ async function main() {
   // resolves only when main() actually runs, under plain Node.
   const entryServerUrl = new URL('../dist-server/entry-server.js', import.meta.url)
   const { render } = await import(entryServerUrl.href)
-  const routes = collectRoutes({ articles: content.articles, pageKeys: PAGE_KEYS })
 
   for (const route of routes) {
     const preload = preloadFor(route, content)

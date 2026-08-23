@@ -1,0 +1,32 @@
+# Source WordPress backup archive: contains .ssh/id_rsa and wp-config.php
+# database credentials. Must never enter a build context or an image layer;
+# a pushed layer is public and permanent.
+backup_*.tar
+
+# The migration tooling and its extracted data/uploads (1.7GB, pulled from
+# the archive above). Neither image ships anything from migrate/.
+migrate/
+
+# Not needed by either build.
+.git/
+.github/
+k8s/
+docs/
+docker-compose.dev.yml
+.gstack/
+.dev/
+.superpowers/
+
+# Reinstalled fresh inside the image; a stale local node_modules must not be
+# sent to the daemon or shadow the container's own npm ci.
+**/node_modules/
+
+# Build output regenerated inside the image.
+**/dist/
+**/dist-server/
+**/coverage/
+
+.env
+.env.*
+*.log
+**/.DS_Store

@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest'
-import { collectRoutes, headFor, pageHtml, mergeArticleLists, preloadFor } from '../index.js'
+import { collectRoutes, headFor, pageHtml, mergeArticleLists, preloadFor, checkFloor } from '../index.js'
+
+// Controller correction 4: a reachable API answering 200 with an (almost)
+// empty list is not caught by main()'s try/catch around fetchArticles /
+// fetchPages (nothing throws), so without this floor it would silently emit
+// a handful of static-page routes, exit 0, and ship a near-empty site.
+describe('checkFloor', () => {
+  it('flags zero articles even when static-page routes exist', () => {
+    const failure = checkFloor({ articleCount: 0, routeCount: 18 })
+    expect(failure).toMatch(/0 article/)
+  })
+
+  it('flags an implausibly small route count even with some articles', () => {
+    const failure = checkFloor({ articleCount: 12, routeCount: 20 })
+    expect(failure).toMatch(/20 route/)
+  })
+
+  it('passes on counts near the real archive size', () => {
+    expect(checkFloor({ articleCount: 63, routeCount: 142 })).toBeNull()
+  })
+
+  it('does not trip on ordinary growth or shrinkage of the archive', () => {
+    expect(checkFloor({ articleCount: 40, routeCount: 90 })).toBeNull()
+  })
+})
 
 describe('collectRoutes', () => {
   it('emits both languages for every static page and article', () => {

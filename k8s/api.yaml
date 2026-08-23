@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: philippe-api-config
+  namespace: apps
+data:
+  MONGO_DB: "philippe"
+  MEDIA_ROOT: "/data/media"
+  ALLOWED_ORIGINS: "https://philippe.natazar.org"
+  PORT: "8080"
+---
+# Media lives on a node-local ReadWriteOnce volume, so this deployment must
+# stay at one replica and must not run two pods at once during a rollout.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: philippe-media
+  namespace: apps
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Secrets are created out of band:
+#   kubectl -n apps create secret generic philippe-api-secrets \
+#     --from-literal=MONGO_URI='mongodb://<user>:<pass>@mongo.infra.svc.cluster.local:27017/?authSource=admin' \
+#     --from-literal=JWT_SECRET="$(openssl rand -hex 32)" \
+#     --from-literal=ADMIN_EMAIL='...' --from-literal=ADMIN_PASSWORD='...'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: philippe-api
+  namespace: apps
+  labels: { app: philippe-api }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: philippe-api }
+  template:
+    metadata:
+      labels: { app: philippe-api }
+    spec:
+      imagePullSecrets:
+        - name: ghcr-creds
+      containers:
+        - name: philippe-api
+          image: ghcr.io/goobernetics/philippe-api:latest
+          ports: [{ containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: philippe-api-config }
+            - secretRef: { name: philippe-api-secrets }
+          volumeMounts:
+            - name: media
+              mountPath: /data/media
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          startupProbe:
+            httpGet: { path: /health, port: 8080 }
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            periodSeconds: 60
+            failureThreshold: 3
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: philippe-media
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: philippe-api
+  namespace: apps
+  labels: { app: philippe-api }
+spec:
+  type: ClusterIP
+  selector: { app: philippe-api }
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
