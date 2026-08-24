@@ -692,6 +692,37 @@ picture {
     top: var(--header-height);
   }
 
+  /* Task 35, Part B: at 25 dots (one per year) the whole rail always fit a
+     normal desktop viewport -- the comment above this block used to say so
+     outright, celebrating deleting the OLD design's scroll/auto-scroll/
+     fade-mask machinery for exactly that reason. At 39 (one per exhibition)
+     it no longer reliably does: measured directly, 39 dots at this gap and
+     hit-target size need about 1012px, taller than the ~820px available
+     below the header on a common 900px-tall window -- and unlike a page
+     that is genuinely long, THIS height comes from the rail alone, so it
+     was inflating even a one-line exhibition's page to need a scrollbar
+     purely because of dot count. `max-height` + `overflow-y: auto` caps the
+     rail at whatever height actually IS available and scrolls the dot list
+     within it -- not a full reintroduction of the old design's own scroll
+     machinery, just a plain, hidden-scrollbar clip (scrollbar-width: none,
+     :-webkit-scrollbar below, matching how the mobile row already hides
+     its own).
+
+     `width` here is NOT a layout width -- `.exhibitions-layout`'s grid
+     track (var(--exhibitions-timeline-width), unchanged) still decides
+     where the content column starts, and each dot's own `<li>` (not
+     stretched: `align-items: flex-start`) stays exactly as narrow as
+     before. It exists ONLY to give `.exhibitions-timeline-label` (below,
+     "1989" at most -- measured at ~45px including its own padding) enough
+     room to pop out to the right and land INSIDE this box's own clipping
+     boundary, sized with a safety margin, rather than escaping past it: the
+     CSS overflow spec computes `overflow-x: visible` up to `auto` the
+     moment `overflow-y` is anything else (the exact rule the mobile
+     `padding-top` comment below already describes for its own axis), so
+     `overflow-x: visible` cannot coexist with the vertical scrolling this
+     needs. Reserving room INSIDE the box, the same fix the mobile version
+     already uses on its own axis, is what keeps the label from being
+     silently clipped instead. */
   .exhibitions-timeline > ol {
     flex-direction: column;
     align-items: flex-start;
@@ -701,7 +732,10 @@ picture {
        dots without touching hit-area math at all. */
     gap: 0.125rem;
     padding: 0;
-    overflow-x: visible;
+    width: 4rem;
+    max-height: calc(100dvh - var(--header-height));
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .exhibitions-timeline-group {
