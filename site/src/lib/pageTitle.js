@@ -21,7 +21,21 @@ export function articlePageTitle(title, year) {
   return `${base} | ${SITE_NAME}`
 }
 
-/** A static or section page's title (biography, works, contact, ...): its own title and the site name. */
+/**
+ * A static or section page's title (biography, works, contact, ...): its own
+ * title and the site name.
+ *
+ * An untitled page falls back to the bare site name rather than the
+ * suffix on its own. A `Page` document's `title` is a localizedField, which
+ * defaults to '' -- and the exhibitions page in production carries exactly
+ * that, so /expositions shipped with a literal `<title> | Philippe Gronon</title>`.
+ * The runtime hid this: Exhibitions.jsx guarded its own call
+ * (`title && staticPageTitle(title)`), so the tab kept the previous route's
+ * title instead of showing the broken one, while the PRERENDERED head -- the
+ * one crawlers read -- had no such guard. Two call sites disagreeing about
+ * what an empty title means is exactly the drift this module exists to
+ * prevent, so the answer lives here, once, where both of them already are.
+ */
 export function staticPageTitle(title) {
-  return `${title} | ${SITE_NAME}`
+  return title ? `${title} | ${SITE_NAME}` : SITE_NAME
 }

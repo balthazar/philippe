@@ -18,4 +18,15 @@ describe('pageTitle', () => {
   it('staticPageTitle suffixes the site name', () => {
     expect(staticPageTitle('Biographie')).toBe('Biographie | Philippe Gronon')
   })
+
+  // A Page's `title` is a localizedField, which defaults to '' -- and the
+  // exhibitions page in production carries exactly that, which shipped
+  // /expositions with a literal "<title> | Philippe Gronon</title>". The
+  // fallback lives here so the prerender and the runtime cannot answer
+  // "what does an untitled page's tab say" two different ways.
+  it('staticPageTitle falls back to the bare site name for an untitled page', () => {
+    expect(staticPageTitle('')).toBe('Philippe Gronon')
+    expect(staticPageTitle(undefined)).toBe('Philippe Gronon')
+    expect(staticPageTitle(null)).toBe('Philippe Gronon')
+  })
 })

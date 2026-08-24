@@ -34,7 +34,7 @@ export function Exhibitions() {
   })
 
   // Coordinator feedback (task 27): same reasoning as Works.jsx.
-  usePageTitle(data?.intro?.title && staticPageTitle(data.intro.title))
+  usePageTitle(data && staticPageTitle(data.intro?.title))
 
   // Task 26, correction to B4's original reasoning no longer applies here
   // the same way -- ExhibitionsLayout's own `<main>` already reserves the
