@@ -816,7 +816,21 @@ picture {
    escaping into the left margin. The rail is now at the RIGHT edge, so the
    same reasoning flips: growing right here would push the label off the
    page's own right edge, into the browser's margin, so it grows left,
-   toward the content column, instead. */
+   toward the content column, instead.
+
+   Task 38, part 2 (client feedback: "dots being hidden"). The rail is only
+   var(--exhibitions-timeline-width) (1.5rem) wide and the dots sit at its
+   centre, so a label anchored at `right: 0` covered the full width of the
+   dot column with its own opaque --paper background -- every dot within
+   half a label's height of a persistent year vanished under it. Anchored
+   clear of the dots instead: `50%` is the rail's centre line, i.e. the
+   dots' own axis, and the offset past it clears the dot's radius
+   (0.1875rem) with room to spare, so a label now stops short of its year's
+   dot rather than painting over it. `top` is still centred on the dot it
+   names -- ExhibitionsTimeline.jsx clamps that value to the rail's own box
+   (clampToRail) so the newest and oldest years' labels sit flush with the
+   ends instead of hanging past them, which is what was raising a scrollbar
+   on a page that is meant never to scroll. */
 /* Task 37, part C4: bumped from the unset default (400) -- a non-persistent
    label already reads faint from its colour alone (--ink-soft); at regular
    weight, next to a page of otherwise-bold chrome type, it read as too
@@ -826,7 +840,7 @@ picture {
 .exhibitions-timeline-label {
   position: absolute;
   top: 0;
-  right: 0;
+  right: calc(50% + 0.5rem);
   left: auto;
   z-index: 1;
   transform: translateY(-50%);
@@ -961,6 +975,22 @@ picture {
 
 .exhibitions-content .article-header {
   margin-top: 0;
+}
+
+/* Task 38, part 4 (client feedback): an exhibition's own title reads a
+   step quieter than the rest of the site's headings -- "a bit grey compared
+   to the philippe gronon title". It is the only h1 that shares the screen
+   with the wordmark as an equal (the rail pins it level with the header, so
+   the two sit side by side rather than one above the other), and at
+   --ink-strong it out-weighted the wordmark's own --ink. --ink-muted sits
+   one step further down that same scale (see tokens.css), so the wordmark
+   stays the darkest thing on the page and the exhibition title reads as
+   what it is: the name of what you are looking at, not the name of the
+   site. Scoped to .exhibitions-content, so works articles' own titles --
+   which never share a viewport with the wordmark this way -- keep the
+   literal black the client specified for them in task 29. */
+.exhibitions-content .article-header h1 {
+  color: var(--ink-muted);
 }
 
 /* Task 36, item 6: the content column -- title, gallery, and the copyright

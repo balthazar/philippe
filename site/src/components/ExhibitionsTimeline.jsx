@@ -84,6 +84,17 @@ function useRailHeight(ref) {
  */
 const FALLBACK_SCRUB_HEIGHT = 44
 
+/**
+ * Task 38, part 1. The same kind of rough first-paint/jsdom guess as
+ * FALLBACK_SCRUB_HEIGHT above, for a persistent year label
+ * (.exhibitions-timeline-label: one line of var(--text-m) type at the body's
+ * 1.6 line-height, plus 0.125rem of padding each side). Every year label is
+ * the same height -- one line, always four digits -- so ONE measurement
+ * (taken from whichever label renders first, see the ref below) governs all
+ * of them, rather than a ref and an observer per label.
+ */
+const FALLBACK_LABEL_HEIGHT = 25
+
 /** Measures `ref`'s own rendered height in real pixels, live -- the scrub
  * label's height changes with its content (a one-line vs. a wrapping title),
  * not just the viewport, so this re-measures on every resize of the element
@@ -124,6 +135,19 @@ function useElementHeight(ref, fallback, mountKey) {
 }
 
 /**
+ * Task 38, part 1: shared by BOTH floating labels -- the scrubber and,
+ * since this task, every persistent YEAR label. The year labels were the
+ * remaining source of the page scroll this section is not supposed to have:
+ * a dot's own hit box is inset from the rail's ends by half its size (see
+ * DOT_HIT_SIZE above), but a year label is TALLER than a dot's hit box
+ * (13px of type on a 1.6 line-height, plus padding, versus 24px), so the
+ * oldest year's label -- centred on the bottommost dot, which sits exactly
+ * DOT_HIT_SIZE/2 above the rail's own bottom edge -- still hung past that
+ * edge by the difference. The rail's bottom edge IS the viewport's bottom
+ * edge (.exhibitions-layout is `calc(100dvh - header-height)`, and nothing
+ * in this section clips or scrolls by design), so even a fraction of a
+ * pixel of overhang inflates the document and raises a scrollbar.
+ *
  * Task 37, part C1. The scrubber label used to share a dot's own `top` and
  * `translateY(-50%)` centring unconditionally, which is exactly what let it
  * escape the viewport at the rail's own extremes: centred on the topmost
@@ -144,7 +168,7 @@ function useElementHeight(ref, fallback, mountKey) {
  * correctly to a long, two-line title's own taller box, not just the common
  * one-line case.
  */
-function clampScrubTop(top, labelHeight, railHeight) {
+function clampToRail(top, labelHeight, railHeight) {
   const half = labelHeight / 2
   if (railHeight <= labelHeight) return railHeight / 2
   return Math.min(Math.max(top, half), railHeight - half)
@@ -241,6 +265,10 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   const navigate = useNavigate()
   const railRef = useRef(null)
   const scrubRef = useRef(null)
+  // Task 38, part 1: attached to the FIRST year label only -- they are all
+  // the same height (see FALLBACK_LABEL_HEIGHT), and one label mounts for
+  // as long as any does, so a single observer answers for the whole set.
+  const labelRef = useRef(null)
   const height = useRailHeight(railRef)
   const groups = groupExhibitionsByYear(items)
   const total = items?.length || 0
@@ -254,16 +282,38 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   const activeIndex = activeSlug ? items.findIndex((item) => item.slug === activeSlug) : -1
   const activeItem = activeIndex >= 0 ? items[activeIndex] : null
   const scrubHeight = useElementHeight(scrubRef, FALLBACK_SCRUB_HEIGHT, activeSlug)
+  const labelHeight = useElementHeight(labelRef, FALLBACK_LABEL_HEIGHT, groups.length)
 
-  // Whichever dot currently holds keyboard focus (if any) within the rail --
+  // Whichever dot currently holds KEYBOARD focus (if any) within the rail --
   // shared by handleLeave below and the navigation effect further down, so
   // the two never answer "what's focused right now" two different ways.
+  //
+  // Task 38, part 3: `:focus-visible`, not plain `:focus`. A mouse click
+  // focuses its target exactly as Tab does, so a plain focus test cannot
+  // tell "this viewer is navigating by keyboard and needs the label" from
+  // "this viewer just clicked a dot and the browser focused it on the way
+  // out" -- and the label is a hover/keyboard affordance, so answering yes
+  // to the second case is what left it hanging over the newly loaded page
+  // with the pointer nowhere near the rail. `:focus-visible` is the
+  // platform's own answer to that exact question, so it is asked rather
+  // than re-derived from modality bookkeeping of our own. Guarded because a
+  // selector engine that does not implement the pseudo-class throws on it
+  // rather than returning false (jsdom's own nwsapi historically did);
+  // falling back to "not keyboard focus" is the conservative answer, and
+  // costs only the mouse-leave restore, never the label itself (onFocus
+  // below sets it directly, unconditionally).
   const focusedSlug = () => {
     const el = railRef.current
     const focused = el && document.activeElement !== document.body && el.contains(document.activeElement)
       ? document.activeElement
       : null
-    return focused?.dataset.slug || null
+    if (!focused) return null
+    try {
+      if (!focused.matches(':focus-visible')) return null
+    } catch {
+      return null
+    }
+    return focused.dataset.slug || null
   }
 
   // Restores the label to whichever dot currently holds keyboard focus (if
@@ -287,9 +337,27 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   // common case (the brief's own words), not an edge case to leave dark
   // until the next pixel of movement.
   useEffect(() => {
-    setActiveSlug(focusedSlug())
+    // Task 38, part 3: a pointer click clears the label outright rather than
+    // restoring it from focus. See pointerNavRef below for why the two cases
+    // have to be told apart here at all.
+    const viaPointer = pointerNavRef.current
+    pointerNavRef.current = false
+    setActiveSlug(viaPointer ? null : focusedSlug())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSlug])
+
+  // Task 38, part 3 (client feedback): true from the moment a POINTER click
+  // starts a navigation until the effect above consumes it. A click is a
+  // click whether it came from a mouse or from Enter on a focused link --
+  // browsers dispatch both -- and `detail` is what separates them: the UI
+  // Events spec defines it as the click count for a pointer-driven click
+  // (1 and up) and browsers leave it at 0 for one synthesized from the
+  // keyboard. The keyboard case must still restore the label (that viewer
+  // has no pointer and the focused dot is the only thing telling them where
+  // they are); the pointer case must not (the label is a hover affordance,
+  // and leaving it up after the click is what the client saw as a tooltip
+  // stuck over the newly loaded page).
+  const pointerNavRef = useRef(false)
 
   const handleMove = (e) => {
     if (!total) return
@@ -331,6 +399,7 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
     const rect = railRef.current.getBoundingClientRect()
     const nearest = nearestIndexByY(positions, e.clientY - rect.top)
     e.preventDefault()
+    pointerNavRef.current = e.detail > 0
     navigate(href('article', items[nearest].slug))
   }
 
@@ -372,7 +441,7 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
         })}
       </ol>
 
-      {groups.map((group) => {
+      {groups.map((group, index) => {
         const groupStartIndex = items.findIndex((item) => item.yearStart === group.year)
         const isCurrentGroup = group.year === currentYear
         const isPersistent =
@@ -386,7 +455,13 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
           .filter(Boolean)
           .join(' ')
         return (
-          <span key={group.year} className={className} aria-hidden="true" style={{ top: `${positions[groupStartIndex]}px` }}>
+          <span
+            key={group.year}
+            ref={index === 0 ? labelRef : undefined}
+            className={className}
+            aria-hidden="true"
+            style={{ top: `${clampToRail(positions[groupStartIndex], labelHeight, height)}px` }}
+          >
             {group.year}
           </span>
         )
@@ -397,7 +472,7 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
           ref={scrubRef}
           className="exhibitions-timeline-scrub"
           aria-hidden="true"
-          style={{ top: `${clampScrubTop(positions[activeIndex], scrubHeight, height)}px` }}
+          style={{ top: `${clampToRail(positions[activeIndex], scrubHeight, height)}px` }}
         >
           <span className="exhibitions-timeline-scrub-year">{activeItem.yearStart}</span>
           <span className="exhibitions-timeline-scrub-title">{activeItem.title}</span>

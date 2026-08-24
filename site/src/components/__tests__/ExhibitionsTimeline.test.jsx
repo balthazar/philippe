@@ -349,7 +349,7 @@ describe('ExhibitionsTimeline', () => {
   // would leave behind), a DIFFERENT item is clicked and focused (as a real
   // click does), and the parent re-renders with the newly current slug --
   // exactly what ExhibitionsLayout does once the URL updates.
-  it('clears the floating scrubber label\'s stale value once navigation completes, restoring it from the link that still holds focus', () => {
+  it('restores the floating scrubber label from the focused link when a KEYBOARD activation navigates', () => {
     const { container, rerender } = render(
       <MemoryRouter initialEntries={['/']}>
         <LangProvider>
@@ -361,11 +361,13 @@ describe('ExhibitionsTimeline', () => {
     fireEvent.mouseMove(rail, { clientY: 0 })
     expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveTextContent('2024')
 
-    // Click "1989" (a different item than the stale hover above) -- a real
-    // click focuses its target the same way a keyboard Enter does.
+    // Enter on a focused link: browsers dispatch a click for it like any
+    // other, distinguishable only by `detail` staying 0 (see pointerNavRef
+    // in the component). This viewer has no pointer, so the label has to
+    // survive the navigation and follow the focused dot.
     const link = screen.getByRole('link', { name: '1989' })
     link.focus()
-    fireEvent.click(link, { clientY: 700 })
+    fireEvent.click(link, { clientY: 700, detail: 0 })
 
     // The parent (ExhibitionsLayout) re-renders with the newly current
     // slug once the URL updates.
@@ -380,6 +382,39 @@ describe('ExhibitionsTimeline', () => {
     const scrub = container.querySelector('.exhibitions-timeline-scrub')
     expect(scrub).toHaveTextContent('1989')
     expect(scrub).not.toHaveTextContent('2024')
+  })
+
+  // Task 38, part 3 (client feedback: the label "being stuck visible after
+  // clicking one exhibit"). A mouse click focuses its target exactly as Tab
+  // does, so the restore-from-focus above used to fire for pointer clicks
+  // too and left the label sitting over the newly loaded page with the
+  // pointer no longer anywhere near it. `detail: 1` is what marks this as
+  // pointer-driven.
+  it('clears the floating scrubber label outright when a POINTER click navigates, even though the click focused its own link', () => {
+    const { container, rerender } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <ExhibitionsTimeline items={items} currentSlug="expo-2023" currentYear={2023} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveTextContent('2024')
+
+    const link = screen.getByRole('link', { name: '1989' })
+    link.focus() // as a real mouse click does
+    fireEvent.click(link, { clientY: 700, detail: 1 })
+
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <ExhibitionsTimeline items={items} currentSlug="expo-1989" currentYear={1989} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+
+    expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
   })
 
   it('clears the floating scrubber label entirely on navigation when nothing holds focus within the rail', () => {
@@ -404,6 +439,41 @@ describe('ExhibitionsTimeline', () => {
     )
 
     expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
+  })
+
+  // Task 38, part 1 (client feedback: the rail "bleeds too much at the
+  // bottom ... and creates a scrollbar"). A year label is taller than a
+  // dot's own hit box, so centring the oldest year's label on the bottommost
+  // dot hung it past the rail's bottom edge -- which is the viewport's
+  // bottom edge, on a page designed never to scroll. jsdom has no layout, so
+  // these assert against the component's own fallbacks: a 700px rail
+  // (FALLBACK_RAIL_HEIGHT) and a 25px label (FALLBACK_LABEL_HEIGHT), i.e.
+  // every label's centre must sit within [12.5, 687.5].
+  it('clamps the newest year\'s label inside the rail\'s own top edge, rather than centring it past it', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const label = screen.getByText('2024', { selector: '.exhibitions-timeline-label' })
+    expect(parseFloat(label.style.top)).toBeGreaterThanOrEqual(12.5)
+    expect(container.querySelector('.exhibitions-timeline-label')).toBe(label)
+  })
+
+  it('clamps the oldest year\'s label inside the rail\'s own bottom edge, rather than centring it past it', () => {
+    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const label = screen.getByText('1989', { selector: '.exhibitions-timeline-label' })
+    expect(parseFloat(label.style.top)).toBeLessThanOrEqual(700 - 12.5)
+  })
+
+  it('leaves every year label centred on its own dot away from the rail\'s ends', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const labels = [...container.querySelectorAll('.exhibitions-timeline-label')]
+    const tops = labels.map((l) => parseFloat(l.style.top))
+    // Strictly descending in DOM order (newest first), and every one inside
+    // the rail: clamping the two ends must not reorder or collapse the rest.
+    expect(tops).toEqual([...tops].sort((a, b) => a - b))
+    expect(new Set(tops).size).toBe(tops.length)
+    tops.forEach((top) => {
+      expect(top).toBeGreaterThanOrEqual(12.5)
+      expect(top).toBeLessThanOrEqual(700 - 12.5)
+    })
   })
 
   it('leaves the floating scrubber label alone while the current exhibition does not change', () => {
