@@ -416,9 +416,28 @@ picture {
    same rule applies here. object-fit: contain plus the max-width/max-height
    pair keep the whole image visible, uncropped, on plain white, whether the
    work is very wide (a blackboard, aspect ~1.7) or tall and narrow (a
-   thermometer, aspect ~0.86). Both the outgoing and incoming slide occupy
-   the same cell (absolutely positioned, centered via inset: 0 + margin:
-   auto) so neither moves during the crossfade below. */
+   thermometer, aspect ~0.86).
+
+   Task 35, Part A rewrite: ONE persistent <img>, never unmounted -- see
+   useCrossfade.js and Slideshow.jsx's own file comment for why the earlier
+   two-image-element version (kept two absolutely-positioned images with a
+   z-index stacking order and a nested requestAnimationFrame dance to make a
+   freshly-mounted node's opacity transition actually animate) is gone. This
+   element already exists and has already been painted by the time its
+   target changes, so a plain class toggle is enough for the browser to
+   transition FROM its current opacity -- nothing to wait a frame for.
+
+   `.is-hidden` (set by useCrossfade's `visible` value) is the only state:
+   present while fading/settled at opacity 0, absent while fading/settled at
+   opacity 1. Two different `transition` values -- one on the base rule, one
+   on `.is-hidden` -- give the fade-out and fade-in their own duration/easing
+   from a single property, the standard way a CSS transition can be
+   asymmetric per direction: whichever rule is newly in effect after the
+   class change is what the browser uses for that transition.
+
+   Kept in sync by hand with FADE_OUT_MS in Slideshow.jsx (fade-in has no JS
+   counterpart to keep in sync any more -- nothing needs to know when it
+   ends, only when the fade-out does, to swap `src`). */
 .slideshow-image {
   position: absolute;
   inset: 0;
@@ -429,56 +448,17 @@ picture {
   height: auto;
   object-fit: contain;
   opacity: 1;
+  transition: opacity var(--fade-in-ms) ease-out;
 }
 
-/* Slide change in two halves, NOT a crossfade: the outgoing work fades to
-   white over --fade-out-ms, then the incoming one fades up over --fade-in-ms.
-   Works here range from about 0.86 to 1.72 in aspect, so two images at
-   partial opacity coincide over only part of their area and the remainder
-   reads as a ghost of one work protruding past the other. Going through white
-   means the two are never on screen together.
-
-   z-index is load-bearing. Both images are absolutely positioned in the same
-   stage and the outgoing one is rendered FIRST in the DOM, so without an
-   explicit stacking order the incoming image would paint on top of it and the
-   fade-out would happen invisibly behind an opaque image. Note that jsdom
-   cannot see paint order at all: the suite was fully green while the fade did
-   nothing on screen, so this is only ever caught by looking at it.
-
-   `is-leaving` / `is-entered` are applied a frame after mount so the browser
-   transitions the change instead of jumping straight to the end state. The
-   incoming image carries a transition-delay of --fade-out-ms so that a single
-   class flip drives both halves in sequence.
-
-   Kept in sync by hand with FADE_OUT_MS / FADE_IN_MS in Slideshow.jsx. */
-.slideshow-image--outgoing {
-  z-index: 1;
+.slideshow-image.is-hidden {
+  opacity: 0;
   transition: opacity var(--fade-out-ms) ease-in;
 }
 
-.slideshow-image--outgoing.is-leaving {
-  opacity: 0;
-}
-
-.slideshow-image--entering {
-  opacity: 0;
-  transition: opacity var(--fade-in-ms) ease-out var(--fade-out-ms);
-}
-
-.slideshow-image--entering.is-entered {
-  opacity: 1;
-}
-
-/* Reduced motion: the component already swaps slides instantly and never
-   mounts an outgoing image, but the incoming image still gets its class, so
-   both transitions must be neutralised or the new work would fade up alone. */
 @media (prefers-reduced-motion: reduce) {
-  .slideshow-image--outgoing,
-  .slideshow-image--entering {
+  .slideshow-image {
     transition: none;
-  }
-  .slideshow-image--entering {
-    opacity: 1;
   }
 }
 
