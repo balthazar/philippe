@@ -116,6 +116,37 @@ describe('collectRoutes', () => {
     expect(routes.some((r) => r.startsWith('/admin'))).toBe(false)
     expect(routes).not.toContain('/404')
   })
+
+  // Task 33, section 3: the 25 legacy exhibition-year URLs (1989..2024) used
+  // to be one article's own slug; splitting each year into its own
+  // per-exhibition articles means none of them is slugged as the bare year
+  // any more. Every distinct year among the (already split) exhibitions
+  // articles gets its own listing route instead, in both languages, so the
+  // static build actually has a file to serve there.
+  it('emits a legacy year route, in both languages, for every distinct year among exhibitions articles', () => {
+    const routes = collectRoutes({
+      articles: [
+        { category: 'exhibitions', slug: { fr: 'premier-lieu', en: '' }, yearStart: 2013 },
+        { category: 'exhibitions', slug: { fr: 'second-lieu', en: '' }, yearStart: 2013 },
+        { category: 'exhibitions', slug: { fr: 'expo-2012', en: '' }, yearStart: 2012 },
+      ],
+      pageKeys: [],
+    })
+    expect(routes).toContain('/2013')
+    expect(routes).toContain('/en/2013')
+    expect(routes).toContain('/2012')
+    expect(routes).toContain('/en/2012')
+    // Not duplicated even though two exhibitions share 2013.
+    expect(routes.filter((r) => r === '/2013')).toHaveLength(1)
+  })
+
+  it('emits no year route for a category other than exhibitions', () => {
+    const routes = collectRoutes({
+      articles: [{ category: 'works', slug: { fr: 'porte', en: 'door' }, yearStart: 2013 }],
+      pageKeys: [],
+    })
+    expect(routes).not.toContain('/2013')
+  })
 })
 
 // Fix round 1: mergeArticleLists is where the same-slug-implies-untranslated
@@ -139,6 +170,16 @@ describe('mergeArticleLists', () => {
     const [merged] = mergeArticleLists(frItems, enItems)
     expect(merged.slug).toEqual({ fr: 'tableaux-electriques-2007-2010', en: 'switchboards-2007-2010' })
     expect(merged.title).toEqual({ fr: 'Tableaux Électriques', en: 'Switchboards' })
+  })
+
+  // Task 33, section 3: collectRoutes/headFor need yearStart to compute the
+  // legacy year routes -- not a localized field (unlike slug/title/
+  // yearLabel above), so it is carried through as-is, not split per language.
+  it('carries yearStart through, for the legacy year routes', () => {
+    const frItems = [{ _id: 'a1', category: 'exhibitions', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 }]
+    const enItems = [{ _id: 'a1', category: 'exhibitions', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 }]
+    const [merged] = mergeArticleLists(frItems, enItems)
+    expect(merged.yearStart).toBe(2013)
   })
 })
 
@@ -280,6 +321,39 @@ describe('headFor', () => {
     expect(headFor('/porte', emptyDescription, site)).not.toContain('name="description"')
     expect(headFor('/biographie', emptyDescription, site)).not.toContain('object Object')
     expect(headFor('/biographie', emptyDescription, site)).not.toContain('name="description"')
+  })
+
+  // Task 33, section 3: a legacy year URL is no longer one article's own
+  // route -- it lists that year's exhibitions instead (see
+  // ArticleDetail.jsx). headFor still needs to produce a real <title> and
+  // both languages' canonical/hreflang for it, derived from the exhibitions
+  // articles' own yearStart, not from a matching article (there is none).
+  describe('a legacy exhibition-year route', () => {
+    const withYears = {
+      articles: [
+        { category: 'exhibitions', slug: { fr: 'premier-lieu', en: '' }, title: { fr: 'Premier lieu', en: '' }, yearStart: 2013 },
+        { category: 'exhibitions', slug: { fr: 'second-lieu', en: '' }, title: { fr: 'Second lieu', en: '' }, yearStart: 2013 },
+      ],
+    }
+
+    it('titles it with the bare year', () => {
+      expect(headFor('/2013', withYears, site)).toContain('<title>2013 | Philippe Gronon</title>')
+    })
+
+    it('emits a canonical URL and both hreflang alternates, at the root, for either language route', () => {
+      const fr = headFor('/2013', withYears, site)
+      expect(fr).toContain('<link rel="canonical" href="https://example.org/2013">')
+      expect(fr).toContain('hreflang="fr" href="https://example.org/2013"')
+      expect(fr).toContain('hreflang="en" href="https://example.org/en/2013"')
+
+      const en = headFor('/en/2013', withYears, site)
+      expect(en).toContain('<title>2013 | Philippe Gronon</title>')
+      expect(en).toContain('<link rel="canonical" href="https://example.org/en/2013">')
+    })
+
+    it('does not crash and falls back to the generic title for a year with no matching exhibitions article', () => {
+      expect(headFor('/1500', withYears, site)).toContain('<title>Philippe Gronon</title>')
+    })
   })
 
   it('titles and describes a static page from content.pages, per route language', () => {

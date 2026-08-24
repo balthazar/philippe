@@ -41,7 +41,36 @@ export function collectRoutes({ articles, pageKeys }) {
     const enSlug = a.slug?.en || a.slug?.fr
     if (enSlug) routes.push(`/en/${enSlug}`)
   }
+
+  // Task 33, section 3: the 25 legacy exhibition-year URLs (1989..2024) used
+  // to be one article's own slug; splitting each year into its own
+  // per-exhibition articles (migrate/extract.js's splitExhibitionYear) means
+  // none of them is slugged as the bare year any more. Every distinct year
+  // among the (already split) exhibitions articles gets its own listing
+  // route instead, in both languages -- see ArticleDetail.jsx's own
+  // YEAR_SLUG_RE fallback for how the route itself is rendered.
+  const years = new Set(
+    articles.filter((a) => a.category === 'exhibitions' && a.yearStart).map((a) => a.yearStart)
+  )
+  for (const year of years) {
+    routes.push(`/${year}`, `/en/${year}`)
+  }
+
   return [...new Set(routes)]
+}
+
+// Task 33, section 3: matches a legacy exhibition-year route (`/2013` or
+// `/en/2013`) and confirms the year is real -- among the (already split)
+// exhibitions articles' own yearStart -- rather than trusting the URL shape
+// alone, so an arbitrary 4-digit route never gets a fabricated head.
+const YEAR_ROUTE_RE = /^\/(?:en\/)?(\d{4})$/
+
+function yearFromRoute(route, content) {
+  const m = route.match(YEAR_ROUTE_RE)
+  if (!m) return null
+  const year = Number(m[1])
+  const known = (content.articles || []).some((a) => a.category === 'exhibitions' && a.yearStart === year)
+  return known ? year : null
 }
 
 // SITE_NAME imported from src/lib/pageTitle.js (shared with the runtime).
@@ -83,11 +112,21 @@ function findArticleMatch(route, content) {
 export function headFor(route, content, site = SITE) {
   const lang = routeLang(route)
   const match = findArticleMatch(route, content)
+  const legacyYear = !match ? yearFromRoute(route, content) : null
 
   const tags = []
   let description = ''
 
-  if (match) {
+  if (legacyYear) {
+    // Task 33, section 3: a legacy year URL lists that year's own
+    // exhibitions rather than being one article's own route -- no
+    // seoDescription/cover to read (there is no single matching article),
+    // just a title and both languages' canonical/hreflang, matching the
+    // /year + /en/year pair collectRoutes emits for it.
+    tags.push(`<title>${esc(staticPageTitle(String(legacyYear)))}</title>`)
+    tags.push(`<link rel="alternate" hreflang="fr" href="${site}/${legacyYear}">`)
+    tags.push(`<link rel="alternate" hreflang="en" href="${site}/en/${legacyYear}">`)
+  } else if (match) {
     const title = localize(match.title, lang)
     const year = localize(match.yearLabel, lang)
     tags.push(`<title>${esc(articlePageTitle(title, year))}</title>`)
@@ -255,6 +294,11 @@ export function mergeArticleLists(frItems, enItems) {
     entry.slug[lang] = item.slug
     entry.title[lang] = item.title
     entry.yearLabel[lang] = item.yearLabel
+    // Task 33, section 3: yearStart is not a localized field (unlike the
+    // three above) -- a plain Number, identical for both language calls --
+    // so it's carried through as-is, for collectRoutes/headFor's legacy
+    // year routes.
+    entry.yearStart = item.yearStart
     merged.set(id, entry)
   }
   frItems.forEach((item) => put(item, 'fr'))
