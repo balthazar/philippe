@@ -3,6 +3,7 @@ import {
   pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks,
   reduceContactPageBlocks, removeEmptyTextBlocks, removeSubtitleDuplicateBlocks, ensureCoverInGallery,
   coverLegacyIdFor, moveCreditsAfterGallery, defaultGalleryMode, splitExhibitionYear,
+  removeExhibitionTitleDuplicateBlocks,
 } from '../extract.js'
 
 describe('mapCategory', () => {
@@ -492,8 +493,13 @@ describe('splitExhibitionYear', () => {
     expect(result[0].title).toEqual({ fr: 'Musée Untel', en: 'Musée Untel' })
     expect(result[0].yearStart).toBe(2013)
     expect(result[0].yearEnd).toBe(2013)
-    // The heading block itself stays IN the body -- ArticleBody suppresses
-    // the <h1> for exhibitions, so the in-body <h2> is the visible title.
+    // splitExhibitionYear itself still keeps the heading block in place --
+    // it only slices at <h2> boundaries, it does not dedupe. Task 37, part
+    // A1: extractAll runs removeExhibitionTitleDuplicateBlocks (below)
+    // straight after this, on the article this function returns, which is
+    // what actually drops the now-redundant heading block. Tested here in
+    // isolation, so this function's own job (splitting) stays provably
+    // separate from that later cleanup pass.
     expect(result[0].blocks).toEqual(article.blocks)
   })
 
@@ -615,6 +621,69 @@ describe('splitExhibitionYear', () => {
       ],
     })
     expect(splitExhibitionYear(article)[0].slug).toEqual({ fr: '', en: '' })
+  })
+})
+
+// Task 37, part A1. The split (splitExhibitionYear above) promotes each
+// exhibition's own <h2> heading into `title`, but the heading itself stays
+// in the split entry's own `blocks` -- an oversight of the split, not a
+// deliberate design: the same text then prints twice, once as the article's
+// own `title`, once again as a body block, on all 39 real exhibitions.
+// Content-matched (tags stripped, whitespace collapsed, both sides trimmed),
+// exactly like removeSubtitleDuplicateBlocks -- not by position, since a
+// second, later duplicate is just as real a duplicate as the first.
+describe('removeExhibitionTitleDuplicateBlocks', () => {
+  const textBlock = (fr, en = '') => ({ type: 'text', value: { fr, en } })
+
+  it('removes a text block whose entire content exactly duplicates the title', () => {
+    const blocks = [
+      textBlock('<h2>Rectos / Versos, Galerie Espace Muraille, Genève</h2>'),
+      { type: 'gallery', items: [] },
+      textBlock('<p>© Luca Fascini 2023</p>'),
+    ]
+    const title = { fr: 'Rectos / Versos, Galerie Espace Muraille, Genève', en: '' }
+    expect(removeExhibitionTitleDuplicateBlocks(blocks, title)).toEqual([blocks[1], blocks[2]])
+  })
+
+  it('leaves a block whose content only starts with the title and continues with real prose', () => {
+    const blocks = [textBlock('<h2>Musée Untel, avec un sous-titre en plus</h2>')]
+    const title = { fr: 'Musée Untel', en: '' }
+    expect(removeExhibitionTitleDuplicateBlocks(blocks, title)).toEqual(blocks)
+  })
+
+  it('reports a block that starts with the title and continues, via the partialMatches sink', () => {
+    const blocks = [textBlock('<h2>Musée Untel, avec un sous-titre en plus</h2>')]
+    const title = { fr: 'Musée Untel', en: '' }
+    const partialMatches = []
+    removeExhibitionTitleDuplicateBlocks(blocks, title, partialMatches)
+    expect(partialMatches).toEqual([blocks[0]])
+  })
+
+  it('normalizes a <br/> inside the block to whitespace before comparing, like the subtitle rule', () => {
+    const blocks = [textBlock('<h2>Cycle l’Eternel détour, séquence printemps 2013,<br/>Partage de minuit</h2>')]
+    const title = { fr: 'Cycle l’Eternel détour, séquence printemps 2013, Partage de minuit', en: '' }
+    expect(removeExhibitionTitleDuplicateBlocks(blocks, title)).toEqual([])
+  })
+
+  it('never removes a non-text block', () => {
+    const blocks = [{ type: 'gallery', items: [] }]
+    const title = { fr: 'Anything', en: '' }
+    expect(removeExhibitionTitleDuplicateBlocks(blocks, title)).toEqual(blocks)
+  })
+
+  it('does nothing when there is no title to match against', () => {
+    const blocks = [textBlock('<h2>x</h2>')]
+    expect(removeExhibitionTitleDuplicateBlocks(blocks, { fr: '', en: '' })).toEqual(blocks)
+  })
+
+  it('removes only the matching block, leaving an unrelated later duplicate elsewhere untouched (defensive: none exist in the real archive)', () => {
+    const blocks = [
+      textBlock('<h2>Musée Untel</h2>'),
+      { type: 'gallery', items: [] },
+      textBlock('<p>Musée Untel</p>'),
+    ]
+    const title = { fr: 'Musée Untel', en: '' }
+    expect(removeExhibitionTitleDuplicateBlocks(blocks, title)).toEqual([blocks[1]])
   })
 })
 

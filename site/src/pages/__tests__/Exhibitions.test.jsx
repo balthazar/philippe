@@ -54,10 +54,16 @@ describe('Exhibitions page', () => {
     await waitFor(() => expect(screen.getByText('2024 content')).toBeInTheDocument())
   })
 
-  it('renders no duplicate year heading for the current year\'s content', async () => {
+  // Task 37, part A1: the current year's own content renders through the
+  // same ArticleBody as an individual exhibition page, so its title is an
+  // h1 here too -- see ArticleBody.jsx's own comment for why the
+  // exhibitions-only suppression this test used to guard against no longer
+  // applies (title is the exhibition's real name now, not a bare year, so
+  // showing it is not a duplicate of the timeline's own year label).
+  it('renders the current year\'s own title as an h1', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('2024 content')).toBeInTheDocument())
-    expect(screen.queryByRole('heading', { level: 1, name: '2024' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: '2024' })).toBeInTheDocument()
   })
 
   // Coordinator feedback (task 27): same reasoning as Works.jsx.

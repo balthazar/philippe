@@ -284,10 +284,22 @@ export function defaultGalleryMode(category, blocks) {
 // the one reliable, inspectable marker for "this is a credit line" -- every
 // other text block, including one that merely happens to sit before a
 // gallery, is left exactly where it is.
-const CREDIT_MARK = '©'
+//
+// Task 37, part A2 (client feedback): three exhibitions in the real archive
+// mark their credit with "®" or "™" instead of "©" (one reads "® Mathieu
+// Bertola", on "Pièces montrées, Frac Alsace, 30 ans de collection, MAMCS
+// Stasbourg"), and were missed entirely by a "©"-only check -- their credit
+// still sits ABOVE its gallery. Broadened to any of the three marks, kept
+// just as conservative by matching at the START of the block's own plain
+// text (tags stripped) rather than anywhere within it, so a block that
+// merely mentions one of these symbols in passing prose is never mistaken
+// for a credit line.
+const CREDIT_MARKS = ['©', '®', '™']
 
 function isCreditText(block) {
-  return block.type === 'text' && String(block.value?.fr || '').includes(CREDIT_MARK)
+  if (block.type !== 'text') return false
+  const text = stripToPlainText(block.value?.fr)
+  return CREDIT_MARKS.some((mark) => text.startsWith(mark))
 }
 
 export function moveCreditsAfterGallery(blocks = []) {
@@ -331,13 +343,15 @@ function stripToHeadingText(html) {
 // calls it last), and are unaffected by running before a split that only
 // ever slices at block boundaries those transforms already respect.
 //
-// The <h2> block itself stays IN the resulting article's own blocks, not
-// stripped out into `title` alone: ArticleBody.jsx deliberately suppresses
-// the <h1> for the exhibitions category (an exhibition's own year, next to
-// it in the timeline, would otherwise be a duplicate label) and always has
-// -- the in-body <h2> is, and remains, the visible title on the page.
-// `title` itself still needs the plain-text form, for the browser tab title
-// and any future admin list.
+// The <h2> block itself stays IN the resulting article's own blocks here --
+// this function only slices at <h2> boundaries, it does not dedupe. Task 37,
+// part A1: extractAll runs removeExhibitionTitleDuplicateBlocks (above)
+// straight after this on every split result, which is what actually drops
+// the now-redundant heading block (site/'s ArticleBody now renders `title`
+// as every category's header, exhibitions included -- see that file's own
+// comment for why the year-only suppression that used to justify keeping
+// the heading in the body no longer applies). `title` itself still needs
+// the plain-text form, for the browser tab title and any future admin list.
 //
 // `slug` is deliberately left blank: extraction has no access to the live
 // Mongo state a real uniqueness check needs, so slug generation happens at
@@ -353,6 +367,35 @@ function stripToHeadingText(html) {
 // post id -- including another year's own split entries, since every
 // parent post id is itself unique). See the task report for how this
 // interacts with preserveArtistFields across the migration boundary.
+// Task 37, part A1. splitExhibitionYear (below) promotes each exhibition's
+// own <h2> heading into `title`, but leaves the heading itself in the split
+// entry's own `blocks` -- an oversight of the split, not a deliberate
+// design: the same text then prints twice, once as the article's own
+// `title`, once again as a body block (all 39 real exhibitions, verified
+// against a fresh extraction). Matched by CONTENT, exactly like
+// removeSubtitleDuplicateBlocks above (tags stripped, whitespace collapsed,
+// both sides trimmed) -- not by position, so a genuinely SEPARATE, later
+// duplicate is caught too, and a block that merely STARTS with the title
+// and continues with real prose is left alone and pushed onto
+// `partialMatches` for the caller to report, rather than silently dropped.
+export function removeExhibitionTitleDuplicateBlocks(blocks = [], title, partialMatches = []) {
+  if (!title?.fr) return blocks
+  const target = normalizeForCompare(title.fr)
+  if (!target) return blocks
+  let changed = false
+  const out = blocks.filter((b) => {
+    if (b.type !== 'text') return true
+    const text = normalizeForCompare(b.value?.fr)
+    if (text === target) {
+      changed = true
+      return false
+    }
+    if (text.startsWith(target) && text.length > target.length) partialMatches.push(b)
+    return true
+  })
+  return changed ? out : blocks
+}
+
 export function splitExhibitionYear(article) {
   if (article.category !== 'exhibitions') return [article]
 
@@ -460,6 +503,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     let coversFoldedIntoGallery = 0
     let creditBlocksMoved = 0
     let slidersDefaulted = 0
+    let exhibitionTitleDuplicateBlocksRemoved = 0
+    const exhibitionTitlePartialMatches = []
 
     const articles = pairByTrid(postRows).flatMap((pair) => {
       const base = parseYearLabel(pair.fr.post_title)
@@ -521,7 +566,17 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       // Task 33, section 3: fans a single exhibitions "year" post out into
       // one article per exhibition. A no-op (returns [built]) for every
       // other category, and for an exhibitions post with no <h2> at all.
-      return splitExhibitionYear(built)
+      //
+      // Task 37, part A1: each split result's own title-duplicate heading
+      // block is removed here, per entry (its OWN title, not the parent
+      // year's), since it only exists once `built` has actually been split.
+      return splitExhibitionYear(built).map((entry) => {
+        if (entry.category !== 'exhibitions') return entry
+        const deduped = removeExhibitionTitleDuplicateBlocks(entry.blocks, entry.title, exhibitionTitlePartialMatches)
+        if (deduped === entry.blocks) return entry
+        exhibitionTitleDuplicateBlocksRemoved += entry.blocks.length - deduped.length
+        return { ...entry, blocks: deduped }
+      })
     })
 
     console.log(
@@ -529,10 +584,14 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       (subtitleNonMatches.length ? ` (${subtitleNonMatches.map((m) => `${m.slug}: ${m.reason}`).join('; ')})` : '')
     )
     console.log(
-      `blocks removed: ${emptyTextBlocksRemoved} empty text block(s), ${subtitleDuplicateBlocksRemoved} subtitle-duplicate block(s); ` +
+      `blocks removed: ${emptyTextBlocksRemoved} empty text block(s), ${subtitleDuplicateBlocksRemoved} subtitle-duplicate block(s), ` +
+      `${exhibitionTitleDuplicateBlocksRemoved} exhibition title-duplicate block(s); ` +
       `${coversFoldedIntoGallery} cover(s) folded into their gallery as a hidden item; ` +
       `${creditBlocksMoved} credit block(s) moved after their gallery; ` +
-      `${slidersDefaulted} exhibitions gallery block(s) defaulted to slider mode`
+      `${slidersDefaulted} exhibitions gallery block(s) defaulted to slider mode` +
+      (exhibitionTitlePartialMatches.length
+        ? `; ${exhibitionTitlePartialMatches.length} exhibition text block(s) start with the title but continue with more, left in place`
+        : '')
     )
 
     const enOnlySlugs = articles.filter((a) => a.enOnly).map((a) => a.slug.en || a.slug.fr)
@@ -591,6 +650,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       purgedLegacyIds: [...purgedLegacyIds],
       emptyTextBlocksRemoved,
       subtitleDuplicateBlocksRemoved,
+      exhibitionTitleDuplicateBlocksRemoved,
+      exhibitionTitlePartialMatches: exhibitionTitlePartialMatches.length,
       coversFoldedIntoGallery,
       creditBlocksMoved,
       slidersDefaulted,

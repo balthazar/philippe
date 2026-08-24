@@ -195,11 +195,19 @@ describe('ArticleDetail', () => {
         return Promise.reject(Object.assign(new Error('unexpected path ' + path), { status: 404 }))
       })
 
-    it('renders no year heading for an exhibition article', async () => {
-      exhibitionArticle('2023', '2023', [])
-      renderAt('/oeuvres/2023')
-      await waitFor(() => expect(api.apiGet).toHaveBeenCalledWith('/articles/2023', expect.anything()))
-      expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+    // Task 37, part A1: an exhibition's own name IS the article's `title`
+    // (promoted from its heading by the split, migrate/extract.js's
+    // splitExhibitionYear), so it renders here exactly like every other
+    // category's title -- no exhibitions-only suppression any more. This
+    // used to assert the OPPOSITE (no h1 at all), back when `title` was
+    // just the bare year and repeating it next to the timeline's own
+    // aria-current year would have been a duplicate label; that reasoning
+    // no longer applies now that `title` is the exhibition's real name.
+    it('renders the exhibition\'s own title as an h1', async () => {
+      exhibitionArticle('rectos-versos', 'Rectos / Versos, Galerie Espace Muraille', [])
+      renderAt('/oeuvres/rectos-versos')
+      await waitFor(() => expect(api.apiGet).toHaveBeenCalledWith('/articles/rectos-versos', expect.anything()))
+      expect(screen.getByRole('heading', { level: 1, name: 'Rectos / Versos, Galerie Espace Muraille' })).toBeInTheDocument()
     })
 
     it('never fetches the exhibitions timeline itself -- that is ExhibitionsLayout\'s job now', async () => {
@@ -209,25 +217,27 @@ describe('ArticleDetail', () => {
       expect(spy).not.toHaveBeenCalledWith('/articles', expect.anything())
     })
 
-    // Task 29, part 2 and 3: an exhibition entry is heading, gallery, credit
-    // (the credit reordered in the DATA, not the renderer -- see migrate/
+    // Task 29, part 2 and 3: an exhibition entry is gallery, credit (the
+    // credit reordered in the DATA, not the renderer -- see migrate/
     // extract.js's moveCreditsAfterGallery); rendered stacked, full width,
     // in that exact source order -- never the works-style two-column split
     // (.article-layout), which is what produced the huge vertical gaps the
     // client saw (a couple of short text lines beside a tall gallery).
-    it('renders an exhibition entry stacked full width, in heading/gallery/credit order, not the works two-column split', async () => {
-      exhibitionArticle('2023', '2023', [
-        { type: 'text', value: '<h2>Rectos / Versos, Galerie Espace Muraille</h2>' },
+    // Task 37, part A1: no heading text block any more -- the title is the
+    // header's own h1 (migrate/extract.js's removeExhibitionTitleDuplicateBlocks
+    // strips the body's now-redundant copy at extraction time).
+    it('renders an exhibition entry stacked full width, in gallery/credit order, not the works two-column split', async () => {
+      exhibitionArticle('rectos-versos', 'Rectos / Versos, Galerie Espace Muraille', [
         { type: 'gallery', columns: 3, items: [] },
         { type: 'text', value: '<p>© Luca Fascini 2023</p>' },
       ])
 
-      const { container } = renderAt('/oeuvres/2023')
-      await waitFor(() => expect(screen.getByText('Rectos / Versos, Galerie Espace Muraille')).toBeInTheDocument())
+      const { container } = renderAt('/oeuvres/rectos-versos')
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument())
 
       expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
       expect(container.querySelector('article')).not.toBeInTheDocument()
-      expect([...container.children].map((el) => el.className)).toEqual(['block-text', 'block-gallery', 'block-text'])
+      expect([...container.children].map((el) => el.className)).toEqual(['article-header', 'block-gallery', 'block-text'])
     })
 
     // The plain, no-credit shape (10 of the 25 years: just a heading then a
@@ -235,38 +245,40 @@ describe('ArticleDetail', () => {
     // heuristic mistakes for the works shape (a short text column beside a
     // tall gallery) -- the actual bug the client saw as huge vertical gaps.
     // Exhibitions must never take that path, regardless of how clean a
-    // single entry's own heading+gallery pair looks in isolation.
-    it('never splits a plain heading+gallery entry into the works two-column layout', async () => {
-      exhibitionArticle('2021', '2021', [
-        { type: 'text', value: '<h2>Musée Untel</h2>' },
+    // single entry's own gallery looks in isolation.
+    it('never splits a plain gallery-only entry into the works two-column layout', async () => {
+      exhibitionArticle('musee-untel', 'Musée Untel', [
         { type: 'gallery', columns: 3, items: [] },
       ])
 
-      const { container } = renderAt('/oeuvres/2021')
-      await waitFor(() => expect(screen.getByText('Musée Untel')).toBeInTheDocument())
+      const { container } = renderAt('/oeuvres/musee-untel')
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Musée Untel' })).toBeInTheDocument())
 
       expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
       expect(container.querySelector('.article-text-col')).not.toBeInTheDocument()
-      expect([...container.children].map((el) => el.className)).toEqual(['block-text', 'block-gallery'])
+      expect([...container.children].map((el) => el.className)).toEqual(['article-header', 'block-gallery'])
     })
 
-    // A year with more than one entry (e.g. "hghg") renders every entry the
-    // same way, one after another down the page -- not split into columns
-    // the moment a second heading/gallery pair appears.
-    it('stacks multiple entries in the same year one after another, in source order', async () => {
-      exhibitionArticle('2019', '2019', [
+    // Defensive: ArticleBody stacks whatever blocks it is given, one after
+    // another, rather than splitting into columns the moment a second
+    // heading/gallery pair appears -- even though the real, post-split
+    // archive never gives one split article more than one heading-carrying
+    // entry any more (splitExhibitionYear, migrate/extract.js), a mid-body
+    // <h2>/<h3> remains valid content an artist can add via the admin.
+    it('stacks multiple body entries one after another, in source order', async () => {
+      exhibitionArticle('multi', 'Multi', [
         { type: 'text', value: '<h2>Premier lieu</h2>' },
         { type: 'gallery', columns: 3, items: [] },
         { type: 'text', value: '<h2>Second lieu</h2>' },
         { type: 'gallery', columns: 3, items: [] },
       ])
 
-      const { container } = renderAt('/oeuvres/2019')
+      const { container } = renderAt('/oeuvres/multi')
       await waitFor(() => expect(screen.getByText('Second lieu')).toBeInTheDocument())
 
       expect(container.querySelector('.article-layout')).not.toBeInTheDocument()
       expect([...container.children].map((el) => el.className)).toEqual([
-        'block-text', 'block-gallery', 'block-text', 'block-gallery',
+        'article-header', 'block-text', 'block-gallery', 'block-text', 'block-gallery',
       ])
     })
   })

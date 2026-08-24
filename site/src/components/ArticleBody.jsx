@@ -23,12 +23,21 @@ import { splitArticleLayout } from '@/lib/articleLayout.js'
  * to partition (a plain heading-then-gallery entry, 10 of the 25 years,
  * partitions exactly as cleanly as a real works article and would otherwise
  * be split, stretching a one-line text column beside a tall gallery -- the
- * huge vertical gaps the client saw). Its own year is also dropped from the
- * header: the exhibitions timeline beside it already marks that year
- * current (aria-current), so repeating it as an h1 would be a duplicate
- * label, not new information. `subtitle`/`yearLabel` are not populated for
- * this category today, but are still rendered if a future edit ever adds
- * one -- only the year title itself is exhibitions-specific chrome.
+ * huge vertical gaps the client saw). `subtitle`/`yearLabel` are not
+ * populated for this category today, but are still rendered if a future
+ * edit ever adds one.
+ *
+ * Task 37, part A1: `<h1>` used to be suppressed for exhibitions, back when
+ * each one's own `title` was just its bare year (repeating it next to the
+ * timeline's own aria-current year would have been a duplicate label). The
+ * split (task 33) promoted each exhibition's own name into `title`, but the
+ * migration also left a text block carrying that same name in the body
+ * (migrate/extract.js's splitExhibitionYear), which is what actually showed
+ * on the page -- so the suppression papered over a real bug rather than
+ * serving its original purpose. That leftover block is now removed at
+ * extraction time (removeExhibitionTitleDuplicateBlocks), so every category,
+ * exhibitions included, renders its own `title` here, in the header, like
+ * every other.
  *
  * Extracted out of ArticleDetail so the exhibitions section (task 28, part
  * 3) can render the exact same header+body for the /expositions index's
@@ -39,12 +48,12 @@ export function ArticleBody({ article }) {
   const isExhibition = article.category === 'exhibitions'
   const { text, media, twoColumn } = splitArticleLayout(article.blocks)
 
-  const hasHeader = !isExhibition || article.subtitle || article.yearLabel
+  const hasHeader = Boolean(article.title || article.subtitle || article.yearLabel)
   const header = hasHeader && (
     <header className="article-header">
-      {!isExhibition && <h1>{article.title}</h1>}
-      {article.subtitle && <p className="article-subtitle">{article.subtitle}</p>}
+      {article.title && <h1>{article.title}</h1>}
       {article.yearLabel && <p className="article-year">{article.yearLabel}</p>}
+      {article.subtitle && <p className="article-subtitle">{article.subtitle}</p>}
     </header>
   )
 
