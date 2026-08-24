@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
@@ -477,6 +477,99 @@ describe('ExhibitionsTimeline', () => {
     tops.forEach((top) => {
       expect(top).toBeGreaterThanOrEqual(12.5)
       expect(top).toBeLessThanOrEqual(700 - 12.5)
+    })
+  })
+
+  // Task 38, part 9 (client: "still seeing a scrollbar ... a couple pixels
+  // off"). The previous fix clamped the labels but still placed everything
+  // against `clientHeight`, which is an INTEGER and ROUNDED -- so a rail
+  // whose real height is 748.5px measured as 749, and the bottommost dot's
+  // own box ended half a pixel below the rail's true bottom edge. That edge
+  // is the viewport's, so half a pixel there is a scrollbar; and it is far
+  // too small to find by hunting for an element hanging past the fold,
+  // which is how it survived.
+  //
+  // jsdom implements no layout and has no ResizeObserver, so both are
+  // supplied here: this asserts the arithmetic the browser was tripping on,
+  // which is the only part that was ever wrong.
+  describe('against a fractional rail height', () => {
+    const RAIL_HEIGHT = 748.5
+    const DOT_BOX = 24
+    const LABEL_BOX = 25
+    let realGetBoundingClientRect
+    let realResizeObserver
+
+    beforeEach(() => {
+      realResizeObserver = global.ResizeObserver
+      // Measures once on observe, which is all these assertions need.
+      global.ResizeObserver = class {
+        constructor(callback) { this.callback = callback }
+        observe() { this.callback([]) }
+        disconnect() {}
+      }
+      realGetBoundingClientRect = Element.prototype.getBoundingClientRect
+      Element.prototype.getBoundingClientRect = function fake() {
+        const height = this.classList.contains('exhibitions-timeline-rail')
+          ? RAIL_HEIGHT
+          : this.classList.contains('exhibitions-timeline-label')
+            ? LABEL_BOX
+            : this.tagName === 'A'
+              ? DOT_BOX
+              : 0
+        return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height }
+      }
+    })
+
+    afterEach(() => {
+      Element.prototype.getBoundingClientRect = realGetBoundingClientRect
+      global.ResizeObserver = realResizeObserver
+    })
+
+    it('keeps every dot\'s own box inside the rail, rounding the height down rather than to nearest', () => {
+      const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+      const tops = [...container.querySelectorAll('.exhibitions-timeline-dot-item')]
+        .map((el) => parseFloat(el.style.top))
+      expect(tops.length).toBe(11)
+      tops.forEach((top) => {
+        // Each dot is centred on its own `top` (translateY(-50%)).
+        expect(top - DOT_BOX / 2).toBeGreaterThanOrEqual(0)
+        expect(top + DOT_BOX / 2).toBeLessThanOrEqual(RAIL_HEIGHT)
+      })
+    })
+
+    it('keeps every year label inside the rail too', () => {
+      const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+      const tops = [...container.querySelectorAll('.exhibitions-timeline-label')]
+        .map((el) => parseFloat(el.style.top))
+      expect(tops.length).toBeGreaterThan(0)
+      tops.forEach((top) => {
+        expect(top - LABEL_BOX / 2).toBeGreaterThanOrEqual(0)
+        expect(top + LABEL_BOX / 2).toBeLessThanOrEqual(RAIL_HEIGHT)
+      })
+    })
+
+    // The inset used to be a hardcoded 24, "true at the default root size"
+    // -- a visitor browsing larger got a taller hit box than that and the
+    // bottommost dot hung past the edge by the difference.
+    it('insets by the dot\'s own measured box, not a hardcoded one, at a larger root size', () => {
+      const BIG_DOT = 36 // 1.5rem at a 24px root
+      Element.prototype.getBoundingClientRect = function fake() {
+        const height = this.classList.contains('exhibitions-timeline-rail')
+          ? RAIL_HEIGHT
+          : this.classList.contains('exhibitions-timeline-label')
+            ? LABEL_BOX
+            : this.tagName === 'A'
+              ? BIG_DOT
+              : 0
+        return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height }
+      }
+      const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+      const tops = [...container.querySelectorAll('.exhibitions-timeline-dot-item')]
+        .map((el) => parseFloat(el.style.top))
+      tops.forEach((top) => {
+        expect(top - BIG_DOT / 2).toBeGreaterThanOrEqual(0)
+        expect(top + BIG_DOT / 2).toBeLessThanOrEqual(RAIL_HEIGHT)
+      })
     })
   })
 

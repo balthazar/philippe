@@ -21,6 +21,18 @@ import {
 const MIN_DOT_GAP = 10
 
 /**
+ * Task 38, part 9: the FALLBACK for a dot's own rendered hit area -- first
+ * paint and jsdom only. It used to be this value unconditionally, hardcoded
+ * against base.css and true only "at the default root size", as the note
+ * below always admitted: the CSS is in rem, so a visitor browsing at a
+ * larger root font size got a taller hit box than the 24 assumed here, and
+ * every dot was inset by less than half its own height -- the bottommost
+ * one hanging past the rail's bottom edge by the difference. The real box
+ * is measured now (useElementHeight, on the first dot's own link), so the
+ * two cannot disagree at any root size.
+ *
+ * The original note, still the reason for the number:
+ *
  * Task 36, section 2: matches each dot's own rendered hit area in base.css
  * (`.exhibitions-timeline a`'s 0.5625rem padding on all sides around the
  * 0.375rem dot: 0.5625*2 + 0.375 = 1.5rem = 24px at the default root size).
@@ -34,7 +46,7 @@ const MIN_DOT_GAP = 10
  * computed position by that same half, keeps every dot's hit box fully
  * inside the rail's own box.
  */
-const DOT_HIT_SIZE = 24
+const FALLBACK_DOT_HIT_SIZE = 24
 
 /**
  * Task 36, section 2/6: the rail must never scroll, so its own available
@@ -66,7 +78,20 @@ function useRailHeight(ref) {
   useEffect(() => {
     const el = ref.current
     if (!el || typeof ResizeObserver === 'undefined') return undefined
-    const measure = () => setHeight(el.clientHeight || FALLBACK_RAIL_HEIGHT)
+    // Task 38, part 9: floor of the FRACTIONAL height, not `clientHeight`.
+    // clientHeight is an integer, ROUNDED -- so a rail whose real height is
+    // 748.5px reported 749, every dot was placed against a box half a pixel
+    // taller than the one it lives in, and the bottommost dot's own box
+    // ended half a pixel below the rail's true bottom edge. That edge is
+    // the viewport's bottom edge (.exhibitions-layout is
+    // `calc(100dvh - header-height)`), so half a pixel there is a scrollbar
+    // on a page designed never to scroll -- and small enough that it does
+    // not show up in a hunt for an element hanging past the fold, which is
+    // exactly how it survived the previous fix. Flooring can only ever
+    // under-report, which costs at most a pixel of unused rail and can
+    // never overflow.
+    const measure = () =>
+      setHeight(Math.floor(el.getBoundingClientRect().height) || FALLBACK_RAIL_HEIGHT)
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
@@ -260,6 +285,10 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   // the same height (see FALLBACK_LABEL_HEIGHT), and one label mounts for
   // as long as any does, so a single observer answers for the whole set.
   const labelRef = useRef(null)
+  // Task 38, part 9: attached to the first dot's own link. Every dot's hit
+  // box is identical, so one measurement answers for all of them -- see
+  // FALLBACK_DOT_HIT_SIZE for why this is measured rather than assumed.
+  const dotRef = useRef(null)
   const height = useRailHeight(railRef)
   const groups = groupExhibitionsByYear(items)
   // Task 38, part 5: which years keep a label with no hover or focus at
@@ -267,8 +296,9 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   // counting dots left two decades of the archive unlabelled.
   const persistentYears = persistentLabelYears(groups)
   const total = items?.length || 0
-  const inset = DOT_HIT_SIZE / 2
-  const usableHeight = Math.max(0, height - DOT_HIT_SIZE)
+  const dotHitSize = useElementHeight(dotRef, FALLBACK_DOT_HIT_SIZE, total)
+  const inset = dotHitSize / 2
+  const usableHeight = Math.max(0, height - dotHitSize)
   const positions = layoutExhibitionsTimeline(items, { height: usableHeight, minGap: MIN_DOT_GAP }).map(
     (p) => p + inset
   )
@@ -421,6 +451,7 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
             <li key={item.slug} className="exhibitions-timeline-dot-item" style={{ top: `${positions[i]}px` }}>
               <Link
                 to={href('article', item.slug)}
+                ref={i === 0 ? dotRef : undefined}
                 data-slug={item.slug}
                 aria-current={isCurrent ? 'true' : undefined}
                 aria-label={multi ? `${item.yearStart} – ${item.title}` : String(item.yearStart)}
