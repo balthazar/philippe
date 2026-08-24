@@ -658,4 +658,231 @@ describe('loadAll', () => {
       await disconnect()
     }
   }, 60_000)
+
+  // Task 33, section 3: splitExhibitionYear (extract.js) leaves a split
+  // exhibition's slug blank -- extraction has no access to the live Mongo
+  // state a real uniqueness check needs. Resolved here instead, against the
+  // database, the same pattern the admin API's own ensureSlug() already
+  // uses (reusing api/src/lib/slug.js's uniqueSlug + RESERVED_SLUGS, not
+  // reimplementing either).
+  describe('slug resolution for a blank-slug (split exhibition) article', () => {
+    const exhibitionArticle = (overrides) => ({
+      category: 'exhibitions',
+      status: 'published',
+      slug: { fr: '', en: '' },
+      title: { fr: '', en: '' },
+      yearLabel: { fr: '', en: '' },
+      yearStart: 2013,
+      yearEnd: 2013,
+      coverLegacyId: null,
+      blocks: [],
+      ...overrides,
+    })
+
+    it('derives a slug from the title, the same slugify the API uses', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        exhibitionArticle({ legacyWpId: -101, title: { fr: 'Musée Untel', en: '' } }),
+      ]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+
+      const dbName = `test-${counter++}`
+      await loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName })
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        const article = await Article.findOne({ legacyWpId: -101 })
+        expect(article.slug.fr).toBe('musee-untel')
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+
+    it('disambiguates two split exhibitions that would otherwise slugify to the same base', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        exhibitionArticle({ legacyWpId: -102, title: { fr: 'Vernissage', en: '' } }),
+        exhibitionArticle({ legacyWpId: -103, title: { fr: 'Vernissage', en: '' } }),
+      ]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+
+      const dbName = `test-${counter++}`
+      await loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName })
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        const a = await Article.findOne({ legacyWpId: -102 })
+        const b = await Article.findOne({ legacyWpId: -103 })
+        expect([a.slug.fr, b.slug.fr].sort()).toEqual(['vernissage', 'vernissage-2'])
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+
+    it('never assigns a slug matching a reserved segment (reuses the API guard, does not reimplement it)', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      // "Contact" slugifies to exactly the reserved 'contact' segment.
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        exhibitionArticle({ legacyWpId: -104, title: { fr: 'Contact', en: '' } }),
+      ]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+
+      const dbName = `test-${counter++}`
+      await loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName })
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        const article = await Article.findOne({ legacyWpId: -104 })
+        expect(article.slug.fr).not.toBe('contact')
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+
+    it('keeps the same slug across a re-run, rather than disambiguating against itself', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        exhibitionArticle({ legacyWpId: -105, title: { fr: 'Musée Bis', en: '' } }),
+      ]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+
+      const dbName = `test-${counter++}`
+      const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+      await loadAll(opts)
+      await loadAll(opts)
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        expect(await Article.countDocuments({ legacyWpId: -105 })).toBe(1)
+        const article = await Article.findOne({ legacyWpId: -105 })
+        expect(article.slug.fr).toBe('musee-bis')
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+  })
+
+  // Task 33, section 3: the split changes which documents exist. A pre-split
+  // year-level exhibitions document (e.g. slug "2013", a real, positive
+  // WordPress post id) has no counterpart at all in a fresh extraction any
+  // more -- it has been replaced by N per-exhibition documents, each with
+  // its own synthetic (negative) legacyWpId (see extract.js's
+  // splitExhibitionYear). Left alone, that stale document would keep
+  // resolving at /2013 with its old, pre-split content forever, silently
+  // shadowing the new per-exhibition pages. It is deliberately not carried
+  // forward by preserveArtistFields (there is no single one of the new N
+  // documents a year-level status/cover could correctly map onto) -- see
+  // the task report for the full reasoning.
+  describe('pruning a stale pre-split exhibitions year document', () => {
+    it('removes an old year-level exhibitions document once nothing in the fresh extraction references its legacyWpId', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+      const dbName = `test-${counter++}`
+      const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+
+      // Seed Mongo directly with the old, pre-split year document -- exactly
+      // what a database loaded before this task would still hold.
+      await connect(mongod.getUri(), dbName)
+      try {
+        await Article.create({
+          legacyWpId: 17452,
+          category: 'exhibitions',
+          status: 'published',
+          slug: { fr: '2013', en: '2013' },
+          title: { fr: '2013', en: '2013' },
+          blocks: [],
+        })
+      } finally {
+        await disconnect()
+      }
+
+      // The fresh extraction no longer has anything at legacyWpId 17452 --
+      // only its split children, at synthetic negative ids.
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        {
+          legacyWpId: -1745200,
+          category: 'exhibitions',
+          status: 'published',
+          slug: { fr: '', en: '' },
+          title: { fr: 'New Positions', en: '' },
+          yearLabel: { fr: '', en: '' },
+          yearStart: 2013,
+          yearEnd: 2013,
+          coverLegacyId: null,
+          blocks: [],
+        },
+      ]))
+
+      await loadAll(opts)
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        expect(await Article.findOne({ legacyWpId: 17452 })).toBeNull()
+        expect(await Article.findOne({ legacyWpId: -1745200 })).not.toBeNull()
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+
+    it('leaves a stale non-exhibitions document alone (pruning is scoped to the split category only)', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+      const dbName = `test-${counter++}`
+      const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        await Article.create({
+          legacyWpId: 9999,
+          category: 'works',
+          status: 'published',
+          slug: { fr: 'oeuvre-disparue', en: '' },
+          title: { fr: 'Œuvre disparue', en: '' },
+          blocks: [],
+        })
+      } finally {
+        await disconnect()
+      }
+
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([]))
+      await loadAll(opts)
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        expect(await Article.findOne({ legacyWpId: 9999 })).not.toBeNull()
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+
+    it('never prunes a split child (negative legacyWpId), even across a re-run', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        {
+          legacyWpId: -1745200,
+          category: 'exhibitions',
+          status: 'published',
+          slug: { fr: '', en: '' },
+          title: { fr: 'New Positions', en: '' },
+          yearLabel: { fr: '', en: '' },
+          yearStart: 2013,
+          yearEnd: 2013,
+          coverLegacyId: null,
+          blocks: [],
+        },
+      ]))
+      const dbName = `test-${counter++}`
+      const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+      await loadAll(opts)
+      await loadAll(opts)
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        expect(await Article.countDocuments({ legacyWpId: -1745200 })).toBe(1)
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+  })
 })

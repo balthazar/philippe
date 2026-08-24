@@ -19,16 +19,18 @@ import { Page } from '../../api/src/models/Page.js'
 import { Image } from '../../api/src/models/Image.js'
 
 describe('checkCounts', () => {
-  it('fails when the article count is not 63', () => {
-    expect(checkCounts({ articles: 62, pages: 7 }).failures).toContain('expected 63 articles, found 62')
+  // Task 33, section 3: 77, not 63, now that each exhibitions year is split
+  // into one article per exhibition (see verify.js's own EXPECTED_ARTICLES).
+  it('fails when the article count is not 77', () => {
+    expect(checkCounts({ articles: 76, pages: 7 }).failures).toContain('expected 77 articles, found 76')
   })
 
   it('fails when the page count is not 7', () => {
-    expect(checkCounts({ articles: 63, pages: 6 }).failures).toContain('expected 7 pages, found 6')
+    expect(checkCounts({ articles: 77, pages: 6 }).failures).toContain('expected 7 pages, found 6')
   })
 
   it('passes on the expected counts', () => {
-    expect(checkCounts({ articles: 63, pages: 7 }).failures).toEqual([])
+    expect(checkCounts({ articles: 77, pages: 7 }).failures).toEqual([])
   })
 })
 
@@ -293,7 +295,7 @@ describe('verify (integration)', () => {
   it('fails loudly against an empty database, rather than passing vacuously', async () => {
     const result = await verify({ mongoUri: mongod.getUri(), dbName: 'verify_empty_db', mediaRoot })
     expect(result.ok).toBe(false)
-    expect(result.failures).toContain('expected 63 articles, found 0')
+    expect(result.failures).toContain('expected 77 articles, found 0')
     expect(result.failures).toContain('expected 7 pages, found 0')
   })
 
@@ -324,7 +326,7 @@ describe('verify (integration)', () => {
       })
 
       const articles = []
-      for (let i = 0; i < 63; i += 1) {
+      for (let i = 0; i < 77; i += 1) {
         articles.push({
           slug: { fr: `fr-${i}`, en: i === 0 ? '' : `en-${i}` },
           category: 'works',
@@ -345,7 +347,7 @@ describe('verify (integration)', () => {
       const result = await verify({ mongoUri: mongod.getUri(), dbName: 'verify_consistent_db', mediaRoot })
       expect(result.failures).toEqual([])
       expect(result.ok).toBe(true)
-      expect(result.report.articles).toBe(63)
+      expect(result.report.articles).toBe(77)
       expect(result.report.pages).toBe(7)
       expect(result.report.images).toBe(1)
       expect(result.warnings[0]).toMatch(/fr-0/)

@@ -5,7 +5,8 @@ import { Article } from '../api/src/models/Article.js'
 import { Page } from '../api/src/models/Page.js'
 import { Image } from '../api/src/models/Image.js'
 import { processImage } from '../api/src/lib/imagePipeline.js'
-import { PAGE_KEYS } from '../api/src/lib/constants.js'
+import { PAGE_KEYS, RESERVED_SLUGS } from '../api/src/lib/constants.js'
+import { uniqueSlug } from '../api/src/lib/slug.js'
 
 /** WordPress page slugs to our page keys. Unlisted slugs are skipped (with a warning). */
 const PAGE_KEY_BY_SLUG = {
@@ -201,6 +202,65 @@ function collectUsedImageIds(docs) {
   return used
 }
 
+// Task 33, section 3: splitExhibitionYear (extract.js) leaves a split
+// exhibition's slug blank -- extraction has no access to the live Mongo
+// state a real uniqueness check needs. Resolved here instead, against the
+// database, at load time -- the same pattern the admin API's own
+// ensureSlug() already uses (api/src/routes/admin.js): reuses
+// api/src/lib/slug.js's uniqueSlug and constants.js's RESERVED_SLUGS
+// directly rather than reimplementing either.
+//
+// `taken` excludes the article's OWN existing document (matched by its own
+// stable, synthetic legacyWpId -- see splitExhibitionYear), the same way
+// ensureSlug's own `taken` excludes `currentId`: without that, a re-run
+// would see its own previously-assigned slug as "already taken" and
+// disambiguate against itself every single time, drifting the slug on
+// every load rather than keeping it stable.
+async function resolveArticleSlug(article) {
+  if (article.slug?.fr) return article.slug
+  const taken = async (candidate) => {
+    if (RESERVED_SLUGS.includes(candidate)) return true
+    const hit = await Article.findOne({ 'slug.fr': candidate }).select('legacyWpId').lean()
+    return Boolean(hit) && hit.legacyWpId !== article.legacyWpId
+  }
+  const fr = await uniqueSlug(article.title?.fr || 'exposition', taken)
+  return { fr, en: article.slug?.en || '' }
+}
+
+// Task 33, section 3: the split changes which documents exist. A pre-split
+// year-level exhibitions document (slug "2013", a real WordPress post id)
+// has no counterpart in a fresh extraction any more -- splitExhibitionYear
+// replaces it with N per-exhibition documents, each at its own synthetic
+// (negative) legacyWpId. Left alone, that stale document would keep
+// resolving at its old URL with its old, pre-split content forever,
+// silently shadowing the new per-exhibition pages (see ArticleDetail.jsx's
+// own fallback for those legacy year URLs, which depends on the direct
+// fetch genuinely 404ing).
+//
+// Deliberately scoped to `category: 'exhibitions'` with a POSITIVE
+// legacyWpId (a genuine former WP post, never one of the split children,
+// whose ids are always negative) -- every other category stays exactly
+// 1:1 with its WordPress post, so nothing there can go stale this way
+// under ordinary operation, and this must never reach into that case by
+// accident.
+//
+// Not carried forward by preserveArtistFields: there is no single one of
+// the N new documents a year-level status/cover/gallery-hidden choice
+// could correctly map onto (which exhibition would "inherit" the year's
+// own cover?). This is a one-time loss at the migration boundary, not an
+// ongoing gap -- see the task report for the full reasoning, and what was
+// checked against the real database before this shipped.
+export async function pruneStaleExhibitionYears(validLegacyIds) {
+  const stale = await Article.find({
+    category: 'exhibitions',
+    legacyWpId: { $gt: 0, $nin: [...validLegacyIds] },
+  }).lean()
+  for (const doc of stale) {
+    await Article.deleteOne({ _id: doc._id })
+  }
+  return { pruned: stale.length, ids: stale.map((d) => String(d._id)) }
+}
+
 export async function pruneKnownPurgedImages(mediaRoot) {
   const all = await Image.find().lean()
   const candidates = all.filter((img) => PURGED_ORIGINAL_FILENAMES.has((img.legacyUrl || '').split('/').pop()))
@@ -316,7 +376,7 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
       const fresh = {
         category: article.category,
         status: article.status,
-        slug: article.slug,
+        slug: await resolveArticleSlug(article),
         title: article.title,
         yearLabel: article.yearLabel,
         yearStart: article.yearStart,
@@ -332,6 +392,14 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
         preserveArtistFields(existing, fresh),
         { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
       )
+    }
+
+    // Task 33, section 3: removes any pre-split exhibitions year document
+    // (a positive legacyWpId) the fresh extraction no longer accounts for
+    // -- see pruneStaleExhibitionYears' own comment for the full reasoning.
+    const { pruned: exhibitionYearsPruned } = await pruneStaleExhibitionYears(articles.map((a) => a.legacyWpId))
+    if (exhibitionYearsPruned) {
+      console.log(`pruned ${exhibitionYearsPruned} stale pre-split exhibitions year document(s)`)
     }
 
     let pageCount = 0
@@ -362,6 +430,7 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
       imagesPruned,
       unresolvedRefs: { count: noMediaEntryIds.length, ids: noMediaEntryIds },
       articles: articles.length,
+      exhibitionYearsPruned,
       pages: pageCount,
       unmappedPageSlugs,
     }

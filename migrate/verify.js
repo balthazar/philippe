@@ -6,7 +6,11 @@ import { Page } from '../api/src/models/Page.js'
 import { Image } from '../api/src/models/Image.js'
 import { CATEGORIES } from '../api/src/lib/constants.js'
 
-export const EXPECTED_ARTICLES = 63
+// Task 33, section 3: was 63 (25 of them one-per-year exhibitions
+// articles); splitting each year into one article per exhibition (roughly
+// 39 in place of 25, see migrate/extract.js's splitExhibitionYear) makes
+// the real total 77. Confirmed against a live re-extraction, not guessed.
+export const EXPECTED_ARTICLES = 77
 export const EXPECTED_PAGES = 7
 const VARIANT_NAMES = ['thumb', 'medium', 'large', 'original']
 
