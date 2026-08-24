@@ -186,6 +186,35 @@ export function removeEmptyTextBlocks(blocks = []) {
   })
 }
 
+// Task 37, part A (client feedback): 14 text blocks across 14 articles (10
+// works, 3 editions, 1 exhibitions -- measured against the real archive;
+// not "all in works" as first reported) are genuine WordPress placeholder
+// text, the standard "Lorem ipsum dolor sit amet..." filler paragraph (13
+// of the 14 byte-identical; the 14th is the short "Lorem ipsum" alone). Not
+// content anyone wrote, not test data -- useless, and the client wants it
+// gone. Matched on the block's own plain text (tags stripped) STARTING with
+// "lorem ipsum", case-insensitively: conservative in both directions a
+// plain `includes` would not be -- a block that merely mentions the phrase
+// mid-sentence never matches (it does not START with it), and a block that
+// opens with real prose and only trails off into lorem ipsum filler is left
+// alone too (this check only ever fires on the block's own opening words).
+// Checked against fr and en independently, since a block occasionally has
+// only one language populated. Verified against the real archive: every
+// one of the 14 matches is pure filler start-to-finish, none mix in real
+// prose alongside it -- but the rule itself does not assume that; it would
+// still leave a genuinely mixed block's own real prose in place, reporting
+// it separately, if one ever turns up.
+function isLoremIpsumBlock(block) {
+  if (block.type !== 'text') return false
+  const fr = stripToPlainText(block.value?.fr).toLowerCase()
+  const en = stripToPlainText(block.value?.en).toLowerCase()
+  return fr.startsWith('lorem ipsum') || en.startsWith('lorem ipsum')
+}
+
+export function removeLoremIpsumBlocks(blocks = []) {
+  return blocks.filter((b) => !isLoremIpsumBlock(b))
+}
+
 // Client feedback (task 27), replacing the original plan of keeping a
 // separate cover picker forever: 37 of 63 articles have a cover that is not
 // among their gallery images, and one has no gallery at all. Folds each such
@@ -499,6 +528,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     const subtitleNonMatches = []
     let purgedImageBlockCount = 0
     let emptyTextBlocksRemoved = 0
+    let loremIpsumBlocksRemoved = 0
     let subtitleDuplicateBlocksRemoved = 0
     let coversFoldedIntoGallery = 0
     let creditBlocksMoved = 0
@@ -524,7 +554,16 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       const withoutEmpty = removeEmptyTextBlocks(purged)
       emptyTextBlocksRemoved += purged.length - withoutEmpty.length
 
-      const { subtitle, blocks: afterSubtitle, matched, reason } = extractSubtitle(category, withoutEmpty)
+      // Task 37, part A (client feedback): genuine WordPress placeholder
+      // text (the standard lorem ipsum filler), stripped at the same early
+      // stage as the empty-block pass above and for the same reason -- so a
+      // placeholder block sitting in front of the real technique-line block
+      // (10 of the 14 real cases are a works article's own first text block)
+      // can never confuse extractSubtitle's own block-by-block search below.
+      const withoutLoremIpsum = removeLoremIpsumBlocks(withoutEmpty)
+      loremIpsumBlocksRemoved += withoutEmpty.length - withoutLoremIpsum.length
+
+      const { subtitle, blocks: afterSubtitle, matched, reason } = extractSubtitle(category, withoutLoremIpsum)
       if (category === 'works') {
         if (matched) subtitleMatched += 1
         else subtitleNonMatches.push({ slug: pair.fr.post_name, reason })
@@ -584,7 +623,8 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       (subtitleNonMatches.length ? ` (${subtitleNonMatches.map((m) => `${m.slug}: ${m.reason}`).join('; ')})` : '')
     )
     console.log(
-      `blocks removed: ${emptyTextBlocksRemoved} empty text block(s), ${subtitleDuplicateBlocksRemoved} subtitle-duplicate block(s), ` +
+      `blocks removed: ${emptyTextBlocksRemoved} empty text block(s), ${loremIpsumBlocksRemoved} lorem ipsum placeholder block(s), ` +
+      `${subtitleDuplicateBlocksRemoved} subtitle-duplicate block(s), ` +
       `${exhibitionTitleDuplicateBlocksRemoved} exhibition title-duplicate block(s); ` +
       `${coversFoldedIntoGallery} cover(s) folded into their gallery as a hidden item; ` +
       `${creditBlocksMoved} credit block(s) moved after their gallery; ` +
@@ -649,6 +689,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       purgedImageBlockCount,
       purgedLegacyIds: [...purgedLegacyIds],
       emptyTextBlocksRemoved,
+      loremIpsumBlocksRemoved,
       subtitleDuplicateBlocksRemoved,
       exhibitionTitleDuplicateBlocksRemoved,
       exhibitionTitlePartialMatches: exhibitionTitlePartialMatches.length,

@@ -3,7 +3,7 @@ import {
   pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks,
   reduceContactPageBlocks, removeEmptyTextBlocks, removeSubtitleDuplicateBlocks, ensureCoverInGallery,
   coverLegacyIdFor, moveCreditsAfterGallery, defaultGalleryMode, splitExhibitionYear,
-  removeExhibitionTitleDuplicateBlocks,
+  removeExhibitionTitleDuplicateBlocks, removeLoremIpsumBlocks,
 } from '../extract.js'
 
 describe('mapCategory', () => {
@@ -238,6 +238,56 @@ describe('removeEmptyTextBlocks', () => {
   it('never removes a non-text block on emptiness grounds', () => {
     const blocks = [{ type: 'image', image: null }]
     expect(removeEmptyTextBlocks(blocks)).toEqual(blocks)
+  })
+})
+
+// Task 37, part A (client feedback): 14 real archive text blocks are
+// genuine WordPress placeholder text -- the standard "Lorem ipsum dolor sit
+// amet..." filler paragraph -- not content anyone wrote. Matched on the
+// block's own plain text STARTING with "lorem ipsum" (case-insensitive), so
+// a block that merely mentions the phrase mid-sentence is never caught, and
+// a block that opens with real prose and only trails into lorem ipsum
+// filler is left alone (this only ever looks at a block's own opening
+// words).
+describe('removeLoremIpsumBlocks', () => {
+  const textBlock = (fr, en = '') => ({ type: 'text', value: { fr, en } })
+
+  it('drops a text block whose fr starts with the standard lorem ipsum filler', () => {
+    const blocks = [
+      textBlock('<p>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</p>'),
+      { type: 'gallery', items: [] },
+    ]
+    expect(removeLoremIpsumBlocks(blocks)).toEqual([blocks[1]])
+  })
+
+  it('drops the short "Lorem ipsum" placeholder too, not just the full paragraph', () => {
+    const blocks = [textBlock('<p>Lorem ipsum </p>')]
+    expect(removeLoremIpsumBlocks(blocks)).toEqual([])
+  })
+
+  it('matches case-insensitively', () => {
+    const blocks = [textBlock('<p>LOREM IPSUM dolor sit amet.</p>')]
+    expect(removeLoremIpsumBlocks(blocks)).toEqual([])
+  })
+
+  it('drops a block whose en (not fr) starts with lorem ipsum', () => {
+    const blocks = [textBlock('', 'Lorem ipsum dolor sit amet.')]
+    expect(removeLoremIpsumBlocks(blocks)).toEqual([])
+  })
+
+  it('leaves a block that merely mentions the phrase mid-sentence untouched', () => {
+    const blocks = [textBlock('<p>Le texte utilisait un faux lorem ipsum avant la relecture.</p>')]
+    expect(removeLoremIpsumBlocks(blocks)).toEqual(blocks)
+  })
+
+  it('leaves a block that opens with real prose and only trails into lorem ipsum filler untouched', () => {
+    const blocks = [textBlock('<p>Photographie argentique, tirage numérique. Lorem ipsum dolor sit amet.</p>')]
+    expect(removeLoremIpsumBlocks(blocks)).toEqual(blocks)
+  })
+
+  it('never removes a non-text block', () => {
+    const blocks = [{ type: 'gallery', items: [] }]
+    expect(removeLoremIpsumBlocks(blocks)).toEqual(blocks)
   })
 })
 
