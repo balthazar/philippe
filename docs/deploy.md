@@ -1,5 +1,8 @@
 # Deploying to production
 
+For running the site on your own machine, see [development.md](development.md)
+-- note that local development uses this same production database.
+
 Production is `philippe.balthazar.dev`, served from the single-node k3s cluster
 at `135.148.100.142` (kubeconfig context `dadonew`), namespace `apps`. The API
 lives on `/api` of the same origin, so the browser never makes a cross-origin
