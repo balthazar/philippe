@@ -6,7 +6,7 @@ metadata:
 data:
   MONGO_DB: "philippe"
   MEDIA_ROOT: "/data/media"
-  ALLOWED_ORIGINS: "https://philippe.natazar.org"
+  ALLOWED_ORIGINS: "https://philippe.balthazar.dev"
   PORT: "8080"
 ---
 # Media lives on a node-local ReadWriteOnce volume, so this deployment must
@@ -23,11 +23,17 @@ spec:
     requests:
       storage: 20Gi
 ---
-# Secrets are created out of band:
-#   kubectl -n apps create secret generic philippe-api-secrets \
-#     --from-literal=MONGO_URI='mongodb://<user>:<pass>@mongo.infra.svc.cluster.local:27017/?authSource=admin' \
+# Secrets are created out of band -- see docs/deploy.md:
+#   kubectl --context dadonew -n apps create secret generic philippe-api-secrets \
+#     --from-literal=MONGO_URI='mongodb://mongo.infra.svc.cluster.local:27017' \
 #     --from-literal=JWT_SECRET="$(openssl rand -hex 32)" \
 #     --from-literal=ADMIN_EMAIL='...' --from-literal=ADMIN_PASSWORD='...'
+#
+# No credentials in MONGO_URI: the infra/mongo Deployment runs mongo:7 with no
+# --auth flag and no MONGO_INITDB_ROOT_* env, so the server accepts
+# unauthenticated in-cluster connections. Adding a <user>:<pass>@ prefix or
+# ?authSource=admin would fail. The database name is not in the URI either --
+# api/src/db.js passes MONGO_DB (the ConfigMap above) to mongoose as dbName.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -48,7 +54,7 @@ spec:
         - name: ghcr-creds
       containers:
         - name: philippe-api
-          image: ghcr.io/goobernetics/philippe-api:latest
+          image: ghcr.io/balthazar/philippe-api:latest
           ports: [{ containerPort: 8080 }]
           envFrom:
             - configMapRef: { name: philippe-api-config }

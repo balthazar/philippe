@@ -4,7 +4,7 @@
 FROM node:24.19-alpine AS build
 WORKDIR /app
 ARG PRERENDER_API_URL
-ARG SITE_URL=https://philippe.natazar.org
+ARG SITE_URL=https://philippe.balthazar.dev
 # Left unset here deliberately: prerender/index.js's unreachableApiOutcome
 # fails the build (non-zero exit) by default when the API can't be reached,
 # so a briefly-down API or an unresolvable Service mid-rollout can never

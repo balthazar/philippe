@@ -1,6 +1,10 @@
 name: API
 
 on:
+  # Manual trigger matters for the first deploy and for re-runs: the web
+  # image only builds against a live API, so its first successful build has to
+  # happen after the API is rolled out, not on the same push.
+  workflow_dispatch:
   push:
     branches:
       - master

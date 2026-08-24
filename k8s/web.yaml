@@ -16,7 +16,7 @@ spec:
         - name: ghcr-creds
       containers:
         - name: philippe-web
-          image: ghcr.io/goobernetics/philippe-web:latest
+          image: ghcr.io/balthazar/philippe-web:latest
           ports: [{ containerPort: 8080 }]
           resources:
             requests: { cpu: 50m, memory: 64Mi }
@@ -44,6 +44,16 @@ spec:
       targetPort: 8080
       protocol: TCP
 ---
+# TLS terminates at Cloudflare (proxied/orange-cloud record for
+# philippe.balthazar.dev -> 135.148.100.142); Traefik only ever serves plain
+# HTTP inside the cluster, which is why there is no tls: block here and no
+# cert-manager annotation. Every other ingress in this cluster is set up the
+# same way -- see k8s/apps in the server-migration repo.
+#
+# /api and /media are more specific than /, and Traefik's Ingress provider
+# orders rules by path length, so both reach philippe-api before the catch-all
+# hits philippe-web. The API mounts its routes under /api and /media itself
+# (api/src/app.js), so no prefix stripping is needed.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -52,7 +62,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: philippe.natazar.org
+    - host: philippe.balthazar.dev
       http:
         paths:
           - path: /api

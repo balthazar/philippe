@@ -7,12 +7,19 @@
 name: Web
 
 on:
+  # Manual trigger matters for the first deploy and for re-runs: the web
+  # image only builds against a live API, so its first successful build has to
+  # happen after the API is rolled out, not on the same push.
+  workflow_dispatch:
   push:
     branches:
       - master
     paths:
       - 'site/src/**'
       - 'site/prerender/**'
+      - 'site/public/**'
+      - 'site/index.html'
+      - 'site/vite.config.js'
       - 'site/package.json'
       - 'site/package-lock.json'
       - 'Dockerfile'
@@ -80,7 +87,8 @@ jobs:
           file: Dockerfile
           push: true
           build-args: |
-            PRERENDER_API_URL=https://philippe.natazar.org/api
+            PRERENDER_API_URL=https://philippe.balthazar.dev/api
+            SITE_URL=https://philippe.balthazar.dev
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
           tags: |
