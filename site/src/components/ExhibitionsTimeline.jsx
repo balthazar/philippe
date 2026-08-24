@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
+import { groupExhibitionsByYear } from '@/lib/exhibitionsOrder.js'
 
 /**
  * Task 31, part 1: the client's "every fifth" instruction is read against the
@@ -37,9 +38,20 @@ function isPersistentDot(index, length, isCurrent) {
  * that label at rest; everything else reveals it on hover, and identically on
  * keyboard focus (base.css's `:focus-visible` rules mirror `:hover` exactly),
  * the way a scrubber reveals a value under the pointer.
+ *
+ * Task 33, section 3: `items` is now the list of EXHIBITIONS (each split
+ * out of its year -- see migrate/extract.js's splitExhibitionYear), not one
+ * per year, since a year can hold more than one (nine do; 2013 holds five).
+ * The timeline still shows years: groupExhibitionsByYear collapses same-year
+ * items into a single dot, linking to that year's own FIRST exhibition (in
+ * source order) -- multiple exhibitions in one year must never produce
+ * duplicate year dots. `currentYear` (not a slug -- there is no longer one
+ * single "current" exhibition slug a year-level dot could match) is what
+ * marks the current dot; ExhibitionsLayout.jsx computes it.
  */
-export function ExhibitionsTimeline({ items, currentSlug }) {
+export function ExhibitionsTimeline({ items, currentYear }) {
   const { href, lang } = useLang()
+  const groups = groupExhibitionsByYear(items)
 
   return (
     <nav
@@ -47,14 +59,14 @@ export function ExhibitionsTimeline({ items, currentSlug }) {
       aria-label={lang === 'fr' ? 'Chronologie des expositions' : 'Exhibitions timeline'}
     >
       <ol>
-        {items.map((item, index) => {
-          const isCurrent = item.slug === currentSlug
-          const persistent = isPersistentDot(index, items.length, isCurrent)
+        {groups.map((group, index) => {
+          const isCurrent = group.year === currentYear
+          const persistent = isPersistentDot(index, groups.length, isCurrent)
           return (
-            <li key={item._id || item.slug} className={persistent ? 'is-persistent' : undefined}>
-              <Link to={href('article', item.slug)} aria-current={isCurrent ? 'true' : undefined}>
+            <li key={group.slug} className={persistent ? 'is-persistent' : undefined}>
+              <Link to={href('article', group.slug)} aria-current={isCurrent ? 'true' : undefined}>
                 <span className="exhibitions-timeline-dot" aria-hidden="true" />
-                <span className="exhibitions-timeline-label">{item.title}</span>
+                <span className="exhibitions-timeline-label">{group.year}</span>
               </Link>
             </li>
           )

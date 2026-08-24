@@ -7,6 +7,11 @@ import { Container } from './Container.jsx'
 import { ExhibitionsTimeline } from './ExhibitionsTimeline.jsx'
 import { sortExhibitionsByYear } from '@/lib/exhibitionsOrder.js'
 
+// Task 33, section 3: the only shape the 25 legacy exhibition-year URLs
+// ever had. Shared with ArticleDetail.jsx's own fallback for those URLs --
+// keep the two definitions in agreement.
+const YEAR_SLUG_RE = /^\d{4}$/
+
 /**
  * Task 32, item 1: a nested layout route for the whole exhibitions section,
  * replacing ExhibitionsChrome (retired). Previously the timeline was
@@ -87,14 +92,32 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
   // /expositions index there is no slug at all -- the most recent year
   // (items are sorted newest-first, lib/exhibitionsOrder.js) is "current",
   // matching Exhibitions.jsx's own choice of which article to show.
+  //
+  // Task 33, section 3: the timeline marks a whole YEAR current now, not one
+  // exhibition slug (a year can hold more than one exhibition, so there is
+  // no longer a single slug a year-level dot could match). A legacy year URL
+  // (/2013 -- see ArticleDetail.jsx's own YEAR_SLUG_RE fallback) IS the year
+  // itself, read directly with no lookup needed; a real exhibition slug's
+  // year comes from `items`, the same list the rail already fetched.
   const currentSlug = slug || items?.[0]?.slug
+  const currentYear = slug && YEAR_SLUG_RE.test(slug)
+    ? Number(slug)
+    : items?.find((item) => item.slug === currentSlug)?.yearStart
 
   return (
     <Container as="main" className="page-main">
       <div className={showRail ? 'exhibitions-layout' : undefined}>
-        {showRail && <ExhibitionsTimeline items={items || []} currentSlug={currentSlug} />}
+        {showRail && <ExhibitionsTimeline items={items || []} currentYear={currentYear} />}
         <div className={showRail ? 'exhibitions-content' : undefined}>
-          <Outlet />
+          {/*
+            Task 33, section 3: hands the already-fetched exhibitions list
+            down to ArticleDetail via route context, so its own legacy-year
+            fallback (a slug shaped like a year, once its direct article
+            fetch 404s) can list that year's exhibitions without a second,
+            redundant fetch of the exact same data this component already
+            has.
+          */}
+          <Outlet context={items} />
         </div>
       </div>
     </Container>

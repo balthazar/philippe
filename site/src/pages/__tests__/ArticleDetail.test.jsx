@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, Outlet } from 'react-router-dom'
 import { LangProvider } from '@/lang.jsx'
 import * as api from '@/api.js'
 import { ArticleDetail } from '../ArticleDetail.jsx'
@@ -11,6 +11,24 @@ const renderAt = (path) =>
       <LangProvider>
         <Routes>
           <Route path="/oeuvres/:slug" element={<ArticleDetail routeKey="works" />} />
+        </Routes>
+      </LangProvider>
+    </MemoryRouter>
+  )
+
+// Task 33, section 3: the real app reaches ArticleDetail through
+// ExhibitionsLayout.jsx, which hands the exhibitions list down via route
+// context (<Outlet context={items}/>) -- reproduced here with a minimal
+// layout route, rather than a fixed prop, so these tests exercise the same
+// wiring the real app uses.
+const renderWithExhibitionsContext = (path, items) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <LangProvider>
+        <Routes>
+          <Route element={<Outlet context={items} />}>
+            <Route path=":slug" element={<ArticleDetail />} />
+          </Route>
         </Routes>
       </LangProvider>
     </MemoryRouter>
@@ -250,6 +268,70 @@ describe('ArticleDetail', () => {
       expect([...container.children].map((el) => el.className)).toEqual([
         'block-text', 'block-gallery', 'block-text', 'block-gallery',
       ])
+    })
+  })
+
+  // Task 33, section 3: the 25 legacy exhibition-year URLs (1989..2024) used
+  // to be one article's own slug; the split replaced each with N
+  // per-exhibition articles, none slugged as the bare year any more, so the
+  // direct fetch genuinely 404s for every one of them. A slug shaped like a
+  // year is what triggers the fallback -- lists that year's own exhibitions
+  // instead of a dead link.
+  describe('legacy exhibition-year URLs (Task 33, section 3)', () => {
+    const notFound = () => Promise.reject(Object.assign(new Error('nope'), { status: 404 }))
+
+    it('lists that year\'s own exhibitions, linking to each one\'s own slug', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      const items = [
+        { _id: 'a', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
+        { _id: 'b', slug: 'second-lieu', title: 'Second lieu', yearStart: 2013 },
+        { _id: 'c', slug: 'expo-2012', title: 'Expo 2012', yearStart: 2012 },
+      ]
+      renderWithExhibitionsContext('/2013', items)
+      await waitFor(() => expect(screen.getByText('Premier lieu')).toBeInTheDocument())
+      expect(screen.getByRole('link', { name: 'Premier lieu' })).toHaveAttribute('href', '/premier-lieu')
+      expect(screen.getByRole('link', { name: 'Second lieu' })).toHaveAttribute('href', '/second-lieu')
+      expect(screen.queryByText('Expo 2012')).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 1, name: '2013' })).toBeInTheDocument()
+    })
+
+    it('shows a loading marker, not an empty list, while the exhibitions list is still in flight', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      const { container } = renderWithExhibitionsContext('/2013', undefined)
+      await waitFor(() => expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument())
+      expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+    })
+
+    it('renders the ordinary not-found message for a year-shaped slug matching no real year', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      renderWithExhibitionsContext('/1500', [
+        { _id: 'a', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
+      ])
+      await waitFor(() => expect(screen.getByText(/introuvable/i)).toBeInTheDocument())
+    })
+
+    it('never shadows a real, different-category article that happens to have a 4-digit slug', async () => {
+      // Real content always wins: the direct fetch succeeds, so the
+      // legacy-year fallback (which only ever triggers on a confirmed 404)
+      // must never even be considered.
+      vi.spyOn(api, 'apiGet').mockImplementation((path) =>
+        path === '/articles/2013'
+          ? Promise.resolve({ slug: '2013', title: 'Titled 2013', category: 'works', blocks: [] })
+          : notFound()
+      )
+      renderWithExhibitionsContext('/2013', [
+        { _id: 'a', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
+      ])
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Titled 2013' })).toBeInTheDocument())
+      expect(screen.queryByText('Premier lieu')).not.toBeInTheDocument()
+    })
+
+    it('sets document.title to the bare year for a legacy year URL', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      renderWithExhibitionsContext('/2013', [
+        { _id: 'a', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
+      ])
+      await waitFor(() => expect(document.title).toBe('2013 | Philippe Gronon'))
     })
   })
 })

@@ -31,10 +31,13 @@ function TestSection({ initialPath }) {
   )
 }
 
+// Task 33, section 3: post-split shape -- slug/title are the exhibition's
+// own (here, coincidentally still year-named for brevity), yearStart is
+// what the timeline groups/sorts on now.
 const exhibitionsList = [
-  { _id: '1', slug: '2024', title: '2024' },
-  { _id: '2', slug: '2023', title: '2023' },
-  { _id: '3', slug: '1989', title: '1989' },
+  { _id: '1', slug: '2024', title: '2024', yearStart: 2024 },
+  { _id: '2', slug: '2023', title: '2023', yearStart: 2023 },
+  { _id: '3', slug: '1989', title: '1989', yearStart: 1989 },
 ]
 
 const article = (slug, title) => ({

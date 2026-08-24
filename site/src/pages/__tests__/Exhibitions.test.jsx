@@ -10,9 +10,9 @@ import { Exhibitions } from '../Exhibitions.jsx'
 // chronological (see lib/exhibitionsOrder.js). Deliberately out of year
 // order here to prove the page sorts rather than trusting list order.
 const listItems = [
-  { _id: '1', slug: '2023', category: 'exhibitions', title: '2023' },
-  { _id: '2', slug: '1989', category: 'exhibitions', title: '1989' },
-  { _id: '3', slug: '2024', category: 'exhibitions', title: '2024' },
+  { _id: '1', slug: '2023', category: 'exhibitions', title: '2023', yearStart: 2023 },
+  { _id: '2', slug: '1989', category: 'exhibitions', title: '1989', yearStart: 1989 },
+  { _id: '3', slug: '2024', category: 'exhibitions', title: '2024', yearStart: 2024 },
 ]
 
 const fullArticle = (slug, title) => ({

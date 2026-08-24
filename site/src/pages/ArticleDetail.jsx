@@ -1,12 +1,17 @@
 import { useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useOutletContext, Link } from 'react-router-dom'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
 import { usePageData } from '@/preload.jsx'
 import { routeFor } from '@/routes.js'
 import { ArticleBody } from '@/components/ArticleBody.jsx'
 import { usePageTitle } from '@/lib/usePageTitle.js'
-import { articlePageTitle } from '@/lib/pageTitle.js'
+import { articlePageTitle, staticPageTitle } from '@/lib/pageTitle.js'
+
+// Task 33, section 3: the only shape the 25 legacy exhibition-year URLs
+// (1989..2024) ever had -- shared with ExhibitionsLayout.jsx's own copy,
+// keep the two definitions in agreement.
+const YEAR_SLUG_RE = /^\d{4}$/
 
 /**
  * The public API always resolves `slug` to the requested language and never
@@ -48,7 +53,16 @@ import { articlePageTitle } from '@/lib/pageTitle.js'
  */
 export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   const { slug } = useParams()
-  const { lang, otherLang } = useLang()
+  const { lang, otherLang, href } = useLang()
+  const isYearSlug = YEAR_SLUG_RE.test(slug)
+  // Task 33, section 3: the exhibitions list ExhibitionsLayout.jsx's own
+  // rail already fetched, handed down via route context -- see that file's
+  // comment. Only ever consulted for the legacy-year fallback below; a real
+  // article page ignores it. `undefined` when rendered with no such
+  // ancestor (e.g. this component's own standalone tests), same as
+  // useOutletContext() always returns outside a matching route.
+  const exhibitionsItems = useOutletContext()
+
   const { data: article, error } = usePageData(`article:${slug}:${lang}`, () =>
     apiGet(`/articles/${slug}`, { lang })
   )
@@ -57,11 +71,15 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
     apiGet(`/articles/${slug}`, { lang: otherLang }).then((data) => routeFor('article', otherLang, data.slug))
   )
 
-  // Coordinator feedback (task 27): the prerender already gets this right
-  // in the raw HTML; this is what keeps it right after hydration and on
-  // every later client-side navigation between articles, using the exact
-  // same formatter prerender/index.js's headFor() does.
-  usePageTitle(article && articlePageTitle(article.title, article.yearLabel))
+  // Task 33, section 3: a legacy year URL (see the 404 branch below) has no
+  // article of its own, so there is no title/yearLabel to format the usual
+  // way -- just the bare year, the same staticPageTitle format a section
+  // page uses.
+  usePageTitle(
+    isYearSlug && error?.status === 404
+      ? staticPageTitle(slug)
+      : article && articlePageTitle(article.title, article.yearLabel)
+  )
 
   useEffect(() => {
     onTranslatedPath?.(translatedPath ?? null)
@@ -69,10 +87,10 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   }, [translatedPath, onTranslatedPath])
 
   // Task 30 (client feedback): reports this article's own category up to
-  // App.jsx so PublicLayout can indent the footer, and ExhibitionsLayout can
-  // show/hide the rail, on an exhibition article page -- an individual
-  // article lives at the flat root (/:slug), indistinguishable by URL
-  // alone, so this can only be known once the article itself has loaded.
+  // App.jsx so ExhibitionsLayout can show/hide the rail on an exhibition
+  // article page -- an individual article lives at the flat root (/:slug),
+  // indistinguishable by URL alone, so this can only be known once the
+  // article itself has loaded.
   //
   // Task 32, item 1: this ONLY ever reports a definite, freshly-loaded
   // answer -- never an intermediate `false` while a new article is loading.
@@ -85,9 +103,20 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   // rail at all. A genuine unmount (leaving the exhibitions section
   // entirely for a page that isn't `:slug` at all) is handled by the
   // second effect below instead, which never fires on a mere param change.
+  //
+  // Task 33, section 3: a legacy year URL genuinely has no article to load
+  // (the split replaced it with N per-exhibition articles -- see
+  // migrate/extract.js's splitExhibitionYear), so `article` never resolves
+  // for one. Its own confirmed-404 is the trigger instead: only once the
+  // real fetch has genuinely failed, so a slug that coincidentally looks
+  // like a year but resolves to a real, different-category article (a work
+  // titled with a bare 4-digit slug, however unlikely) is never shadowed by
+  // the legacy-year fallback -- real content always wins.
   useEffect(() => {
-    if (article) onExhibitionsLayout?.(article.category === 'exhibitions')
-  }, [article, onExhibitionsLayout])
+    if (article) { onExhibitionsLayout?.(article.category === 'exhibitions'); return undefined }
+    if (isYearSlug && error?.status === 404) onExhibitionsLayout?.(true)
+    return undefined
+  }, [article, error, isYearSlug, onExhibitionsLayout])
 
   useEffect(() => () => onExhibitionsLayout?.(false), [onExhibitionsLayout])
 
@@ -97,6 +126,36 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   // costs nothing and keeps the success path the one that wins.
   if (!article) {
     if (error?.status === 404) {
+      // Task 33, section 3: a slug shaped exactly like a year is the ONLY
+      // shape the 25 legacy exhibition-year URLs ever had. Rather than a
+      // dead link, list that year's own exhibitions instead -- confirmed
+      // against the real, published exhibitions list (exhibitionsItems),
+      // not trusted from the URL shape alone, so a genuinely unknown
+      // 4-digit slug (e.g. /1500) still 404s normally.
+      if (isYearSlug) {
+        // Not yet fetched (ExhibitionsLayout's own rail fetch, reactively
+        // triggered by onExhibitionsLayout(true) above, still in flight):
+        // keep the same aria-busy placeholder every other page uses while
+        // loading, not an empty "page not found" flash.
+        if (!Array.isArray(exhibitionsItems)) return <div aria-busy="true" />
+
+        const yearExhibitions = exhibitionsItems.filter((item) => item.yearStart === Number(slug))
+        if (!yearExhibitions.length) {
+          return <p>{lang === 'fr' ? 'Page introuvable.' : 'Page not found.'}</p>
+        }
+        return (
+          <div className="exhibitions-year-index">
+            <h1>{slug}</h1>
+            <ul>
+              {yearExhibitions.map((item) => (
+                <li key={item._id || item.slug}>
+                  <Link to={href('article', item.slug)}>{item.title}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      }
       return <p>{lang === 'fr' ? 'Page introuvable.' : 'Page not found.'}</p>
     }
     // Task 26, correction to B4's original reasoning ("reserve the page's

@@ -842,6 +842,33 @@ picture {
   margin-top: 0;
 }
 
+/* Task 33, section 3: a legacy exhibition-year URL (e.g. /2013) now lists
+   that year's own exhibitions rather than holding one article's content
+   directly -- see ArticleDetail.jsx's own YEAR_SLUG_RE fallback. Kept
+   plain and close to the other exhibitions-content typography rather than
+   introducing a new visual language for what is, structurally, still a
+   list of links into the same section. */
+.exhibitions-year-index ul {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.exhibitions-year-index a {
+  font-family: var(--font-chrome);
+  font-size: var(--text-l);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.exhibitions-year-index a:hover,
+.exhibitions-year-index a:focus-visible {
+  text-decoration: underline;
+}
+
 /* Blocks */
 
 /* Task 29 (client typography pass): 16px (var(--text-l), the body default
