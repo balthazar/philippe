@@ -596,6 +596,14 @@ picture {
     grid-template-areas:
       'header media'
       'text   media';
+    /* Rows pinned explicitly, because `media` spans both of them. A spanning
+       item's height is distributed across EVERY row it spans, so with the
+       default `auto auto` a photograph taller than the header plus the text
+       inflated row 1 as well -- opening a large gap between the year and the
+       body copy that looked like stray padding and was not. `auto` hugs the
+       header; `1fr` gives row 2 the surplus, where `align-items: start`
+       leaves it below the text, invisible against white. */
+    grid-template-rows: auto 1fr;
     gap: var(--gutter);
   }
 }
