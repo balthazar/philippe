@@ -80,6 +80,11 @@ build rather than shipping an empty SPA shell when that API is unreachable or
 returns implausibly little content. So the API has to be up and publicly
 reachable before the web image is ever built:
 
+The web build additionally needs the `philippe` database to be **populated**.
+`prerender/index.js`'s `checkFloor` aborts the build below 10 articles or 30
+routes, so a live-but-empty API fails the image build just as an unreachable
+one does. Run the migration before dispatching the web workflow.
+
 ```sh
 kubectl --context dadonew apply -f k8s/api.yaml
 kubectl --context dadonew -n apps rollout status deploy/philippe-api --timeout=180s
