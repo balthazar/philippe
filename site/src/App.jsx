@@ -1,8 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
-import { Routes, Route, Outlet, useLocation } from 'react-router-dom'
+import { Routes, Route, Outlet } from 'react-router-dom'
 import { SEGMENTS } from './routes.js'
 import { Header } from '@/components/Header.jsx'
-import { Footer } from '@/components/Footer.jsx'
 import { Home } from '@/pages/Home.jsx'
 import { Works } from '@/pages/Works.jsx'
 import { Exhibitions } from '@/pages/Exhibitions.jsx'
@@ -61,29 +60,19 @@ function localizedRoutes(lang, onTranslatedPath, onExhibitionsLayout, isExhibiti
 
 // A layout route: wraps only the public branches below it in the public
 // chrome, via <Outlet/>. /admin (a sibling route, not nested under this
-// one) never passes through here, so it never renders <Header>/<Footer>.
-function PublicLayout({ translatedPath, isExhibitionsArticle }) {
-  // Task 26, part B4: the slideshow owns the viewport on the homepage
-  // (both languages' index route, "/" and "/en"), so the footer is dropped
-  // there. Every other page keeps it. A pathname check, not a route
-  // restructure -- the <Route> tree below is unchanged.
-  const { pathname } = useLocation()
-  const isHome = pathname === '/' || pathname === '/en'
-
-  // Task 30 (client feedback): the /expositions section index is knowable
-  // from the pathname alone, the same way isHome is above. An individual
-  // exhibition article cannot be -- it lives at the flat article root
-  // (/:slug), indistinguishable by URL from a work or an edition -- so that
-  // case comes from `isExhibitionsArticle`, reported up by ArticleDetail
-  // once it knows the article's own category (mirrors how `translatedPath`
-  // already reaches Header the same way).
-  const isExhibitionsSection = pathname === `/${SEGMENTS.exhibitions.fr}` || pathname === `/en/${SEGMENTS.exhibitions.en}`
-
+// one) never passes through here, so it never renders <Header>.
+//
+// Task 33: the footer that used to render here is retired outright (its
+// links moved to /contact -- see SimplePage.jsx). That also removes the two
+// things this component used to compute only to feed it: `isHome` (was it
+// the homepage, so the footer could be dropped) and `isExhibitionsSection`
+// (was it /expositions, so the footer could be indented) are both gone; the
+// route tree and everything else below is unchanged.
+function PublicLayout({ translatedPath }) {
   return (
     <div className="site-shell">
       <Header translatedPath={translatedPath} />
       <Outlet />
-      {!isHome && <Footer indent={isExhibitionsSection || isExhibitionsArticle} />}
     </div>
   )
 }
@@ -104,7 +93,7 @@ export default function App() {
         below, not nested under it, so it never renders the public chrome.
       */}
       <Route path="/admin/*" element={<Suspense fallback={null}><Admin /></Suspense>} />
-      <Route element={<PublicLayout translatedPath={translatedPath} isExhibitionsArticle={isExhibitionsArticle} />}>
+      <Route element={<PublicLayout translatedPath={translatedPath} />}>
         <Route path="/">{localizedRoutes('fr', setTranslatedPath, setIsExhibitionsArticle, isExhibitionsArticle)}</Route>
         <Route path="/en">{localizedRoutes('en', setTranslatedPath, setIsExhibitionsArticle, isExhibitionsArticle)}</Route>
         <Route path="*" element={<NotFound />} />

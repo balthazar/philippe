@@ -170,63 +170,17 @@ picture {
   color: var(--ink);
 }
 
-.site-footer {
-  border-top: 1px solid var(--rule);
-  padding: var(--space-3) var(--gutter);
-  margin-top: var(--space-5);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.site-footer nav {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.site-footer nav a {
-  font-size: var(--text-s);
-  text-decoration: none;
-  color: var(--ink-soft);
-}
-
-.site-footer .colophon {
-  font-size: var(--text-s);
-  color: var(--ink-soft);
-  margin: 0;
-}
-
-/* Client feedback (Task 30): on exhibition pages the timeline reads as a
-   full-height sidebar; the footer aligns to the content column beside its
-   base, rather than spanning under the timeline too. Layout only -- Footer
-   stays exactly where PublicLayout already renders it (a sibling of
-   Header/Outlet), this only shifts where its own content starts. Below
-   768px the timeline stacks above the content instead of beside it (see
-   .exhibitions-layout), so there is no column to align to and no indent is
-   applied. --exhibitions-timeline-width is the exact same token
-   .exhibitions-layout's own grid-template-columns reads, so the two cannot
-   fall out of step. */
-@media (min-width: 768px) {
-  .site-footer.is-exhibitions {
-    padding-inline-start: calc(var(--page-gutter) + var(--exhibitions-timeline-width) + var(--gutter));
-  }
-}
-
-/* Client feedback: header + main + footer together must fit exactly one
-   viewport when content is short (e.g. /contact, reduced to one mailto
-   block) -- the page must never scroll for that. `.page-main`'s own
-   min-height: calc(100dvh - var(--header-height)) alone was not enough: it
-   reserved that full height for <main> BY ITSELF, and the footer then
-   added its own height on top, overflowing past 100dvh. `.site-shell`
-   mirrors the admin bundle's own `.admin` flex column (see admin.css,
-   which solved this exact problem first): header and footer take their
-   natural (flex: 0 0 auto, the flex shorthand's own default) height, and
-   `.page-main`'s flex: 1 0 auto below is what lets <main> absorb exactly
-   whatever space is left -- never more, never less. A long page's content
-   still grows main past that share and the page scrolls normally; only a
-   short page is held to exactly one viewport. */
+/* Client feedback: header + main together must fit exactly one viewport
+   when content is short (e.g. /contact) -- the page must never scroll for
+   that. `.site-shell` mirrors the admin bundle's own `.admin` flex column
+   (see admin.css, which solved this exact problem first): the header takes
+   its natural (flex: 0 0 auto, the flex shorthand's own default) height,
+   and `.page-main`'s flex: 1 0 auto below is what lets <main> absorb
+   exactly whatever space is left -- never more, never less. A long page's
+   content still grows main past that share and the page scrolls normally;
+   only a short page is held to exactly one viewport. Task 33: this used to
+   also account for a footer sharing the shell; the footer is retired
+   outright, so the shell now only ever holds header + main. */
 .site-shell {
   display: flex;
   flex-direction: column;
@@ -235,12 +189,11 @@ picture {
 
 /* Task 26, correction to B4: the flash the client saw on every page, not
    just the homepage, was never about content height -- it was the page
-   collapsing to nothing between mount and the fetch resolving, so the
-   footer rode up near the top and then jumped down once data landed.
-   flex: 1 0 auto (not a min-height) is what keeps this holding
-   unconditionally (loading or loaded) without the overflow above: while
-   loading, an aria-busy <main> with no other content still gets the same
-   share of .site-shell's height as a loaded one would. */
+   collapsing to nothing between mount and the fetch resolving. flex: 1 0
+   auto (not a min-height) is what keeps this holding unconditionally
+   (loading or loaded) without overflowing past 100dvh: while loading, an
+   aria-busy <main> with no other content still gets the same share of
+   .site-shell's height as a loaded one would. */
 .page-main {
   flex: 1 0 auto;
   /* Task 32, item 2: `<main>` is a flex ITEM of `.site-shell` (a column
@@ -281,6 +234,39 @@ picture {
 }
 
 .page-main-centered .block-text {
+  margin: 0;
+}
+
+/* Task 33: the retired site-wide footer's contents, relocated to /contact
+   (the only page that renders this -- see SimplePage.jsx's ColophonLinks).
+   The page is already centred both ways by .page-main-centered above (its
+   one BlockRenderer block, the mailto, plus this); the colophon reads as
+   quiet trailing matter beneath the address, not as chrome of its own, so
+   it keeps the old footer's small size/muted colour but drops the border
+   and the space-between layout that made sense spanning the full page
+   width -- here it just stacks, centred, under the address. */
+.contact-colophon {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.contact-colophon nav {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.contact-colophon nav a {
+  font-size: var(--text-s);
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+
+.contact-colophon .colophon {
+  font-size: var(--text-s);
+  color: var(--ink-soft);
   margin: 0;
 }
 

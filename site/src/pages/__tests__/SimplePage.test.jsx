@@ -98,4 +98,53 @@ describe('SimplePage', () => {
     await waitFor(() => expect(screen.getByText('Un')).toBeInTheDocument())
     expect(container.querySelector('main')).not.toHaveClass('page-main-centered')
   })
+
+  // Task 33: the retired footer's contents (bibliography/links/legal, and
+  // the copyright line) move to /contact, which becomes the site's
+  // colophon -- the address (already there via BlockRenderer), then those
+  // three links, then the copyright, set beneath. Only /contact grows this;
+  // every other simple page is unaffected.
+  describe('contact page colophon (Task 33)', () => {
+    beforeEach(() => {
+      vi.spyOn(api, 'apiGet').mockResolvedValue({
+        key: 'contact', title: 'Contact',
+        blocks: [{ type: 'text', value: '<p><a href="mailto:info@philippegronon.com">info@philippegronon.com</a></p>' }],
+      })
+    })
+
+    it('renders the three former-footer links on /contact', async () => {
+      render(<MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>)
+      await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
+      expect(screen.getByRole('link', { name: 'Bibliographie' })).toHaveAttribute('href', '/bibliographie')
+      expect(screen.getByRole('link', { name: 'Liens' })).toHaveAttribute('href', '/liens')
+      expect(screen.getByRole('link', { name: 'Mentions légales' })).toHaveAttribute('href', '/mentions-legales')
+    })
+
+    it('renders the copyright line beneath the links on /contact', async () => {
+      render(<MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>)
+      await waitFor(() => expect(screen.getByText('© Philippe Gronon')).toBeInTheDocument())
+    })
+
+    it('localizes the colophon links in English', async () => {
+      render(
+        <MemoryRouter initialEntries={['/en/contact']}>
+          <LangProvider><SimplePage pageKey="contact" /></LangProvider>
+        </MemoryRouter>
+      )
+      await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
+      expect(screen.getByRole('link', { name: 'Bibliography' })).toHaveAttribute('href', '/en/bibliography')
+      expect(screen.getByRole('link', { name: 'Links' })).toHaveAttribute('href', '/en/links')
+      expect(screen.getByRole('link', { name: 'Terms and Conditions' })).toHaveAttribute('href', '/en/terms')
+    })
+
+    it('does not render the colophon links on another simple page', async () => {
+      vi.spyOn(api, 'apiGet').mockResolvedValue({
+        key: 'biography', title: 'Biographie', blocks: [{ type: 'text', value: '<p>Né en 1964</p>' }],
+      })
+      render(<MemoryRouter><LangProvider><SimplePage pageKey="biography" /></LangProvider></MemoryRouter>)
+      await waitFor(() => expect(screen.getByText('Né en 1964')).toBeInTheDocument())
+      expect(screen.queryByRole('link', { name: 'Bibliographie' })).not.toBeInTheDocument()
+      expect(screen.queryByText('© Philippe Gronon')).not.toBeInTheDocument()
+    })
+  })
 })

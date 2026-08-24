@@ -77,72 +77,37 @@ describe('App routing', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Porte' })).toBeInTheDocument())
   })
 
-  // Task 26, part B4: the slideshow owns the viewport on the homepage, so
-  // the footer is dropped there. Every other page keeps it.
-  it('drops the footer on the homepage but keeps it on other pages', async () => {
+  // Task 33: the footer is retired outright (its links moved to /contact,
+  // see SimplePage.test.jsx) -- no page renders a <footer> any more,
+  // homepage included, so there is nothing left to suppress or indent.
+  it('never renders a footer, on the homepage or any other page', async () => {
     renderAt('/')
     await waitFor(() => expect(screen.getByRole('navigation', { name: /navigation principale/i })).toBeInTheDocument())
     expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument()
 
     renderAt('/biographie')
     await waitFor(() => expect(screen.getByText('Né en 1964')).toBeInTheDocument())
-    expect(screen.getByRole('contentinfo')).toBeInTheDocument()
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument()
   })
 
-  // Client feedback (Task 30): the timeline reads as a full-height sidebar
-  // on exhibition pages, so the footer aligns to the content column beside
-  // its base rather than spanning under the timeline too. A pathname check
-  // covers the /expositions section index directly; an individual
-  // exhibition article lives at the root (/2023), indistinguishable from any
-  // other article by URL alone, so ArticleDetail reports its own category up
-  // once it has loaded (mirroring how onTranslatedPath already works).
-  describe('exhibitions footer indent', () => {
-    it('indents the footer on an exhibition article page', async () => {
-      vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
-        if (path.startsWith('/pages/')) return { key: 'exhibitions', title: 'Expositions', blocks: [] }
-        if (path === '/home') return { slides: [] }
-        if (path === '/articles/2023') return { slug: '2023', title: '2023', category: 'exhibitions', blocks: [] }
-        return { items: [], total: 0 }
-      })
-      renderAt('/2023')
-      await waitFor(() => expect(screen.getByRole('contentinfo')).toHaveClass('is-exhibitions'))
-    })
-
-    it('does not indent the footer on a non-exhibition article page', async () => {
-      renderAt('/porte-fr')
-      await waitFor(() => expect(screen.getByRole('contentinfo')).toBeInTheDocument())
-      expect(screen.getByRole('contentinfo')).not.toHaveClass('is-exhibitions')
-    })
-
-    it('indents the footer on the /expositions section index', async () => {
-      renderAt('/expositions')
-      await waitFor(() => expect(screen.getByRole('contentinfo')).toBeInTheDocument())
-      expect(screen.getByRole('contentinfo')).toHaveClass('is-exhibitions')
-    })
-  })
-
-  // Client feedback: a short page (e.g. /contact, reduced to one mailto
-  // block) must never scroll -- header + main + footer together fit exactly
-  // one viewport. `.page-main`'s own min-height used to reserve
-  // 100dvh-header-height for itself alone, and the footer then added its
-  // own height ON TOP of that, overflowing past 100dvh. `.site-shell`
-  // (mirroring the admin bundle's own `.admin` flex column -- see
-  // admin.css) is what fixes this in general, not as a contact-page
-  // special case: it wraps header/main/footer as a flex column with
-  // min-height: 100dvh, and .page-main's flex: 1 0 auto is what lets it
-  // absorb exactly the slack left after the header and footer's own
-  // natural heights -- never more, never less.
-  it('wraps header, main and footer in a single flex shell that fits one viewport', async () => {
+  // Client feedback: a short page (e.g. /contact) must never scroll --
+  // header + main together fit exactly one viewport. `.site-shell` wraps
+  // them as a flex column with min-height: 100dvh, and .page-main's own
+  // flex: 1 0 auto is what lets it absorb exactly the slack left after the
+  // header's natural height -- never more, never less. Task 33: the footer
+  // that used to share this shell is gone, so the shell now only ever holds
+  // header + main.
+  it('wraps header and main in a single flex shell that fits one viewport', async () => {
     const { container } = renderAt('/biographie')
     await waitFor(() => expect(screen.getByText('Né en 1964')).toBeInTheDocument())
     const shell = container.querySelector('.site-shell')
     expect(shell).toBeInTheDocument()
     expect(shell.querySelector(':scope > header')).toBeInTheDocument()
     expect(shell.querySelector(':scope > main')).toBeInTheDocument()
-    expect(shell.querySelector(':scope > footer')).toBeInTheDocument()
+    expect(shell.querySelector(':scope > footer')).not.toBeInTheDocument()
   })
 
-  it('keeps the flex shell on the homepage too, footer just omitted', async () => {
+  it('keeps the flex shell on the homepage too', async () => {
     const { container } = renderAt('/')
     await waitFor(() => expect(container.querySelector('.site-shell')).toBeInTheDocument())
     const shell = container.querySelector('.site-shell')

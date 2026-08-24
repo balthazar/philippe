@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
 import { usePageData } from '@/preload.jsx'
@@ -5,6 +6,33 @@ import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 import { usePageTitle } from '@/lib/usePageTitle.js'
 import { staticPageTitle } from '@/lib/pageTitle.js'
+
+// Task 33: the retired site-wide footer's contents, now the contact page's
+// own colophon (see ColophonLinks below) -- moved, not duplicated: this is
+// the one place these three links render now.
+const COLOPHON_LINKS = [
+  { key: 'bibliography', fr: 'Bibliographie', en: 'Bibliography' },
+  { key: 'links', fr: 'Liens', en: 'Links' },
+  { key: 'legal', fr: 'Mentions légales', en: 'Terms and Conditions' },
+]
+
+// The address (BlockRenderer's own mailto block, rendered by the caller)
+// is the page; this is what used to be <Footer>, now quietly set beneath
+// it instead of spanning the whole site. Same content, same localization
+// rule as every other nav label: read from `lang` via useLang() below.
+function ColophonLinks() {
+  const { lang, href } = useLang()
+  return (
+    <div className="contact-colophon">
+      <nav aria-label={lang === 'fr' ? 'Pied de page' : 'Footer'}>
+        {COLOPHON_LINKS.map((item) => (
+          <Link key={item.key} to={href(item.key)}>{item[lang]}</Link>
+        ))}
+      </nav>
+      <p className="colophon">&copy; Philippe Gronon</p>
+    </div>
+  )
+}
 
 // Backs biography, contact, bibliography, links and legal. Fetches
 // /pages/:key and renders the title plus BlockRenderer. The title is placed
@@ -42,6 +70,7 @@ export function SimplePage({ pageKey }) {
     <Container as="main" className={className}>
       {pageKey !== 'contact' && <h1>{page.title}</h1>}
       <BlockRenderer blocks={page.blocks} />
+      {pageKey === 'contact' && <ColophonLinks />}
     </Container>
   )
 }
