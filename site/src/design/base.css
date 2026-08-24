@@ -794,6 +794,12 @@ picture {
    same reasoning flips: growing right here would push the label off the
    page's own right edge, into the browser's margin, so it grows left,
    toward the content column, instead. */
+/* Task 37, part C4: bumped from the unset default (400) -- a non-persistent
+   label already reads faint from its colour alone (--ink-soft); at regular
+   weight, next to a page of otherwise-bold chrome type, it read as too
+   light to comfortably read, not just deliberately de-emphasised. Weight
+   alone changes here; colour still separates a persistent label from the
+   current year's own bolder, `--ink` one (.is-current-year below). */
 .exhibitions-timeline-label {
   position: absolute;
   top: 0;
@@ -806,6 +812,7 @@ picture {
   white-space: nowrap;
   font-family: var(--font-chrome);
   font-size: var(--text-m);
+  font-weight: 600;
   color: var(--ink-soft);
   opacity: 0;
   pointer-events: none;
@@ -859,8 +866,22 @@ picture {
   opacity: 0.8;
 }
 
+/* Task 37, part C3: some exhibition titles are very long ("L'Œil
+   photographique, Œuvres majeures des collections photographiques du centre
+   national des Arts Plastiques, Frac Auvergne, Clermont-Ferrand") and, at
+   the label's own natural (shrink-to-fit) width, used to span most of the
+   page. Capped and truncated with an ellipsis instead -- a scrubber names
+   what a click will open, it does not need to hold the entire title; the
+   full name is always the very next thing on screen once you click.
+   `white-space: nowrap` is inherited from .exhibitions-timeline-scrub, but
+   restated here since text-overflow: ellipsis has no effect without it on
+   the element it is actually set on. */
 .exhibitions-timeline-scrub-title {
   display: block;
+  max-width: 16rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-family: var(--font-chrome);
   font-size: var(--text-m);
 }
