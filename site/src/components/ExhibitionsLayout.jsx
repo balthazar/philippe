@@ -107,7 +107,17 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
   return (
     <Container as="main" className="page-main">
       <div className={showRail ? 'exhibitions-layout' : undefined}>
-        {showRail && <ExhibitionsTimeline items={items || []} currentSlug={currentSlug} currentYear={currentYear} />}
+        {/*
+          Task 36, item 1: the rail moved to the right-hand edge, and the
+          point of that move is alignment -- the exhibition title (rendered
+          inside this content column) has to start at the same left gutter
+          as the "PHILIPPE GRONON" wordmark. Both are the FIRST column of
+          their own grid (this one `1fr`, the header's own), reading from
+          the same --page-gutter inset, so they can never drift apart. That
+          only holds if this content div is the first grid item -- the
+          rail, second in the DOM below, occupies the second (fixed-width)
+          track. See .exhibitions-layout in base.css for the grid itself.
+        */}
         <div className={showRail ? 'exhibitions-content' : undefined}>
           {/*
             Task 33, section 3: hands the already-fetched exhibitions list
@@ -119,6 +129,7 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
           */}
           <Outlet context={items} />
         </div>
+        {showRail && <ExhibitionsTimeline items={items || []} currentSlug={currentSlug} currentYear={currentYear} />}
       </div>
     </Container>
   )

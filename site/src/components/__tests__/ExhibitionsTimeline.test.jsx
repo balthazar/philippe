@@ -1,22 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { LangProvider } from '@/lang.jsx'
 import { ExhibitionsTimeline } from '../ExhibitionsTimeline.jsx'
 
-// Task 35, Part B: the split that produced 39 real exhibitions across 25
-// years (nine years hold more than one; 2013 holds five) means a
+// Task 35, Part B / task 36: the split that produced 39 real exhibitions
+// across 25 years (nine years hold more than one; 2013 holds five) means a
 // one-dot-per-YEAR rail links only to that year's first exhibition -- the
 // other exhibitions in a multi-exhibition year are unreachable from the
-// rail entirely. The rail must carry one dot per EXHIBITION, all of them,
-// with the YEAR label still shown once per year (not once per dot).
+// rail entirely. The rail carries one dot per EXHIBITION, all of them, with
+// the YEAR label still shown once per year (not once per dot).
 //
 // 11 items across 10 distinct years (2019 holds two, mirroring 2013 in the
 // real archive) -- enough to exercise both the every-fifth persistent-label
-// rule (now read against the flat 11-dot sequence, since the previous
-// design's "one dot" and "one year" were the same thing and no longer are)
-// and the multi-exhibition-year disambiguation requirement.
+// rule (read against the flat 11-dot sequence) and the multi-exhibition-year
+// disambiguation requirement.
 const items = [
   { _id: '11', slug: 'expo-2024', title: 'Expo 2024', yearStart: 2024 }, // flat 0 -- newest, persistent
   { _id: '10', slug: 'expo-2023', title: 'Expo 2023', yearStart: 2023 }, // flat 1
@@ -95,11 +94,20 @@ describe('ExhibitionsTimeline', () => {
   // for a multi-exhibition year -- "not the year repeated once per dot"
   // (task brief). It is deliberately not part of any single link's own
   // accessible name computation (aria-hidden), since each link already
-  // carries its own, more specific name above.
+  // carries its own, more specific name above. Task 36: the label is now a
+  // standalone element (not nested inside a shared per-year <li>), one per
+  // distinct year regardless of DOM nesting.
   it('renders the year label text only once for a multi-exhibition year', () => {
     const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
     const labels = [...container.querySelectorAll('.exhibitions-timeline-label')].map((n) => n.textContent.trim())
     expect(labels.filter((t) => t === '2019')).toHaveLength(1)
+  })
+
+  it('renders exactly one label per distinct year', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const labels = [...container.querySelectorAll('.exhibitions-timeline-label')]
+    const distinctYears = new Set(items.map((i) => i.yearStart)).size
+    expect(labels).toHaveLength(distinctYears)
   })
 
   it('lets keyboard focus reach every exhibition, in order, via Tab', async () => {
@@ -113,15 +121,15 @@ describe('ExhibitionsTimeline', () => {
 
   // Task 31, part 1 (client decision, not re-litigated): persistent labels
   // land on every fifth dot, the current year, and the newest/oldest.
-  // Task 35, Part B re-checks this against the new dot count: "every fifth"
-  // now counts across the flat 11-dot (39, on the real archive) sequence,
-  // not the ~10 (25) year groups -- a group is persistent if ANY of its
-  // dots lands on the rule, so a multi-exhibition year absorbs an
+  // Task 35, Part B / task 36 re-check this against the new dot count:
+  // "every fifth" counts across the flat 11-dot (39, on the real archive)
+  // sequence, not the ~10 (25) year groups -- a group is persistent if ANY
+  // of its dots lands on the rule, so a multi-exhibition year absorbs an
   // every-fifth hit without showing its label twice.
   it('keeps a persistent label on the group containing every fifth dot, plus the newest and oldest', () => {
     const { container } = renderTimeline({ currentSlug: 'nope', currentYear: 1500 })
-    const persistentYears = [...container.querySelectorAll('.is-persistent')]
-      .map((li) => li.querySelector('.exhibitions-timeline-label').textContent.trim())
+    const persistentYears = [...container.querySelectorAll('.exhibitions-timeline-label.is-persistent')]
+      .map((el) => el.textContent.trim())
     // flat index 5 (the every-fifth hit) is "Premier lieu", inside the 2019
     // group -- its group is persistent, shown once, not twice.
     expect(persistentYears).toEqual(['2024', '2019', '1989'])
@@ -129,8 +137,8 @@ describe('ExhibitionsTimeline', () => {
 
   it('adds the current year to the persistent set even when it falls off the every-fifth pattern', () => {
     const { container } = renderTimeline({ currentSlug: 'expo-2017', currentYear: 2017 }) // flat 8
-    const persistentYears = [...container.querySelectorAll('.is-persistent')]
-      .map((li) => li.querySelector('.exhibitions-timeline-label').textContent.trim())
+    const persistentYears = [...container.querySelectorAll('.exhibitions-timeline-label.is-persistent')]
+      .map((el) => el.textContent.trim())
     expect(persistentYears).toEqual(['2024', '2019', '2017', '1989'])
   })
 
@@ -161,27 +169,94 @@ describe('ExhibitionsTimeline', () => {
         </LangProvider>
       </MemoryRouter>
     )
-    const persistentYears = [...container.querySelectorAll('.is-persistent')]
-      .map((li) => li.querySelector('.exhibitions-timeline-label').textContent.trim())
+    const persistentYears = [...container.querySelectorAll('.exhibitions-timeline-label.is-persistent')]
+      .map((el) => el.textContent.trim())
     expect(persistentYears).toEqual(['2024', '2020', '1989'])
   })
 
   it('does not mark a non-current, non-every-fifth, non-edge year as persistent', () => {
     const { container } = renderTimeline({ currentSlug: 'nope', currentYear: 1500 })
-    const link2021 = screen.getByRole('link', { name: '2021' })
-    expect(link2021.closest('li.is-persistent')).toBeNull()
+    const label2021 = [...container.querySelectorAll('.exhibitions-timeline-label')]
+      .find((el) => el.textContent.trim() === '2021')
+    expect(label2021).not.toHaveClass('is-persistent')
   })
 
-  // Hover/focus on ANY dot in a group reveals that group's shared label --
-  // exercised structurally (the label lives in the same <li> the dots
-  // share, revealed via :hover/:focus-within in base.css, not per-link).
-  it('keeps every exhibition link inside the same group <li> as its year label', () => {
-    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
-    // The dot's own <li> (inside the inner, per-exhibition <ol>) is one
-    // level down from the shared group <li> (which also holds the label).
-    const dotItem = screen.getByRole('link', { name: /Second lieu/ }).closest('li')
-    const groupItem = dotItem.parentElement.closest('li')
-    expect(within(groupItem).getByRole('link', { name: /Premier lieu/ })).toBeInTheDocument()
-    expect(within(groupItem).getByText('2019')).toBeInTheDocument()
+  // Task 36, item 4: replaces the old "hover a dot, its year appears
+  // inline" mechanism with one floating element that tracks the pointer or
+  // keyboard focus and names BOTH the year and the exhibition's own title
+  // -- resolving the hit-target problem (the viewer points at the rail, not
+  // a 6px dot) and giving more than a bare year even for a single-
+  // exhibition year, unlike the always-on persistent label.
+  it('shows no floating scrubber label until the rail is hovered or focused', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
+  })
+
+  it('shows the floating scrubber label, naming year and title, when the rail is hovered', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    const scrub = container.querySelector('.exhibitions-timeline-scrub')
+    expect(scrub).toBeInTheDocument()
+    expect(scrub).toHaveTextContent('2024')
+  })
+
+  it('clears the floating scrubber label when the pointer leaves the rail (and nothing is focused)', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toBeInTheDocument()
+    fireEvent.mouseLeave(rail)
+    expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
+  })
+
+  // Accessibility (task 36, item 4): "the floating label must appear on
+  // keyboard focus exactly as it does on hover" -- with no pointer
+  // involved at all.
+  it('shows the floating scrubber label on keyboard focus of a dot, naming that exhibition', async () => {
+    const user = userEvent.setup()
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    await user.tab() // focuses the first (newest) link, "2024"
+    const scrub = container.querySelector('.exhibitions-timeline-scrub')
+    expect(scrub).toBeInTheDocument()
+    expect(scrub).toHaveTextContent('2024')
+  })
+
+  it('shows a multi-exhibition year link\'s own distinct title in the scrubber on focus, not just the shared year', async () => {
+    const user = userEvent.setup()
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    // Tab to "Premier lieu" (flat index 5, the 6th link).
+    for (let i = 0; i < 6; i++) await user.tab()
+    expect(screen.getByRole('link', { name: /Premier lieu/ })).toHaveFocus()
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveTextContent('Premier lieu')
+  })
+
+  it('hides the floating scrubber label once focus leaves the rail entirely', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <MemoryRouter>
+        <LangProvider>
+          <div>
+            <button type="button">before</button>
+            <ExhibitionsTimeline items={items} currentSlug="expo-2023" currentYear={2023} />
+            <button type="button">after</button>
+          </div>
+        </LangProvider>
+      </MemoryRouter>
+    )
+    await user.tab() // "before" button
+    await user.tab() // first rail link
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toBeInTheDocument()
+    // Tab all the way through the rail and one step past it.
+    for (let i = 0; i < items.length; i++) await user.tab()
+    expect(screen.getByRole('button', { name: 'after' })).toHaveFocus()
+    expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
+  })
+
+  it('is aria-hidden, since each dot\'s own link already carries its accessible name', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveAttribute('aria-hidden', 'true')
   })
 })

@@ -601,43 +601,31 @@ picture {
 }
 
 /* Exhibitions timeline (task 28, part 3; redesigned to a dot rail in task
-   31). Persistent chrome for the whole exhibitions section -- the
-   /expositions index and every individual exhibition article page render
-   this exact structure (see ExhibitionsLayout.jsx, a nested layout route as
-   of task 32, item 1), so it lives here rather than as one-off styling for
-   either page.
+   31; task 36: moved to the right edge, made a full-height scrubber that
+   never scrolls). Persistent chrome for the whole exhibitions section --
+   the /expositions index and every individual exhibition article page
+   render this exact structure (see ExhibitionsLayout.jsx, a nested layout
+   route as of task 32, item 1), so it lives here rather than as one-off
+   styling for either page.
 
-   Task 31 replaced the 25 stacked text labels with 25 small dots, one per
-   exhibition year. Dots are short enough that the whole rail fits inside a
-   normal desktop viewport, which is what removed the need for the old
-   column's own scrollbar, its edge auto-scroll, and its edge fade masks --
-   deleted outright (see ExhibitionsTimeline.jsx and the task report), not
-   left in place unreachable. The mobile row below 768px keeps its own
-   horizontal scroll: 25 dots in a single row can still exceed a phone's
-   width even though they never exceeded a phone's height, so that axis is
-   unaffected by any of this.
+   Task 36, item 1: the rail is now the SECOND column (var(...), fixed
+   width), content the FIRST (1fr) -- ExhibitionsLayout.jsx renders the
+   content div before the rail in the DOM specifically so the content
+   column, not the rail, sits flush with the page's left gutter, aligning
+   the exhibition title with the "PHILIPPE GRONON" wordmark (both read from
+   the same --page-gutter inset -- see .container/.site-header-inner).
 
-   From 768px the rail is a sticky column (independent of the old
-   scroll-to-fit reasoning -- this is purely "stay visible while reading a
-   long article"), narrow enough (--exhibitions-timeline-width, 1.5rem) that
-   the content column beside it gets the space the old 14rem text column
-   used to leave idle. */
-/* Task 33, item 2: no top padding/margin above the rail+content grid --
-   the client's complaint was specifically the gap before an exhibitions
-   page's own content starts, immediately below the sticky header.
-
-   Task 35, Part B, item 2: no `align-items: start` any more. That kept the
-   rail's own grid-item box at its dot list's intrinsic height, shorter
-   than the content column whenever content ran longer (which it usually
-   does) -- and `position: sticky` (below) can only stay stuck while
-   scrolling through its OWN box's height, not the row's. A rail shorter
-   than the content it sits beside stopped being sticky partway down a long
-   article and scrolled away with the page -- exactly backwards from "stay
-   visible while reading a long article", the reason it is sticky at all.
-   The default (`stretch`) makes the rail's box match the row's real
-   height -- as tall as the content actually is -- so sticky positioning
-   has the entire scroll range to work with, all the way to the bottom of
-   the article, not just its first however-many pixels. */
+   Task 36, item 2: 39 dots no longer fit a normal viewport at the OLD
+   design's flat per-year spacing, which is what the previous version of
+   this comment used `max-height` + `overflow-y: auto` to paper over -- the
+   client rejected that scroll twice. This version never scrolls: every
+   dot's own vertical position is computed in JS (layoutExhibitionsTimeline,
+   lib/exhibitionsOrder.js) against the rail's real measured height, with a
+   minimum gap enforced so a dense year (2013 holds five) expands locally
+   rather than collapsing to a few unreadable pixels, while the total
+   sequence still always fits inside that height. See
+   ExhibitionsTimeline.jsx for the placement/measurement itself; this file
+   only supplies the positioning context and visual treatment. */
 .exhibitions-layout {
   display: grid;
   grid-template-columns: 1fr;
@@ -646,19 +634,45 @@ picture {
 
 @media (min-width: 768px) {
   .exhibitions-layout {
-    grid-template-columns: var(--exhibitions-timeline-width) 1fr;
+    grid-template-columns: 1fr var(--exhibitions-timeline-width);
     gap: var(--gutter);
+    /* Task 36, item 2/6: the same "flex column owning exactly the space
+       below the header" shape the homepage slideshow already solved (see
+       .slideshow above) -- reused here as an explicit height rather than a
+       second hand-rolled measurement, so the grid ROW (both the rail and
+       the content column beside it) is exactly the viewport's remaining
+       height and no more. A single implicit `auto` row stretches to fill a
+       grid container's own explicit height by default (align-content's
+       initial value computes to `stretch`), which is what lets both grid
+       items below reach that full height with no `grid-template-rows`
+       needed. */
+    height: calc(100dvh - var(--header-height));
+    min-height: 0;
   }
 }
 
-/* Task 35, Part B: the rail is now two nested lists -- the outer `ol` still
-   one item per YEAR (a group: the shared label plus that year's own dots),
-   the inner `.exhibitions-timeline-group` one item per EXHIBITION (its own
-   dot, its own link). `> ol` scopes every rule below to the OUTER list
-   only, so it never also matches the inner one -- they need different
-   selectors because a multi-exhibition year now nests one inside the
-   other, where a single flat list used to be enough. */
-.exhibitions-timeline > ol {
+/* The rail's own positioning context: every dot, label and the floating
+   scrubber label below are `position: absolute` against this box, using
+   pixel `top` offsets computed in JS. `height: 100%` fills the grid row
+   above (the row itself already stretches to the container's explicit
+   height); `min-height: 0` keeps a grid item from refusing to shrink below
+   its own content's intrinsic size, the same reason .slideshow-stage needs
+   it (see that rule's own comment). No overflow rule of any kind: nothing
+   here is ever meant to clip or scroll -- a label popping left of the rail
+   into the content column's own space is allowed to do so freely, the same
+   way it always could before task 33 moved the rail to the left edge. */
+.exhibitions-timeline {
+  position: relative;
+}
+
+@media (min-width: 768px) {
+  .exhibitions-timeline {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+.exhibitions-timeline-rail {
   display: flex;
   gap: var(--space-2);
   margin: 0;
@@ -668,93 +682,43 @@ picture {
   scrollbar-width: none;
 }
 
-.exhibitions-timeline > ol::-webkit-scrollbar {
+.exhibitions-timeline-rail::-webkit-scrollbar {
   display: none;
 }
 
-/* One year's own dots, mirroring the outer list's own axis at each
-   breakpoint (row on mobile, column from 768px) so a multi-exhibition
-   year's dots sit right next to each other, not scattered across the
-   layout the outer list already owns. Tighter gap than the outer list's
-   between-YEAR spacing -- these are siblings within one year, not
-   different years. */
-.exhibitions-timeline-group {
-  display: flex;
-  gap: 0.125rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 @media (min-width: 768px) {
-  .exhibitions-timeline {
-    position: sticky;
-    top: var(--header-height);
-  }
-
-  /* Task 35, Part B: at 25 dots (one per year) the whole rail always fit a
-     normal desktop viewport -- the comment above this block used to say so
-     outright, celebrating deleting the OLD design's scroll/auto-scroll/
-     fade-mask machinery for exactly that reason. At 39 (one per exhibition)
-     it no longer reliably does: measured directly, 39 dots at this gap and
-     hit-target size need about 1012px, taller than the ~820px available
-     below the header on a common 900px-tall window -- and unlike a page
-     that is genuinely long, THIS height comes from the rail alone, so it
-     was inflating even a one-line exhibition's page to need a scrollbar
-     purely because of dot count. `max-height` + `overflow-y: auto` caps the
-     rail at whatever height actually IS available and scrolls the dot list
-     within it -- not a full reintroduction of the old design's own scroll
-     machinery, just a plain, hidden-scrollbar clip (scrollbar-width: none,
-     :-webkit-scrollbar below, matching how the mobile row already hides
-     its own).
-
-     `width` here is NOT a layout width -- `.exhibitions-layout`'s grid
-     track (var(--exhibitions-timeline-width), unchanged) still decides
-     where the content column starts, and each dot's own `<li>` (not
-     stretched: `align-items: flex-start`) stays exactly as narrow as
-     before. It exists ONLY to give `.exhibitions-timeline-label` (below,
-     "1989" at most -- measured at ~45px including its own padding) enough
-     room to pop out to the right and land INSIDE this box's own clipping
-     boundary, sized with a safety margin, rather than escaping past it: the
-     CSS overflow spec computes `overflow-x: visible` up to `auto` the
-     moment `overflow-y` is anything else (the exact rule the mobile
-     `padding-top` comment below already describes for its own axis), so
-     `overflow-x: visible` cannot coexist with the vertical scrolling this
-     needs. Reserving room INSIDE the box, the same fix the mobile version
-     already uses on its own axis, is what keeps the label from being
-     silently clipped instead. */
-  .exhibitions-timeline > ol {
-    flex-direction: column;
-    align-items: flex-start;
-    /* Task 32, item 3: tightened from 0.375rem. The link's own padding
-       (below) is what keeps each dot's actual click target comfortable, not
-       this gap, so shrinking it just tightens the visual rhythm between
-       dots without touching hit-area math at all. */
-    gap: 0.125rem;
+  /* Desktop: every `<li>` gets its own computed `top` (inline style, see
+     ExhibitionsTimeline.jsx) against this now-relatively-positioned rail,
+     which is exactly `.exhibitions-timeline`'s own full, measured height --
+     see that rule above. No `overflow`, `max-height`, `gap` or `flex-*`
+     properties are relevant to vertical placement any more; only `position`
+     changes between breakpoints, so the identical DOM keeps working as a
+     plain horizontal, normally-flowing row below 768px (where `top` has no
+     effect on a statically positioned element, and is simply ignored). */
+  .exhibitions-timeline-rail {
+    position: relative;
+    height: 100%;
     padding: 0;
-    width: 4rem;
-    max-height: calc(100dvh - var(--header-height));
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: visible;
   }
 
-  .exhibitions-timeline-group {
-    flex-direction: column;
+  .exhibitions-timeline-dot-item {
+    position: absolute;
+    left: 0;
+    right: 0;
+    /* Centres the dot's own hit area ON the computed `top` coordinate
+       (the same coordinate space layoutExhibitionsTimeline uses for
+       every dot, label and the scrubber below), rather than hanging it
+       below that point -- matches how .exhibitions-timeline-label and
+       .exhibitions-timeline-scrub are already centred on their own `top`. */
+    transform: translateY(-50%);
   }
-}
-
-.exhibitions-timeline li {
-  /* The positioning context for the year label, which pops out of this box
-     entirely (see .exhibitions-timeline-label below) rather than taking up
-     space in the row/column flow -- this is what lets the rail's own column
-     stay dot-width, not label-width. Harmless on the inner, per-exhibition
-     `<li>` too (it has nothing absolutely positioned inside it). */
-  position: relative;
 }
 
 .exhibitions-timeline a {
   display: flex;
   align-items: center;
+  justify-content: center;
   /* Task 32, item 3: bumped from var(--space-1) (0.5rem) to 0.5625rem so the
      link's own hit area stays a full 24x24 CSS px (0.5625*2 + the 0.375rem
      dot below = 1.5rem), the WCAG 2.5.8 AA minimum target size, even though
@@ -800,43 +764,36 @@ picture {
    `opacity: 0` instead, which visually hides it while leaving it fully in
    the accessibility tree at every state below.
 
-   Client decisions (task 31, part 1, already ruled on -- see the task
+   Client decision (task 31, part 1, already ruled on -- see the task
    brief): every fifth dot, the current year, and the newest/oldest keep
    their label visible at rest (`.is-persistent`, set in
-   ExhibitionsTimeline.jsx). Every other dot reveals its label on hover --
-   "the way a scrubber reveals a value" -- and identically on keyboard focus.
+   ExhibitionsTimeline.jsx). Every other year's label stays hidden at rest.
 
-   Task 35, Part B: the label is now a sibling of the inner, per-exhibition
-   dot list (ExhibitionsTimeline.jsx groups every year's dots under one
-   shared label), not a descendant of any single dot's own `<a>` any more --
-   so reveal-on-interaction is keyed off the shared, OUTER `<li>` (`:hover`
-   for a mouse, `:focus-within` for keyboard reaching any dot inside it via
-   Tab) rather than a single link's own `:hover`/`:focus-visible`. Hovering
-   or focusing ANY dot in a multi-exhibition year reveals that year's one
-   label -- never a lesser effect for keyboard users than for a mouse. */
-/* Task 33, item 2 (client feedback): the rail's own column sits flush with
-   the wordmark's left edge (its grid column is the same --page-gutter-inset
-   container the header uses -- see .exhibitions-layout above and
-   .container/.site-header-inner, both reading --page-gutter/--container).
-   The label used to pop out to the LEFT of that column (right: 100%),
-   which put its own left edge further left still -- past the wordmark's
-   edge, into the page gutter margin. Anchored from `left: 0` instead, the
-   label's left edge lands exactly on that same line as the dot/wordmark,
-   and it grows right, over the rail's own column, rather than escaping the
-   page's content box on either axis. It is a `position: absolute` overlay
-   toggled by opacity only (see below), so this never affects layout/reflow
-   of the content column beside it. */
+   Task 36, item 4: hover/focus no longer reveals a NON-persistent label
+   here at all -- that mechanism is retired in favour of the one floating
+   `.exhibitions-timeline-scrub` element below, which follows the pointer
+   or keyboard focus continuously rather than only snapping visible beside
+   whichever single dot happens to be hovered. A persistent label's
+   visibility is therefore unconditional (`.is-persistent` alone), not
+   `:hover`/`:focus-within` gated any more.
+
+   Task 36, item 1: the label now pops out to the LEFT of the rail
+   (anchored from `right: 0`, growing left over the content column), the
+   mirror of task 33's `left: 0`/grows-right choice -- that choice existed
+   specifically because the rail sat at the page's LEFT edge, where growing
+   right kept the label inside the page's own content box instead of
+   escaping into the left margin. The rail is now at the RIGHT edge, so the
+   same reasoning flips: growing right here would push the label off the
+   page's own right edge, into the browser's margin, so it grows left,
+   toward the content column, instead. */
 .exhibitions-timeline-label {
   position: absolute;
-  top: 50%;
-  left: 0;
+  top: 0;
+  right: 0;
+  left: auto;
   z-index: 1;
   transform: translateY(-50%);
   padding: 0.125rem 0.375rem;
-  /* Growing right now (instead of left, see above) can lay this over the
-     content column's own text at narrow gaps between them; an opaque
-     background keeps it legible the same way .category-section's sticky
-     heading already relies on --paper for the identical reason. */
   background: var(--paper);
   white-space: nowrap;
   font-family: var(--font-chrome);
@@ -844,43 +801,81 @@ picture {
   color: var(--ink-soft);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 150ms ease;
 }
 
-.exhibitions-timeline > ol > li.is-persistent > .exhibitions-timeline-label,
-.exhibitions-timeline > ol > li:hover > .exhibitions-timeline-label,
-.exhibitions-timeline > ol > li:focus-within > .exhibitions-timeline-label {
+.exhibitions-timeline-label.is-persistent {
   opacity: 1;
 }
 
 /* The current EXHIBITION's own dot is marked via a[aria-current] above; the
    shared year label is bolded whenever that year HOLDS the current
-   exhibition (`.is-current-year`, set in ExhibitionsTimeline.jsx) -- a
-   year-level class, not an attribute selector off any single link, since
-   the label is no longer inside any one dot's `<a>`. */
-.exhibitions-timeline > ol > li.is-current-year > .exhibitions-timeline-label {
+   exhibition (`.is-current-year`, set in ExhibitionsTimeline.jsx). */
+.exhibitions-timeline-label.is-current-year {
   color: var(--ink);
   font-weight: 700;
 }
 
-/* Below 768px the rail is a horizontal row (see .exhibitions-timeline > ol
-   above): popping a label to the *left* of its dot, as the sticky column
-   does, would routinely overlap the previous dot at that spacing. Above the
-   dot instead, centred, keeps every visible label -- persistent or
-   hover-revealed -- clear of its neighbours on that axis.
+/* Task 36, item 4: the floating scrubber label -- "a floating element that
+   overlaps the rail and shows the year and the exhibition's title,
+   tracking the pointer as it moves down the rail" (task brief), modelled
+   on Google's own timeline scrubber (the client's named reference). It
+   tracks the SAME `top` a dot's own position uses (ExhibitionsTimeline.jsx
+   picks the nearest dot to the pointer's Y, or whichever dot currently
+   holds keyboard focus), so it always lands level with the exhibition it
+   describes. `aria-hidden`: purely a sighted convenience for whoever is
+   pointing or tabbing -- the accessible name a screen reader gets comes
+   from each dot's own link (see the aria-label rule in
+   ExhibitionsTimeline.jsx), which this never substitutes for. Anchored
+   from the left of the rail's own box (mirrors the persistent label's own
+   right:0/grows-left rule) so it never crosses over the dots themselves. */
+.exhibitions-timeline-scrub {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  z-index: 2;
+  transform: translateY(-50%);
+  margin-right: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--ink-strong);
+  color: var(--paper);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: top 100ms ease;
+}
 
-   `.exhibitions-timeline > ol`'s own overflow-x: auto is why the label needs
+.exhibitions-timeline-scrub-year {
+  display: block;
+  font-family: var(--font-chrome);
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+}
+
+.exhibitions-timeline-scrub-title {
+  display: block;
+  font-family: var(--font-chrome);
+  font-size: var(--text-m);
+}
+
+/* Below 768px the rail is a horizontal row (see .exhibitions-timeline-rail
+   above): popping a label to the *left* of its dot, as the desktop column
+   does, would routinely overlap the previous dot at that spacing. Above the
+   dot instead, centred, keeps every visible label clear of its neighbours
+   on that axis. The floating scrubber label is a desktop/pointer-tracking
+   feature (task 36, item 4, styled against the desktop column layout
+   above) -- simply hidden below 768px rather than re-deriving its own
+   mobile position, consistent with the brief's "desktop only" scope for
+   this task.
+
+   `.exhibitions-timeline-rail`'s own overflow-x: auto is why the label needs
    `padding-top` reserved here rather than just popping upward freely: the
    CSS overflow spec computes overflow-y to 'auto' as well the moment
-   overflow-x is anything other than 'visible' (the exact rule the old
-   dock-magnification comment on this file used to describe), so the row
-   becomes a clipping box on BOTH axes even though only horizontal
-   scrolling is ever wanted. A label positioned outside that box would be
-   silently clipped, invisible despite opacity: 1 and a correct DOM.
-   Reserving room INSIDE the box (padding, not a negative offset outside
-   it) keeps the label inside the clip region instead. */
+   overflow-x is anything other than 'visible', so the row becomes a
+   clipping box on BOTH axes even though only horizontal scrolling is ever
+   wanted. Reserving room INSIDE the box (padding, not a negative offset
+   outside it) keeps the label inside the clip region instead. */
 @media (max-width: 767.98px) {
-  .exhibitions-timeline > ol {
+  .exhibitions-timeline-rail {
     padding-top: 2rem;
   }
 
@@ -893,17 +888,85 @@ picture {
     margin-right: 0;
     margin-bottom: 0.125rem;
   }
+
+  .exhibitions-timeline-scrub {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .exhibitions-timeline-dot,
-  .exhibitions-timeline-label {
+  .exhibitions-timeline-label,
+  .exhibitions-timeline-scrub {
     transition: none;
   }
 }
 
 .exhibitions-content .article-header {
   margin-top: 0;
+}
+
+/* Task 36, item 6: the content column -- title, gallery, and the copyright
+   line when there is one (a trailing, small `.block-text`, present on some
+   exhibitions and not others -- see BlockRenderer.jsx, which renders every
+   block as a plain sibling here with no wrapper) -- fits the viewport
+   height exactly and no more, reusing the exact shape .slideshow already
+   solved (a flex column owning calc(100dvh - header), with the image stage
+   as the only flexible child, flex: 1 1 auto plus min-height: 0) rather
+   than inventing a second one. `.exhibitions-content` is `.exhibitions-
+   layout`'s own first grid column (task 36, item 1), already stretched to
+   that grid's explicit height -- this only needs to turn that box into a
+   flex column and mark its non-flexible children (the title, the
+   copyright line) `flex: 0 0 auto` so the gallery slider (below) is the
+   one that absorbs whatever height they don't use. */
+@media (min-width: 768px) {
+  .exhibitions-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .exhibitions-content > .article-header,
+  .exhibitions-content > .block-text {
+    flex: 0 0 auto;
+  }
+
+  /* The gallery slider is the flexible child: it absorbs whatever height
+     the title/copyright text above and below it don't use, exactly the
+     way .slideshow-stage absorbs whatever the caption/controls don't use
+     on the homepage. Scoped to `.exhibitions-content` specifically (not a
+     change to `.gallery-slider`/`.gallery-slider-stage` themselves, which
+     a works article's own gallery also uses, sized by aspect-ratio there
+     instead) -- this task's own height budget is exhibitions-specific, and
+     must not disturb the slider elsewhere. */
+  .exhibitions-content > .gallery-slider {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .exhibitions-content .gallery-slider-stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    aspect-ratio: auto;
+    max-height: none;
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  /* Task 36, item 6: "its controls must stay visible within that budget
+     and centred on the image" -- flex: 0 0 auto keeps the controls at
+     their natural height (taken out of the stage's own budget above,
+     mirroring .slideshow-controls), and they are already centred via
+     .gallery-slider-controls' own justify-content: center, which now
+     centres on the stage's full available width (the aspect-ratio/
+     max-width clamp that used to narrow it on a short viewport is gone
+     within this column -- see .gallery-slider-stage above). */
+  .exhibitions-content .gallery-slider-controls {
+    flex: 0 0 auto;
+  }
 }
 
 /* Task 35, Part B, item 1: an exhibition's own content still starts with an
