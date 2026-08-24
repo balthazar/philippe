@@ -10,6 +10,17 @@ const slides = [
   { caption: 'Châssis', article: { slug: 'chassis' }, image: { alt: 'chassis', variants: { large: { path: 'b.webp', width: 2400, height: 1600 } } } },
 ]
 
+// Four distinct slides, needed for the re-entrancy tests below: clicking
+// rapidly through only two slides bounces back to the start (A -> B -> A),
+// which cannot distinguish "the fix preserved the settled anchor" from
+// "there was nothing to distinguish in the first place".
+const fourSlides = [
+  { caption: 'Un', article: { slug: 'un' }, image: { alt: 'un', variants: { large: { path: 'a.webp', width: 2400, height: 1600 } } } },
+  { caption: 'Deux', article: { slug: 'deux' }, image: { alt: 'deux', variants: { large: { path: 'b.webp', width: 2400, height: 1600 } } } },
+  { caption: 'Trois', article: { slug: 'trois' }, image: { alt: 'trois', variants: { large: { path: 'c.webp', width: 2400, height: 1600 } } } },
+  { caption: 'Quatre', article: { slug: 'quatre' }, image: { alt: 'quatre', variants: { large: { path: 'd.webp', width: 2400, height: 1600 } } } },
+]
+
 const slidesWithGap = [
   { caption: 'Porte', article: { slug: 'porte' }, image: { alt: 'porte', variants: { large: { path: 'a.webp', width: 2400, height: 1600 } } } },
   // No image variants at all: the API should already filter these out, but
@@ -18,6 +29,11 @@ const slidesWithGap = [
   { caption: 'Sans image', article: { slug: 'sans-image' }, image: null },
   { caption: 'Châssis', article: { slug: 'chassis' }, image: { alt: 'chassis', variants: { large: { path: 'b.webp', width: 2400, height: 1600 } } } },
 ]
+
+// Mirrors Slideshow.jsx's own FADE_OUT_MS + FADE_IN_MS (not exported --
+// kept in sync by hand, the same way the component's own file comment
+// already says its CSS counterparts are).
+const TRANSITION_MS = 600
 
 const mockMotion = (reduced) =>
   vi.stubGlobal('matchMedia', (query) => ({
@@ -236,5 +252,103 @@ describe('Slideshow', () => {
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
     act(() => { vi.advanceTimersByTime(5000); vi.advanceTimersByTime(600) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  // Task 33, section 4: re-entrancy. Client report: fades correctly once,
+  // then several quick clicks make it instant, then it recovers "at some
+  // point". A SINGLE-click test (every test above this point) passes
+  // against this bug -- it only ever exercises one transition at a time --
+  // which is why it survived a previous fix (the click-vs-timer race, a
+  // different bug, still guarded above). These click several times faster
+  // than the 600ms transition.
+  //
+  // jsdom has no paint pipeline, so it cannot see a real fade -- these pin
+  // the STATE MACHINE (which node is mounted, which classes it carries),
+  // not the actual on-screen animation. That part is browser-verified
+  // separately (see the task report).
+  describe('re-entrancy: clicking faster than the transition (Task 33, section 4)', () => {
+    const next = () => fireEvent.click(screen.getByRole('button', { name: /suivant|next/i }))
+
+    it('lands on the slide actually navigated to, not an intermediate one, after a rapid burst', () => {
+      renderShow({ slides: fourSlides })
+      next() // Un -> Deux
+      act(() => { vi.advanceTimersByTime(100) })
+      next() // Deux -> Trois (interrupts the still-in-flight Un->Deux fade)
+      act(() => { vi.advanceTimersByTime(100) })
+      next() // Trois -> Quatre (interrupts again)
+
+      // Let the final transition actually finish.
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.queryByAltText('un')).not.toBeInTheDocument()
+      expect(screen.queryByAltText('deux')).not.toBeInTheDocument()
+      expect(screen.queryByAltText('trois')).not.toBeInTheDocument()
+      expect(screen.getByAltText('quatre')).toBeInTheDocument()
+      expect(screen.getByText('4 / 4')).toBeInTheDocument()
+    })
+
+    // The core of the fix: the outgoing (fading-out) node must be the last
+    // SETTLED slide throughout an entire rapid burst, never an intermediate
+    // one that was itself interrupted mid-fade -- that stability is what
+    // lets its live opacity keep interpolating instead of snapping. If an
+    // intermediate slide became the outgoing node even briefly, this fails.
+    it('keeps the same slide as the outgoing (fading-out) node throughout a rapid burst', () => {
+      renderShow({ slides: fourSlides })
+      next() // Un -> Deux: outgoing becomes "un"
+      act(() => { vi.advanceTimersByTime(50) })
+      expect(screen.getByAltText('un').className).toContain('slideshow-image--outgoing')
+
+      next() // Deux -> Trois: an interruption
+      act(() => { vi.advanceTimersByTime(50) })
+      // Still "un" -- never remounted as "deux", and not un-mounted either.
+      expect(screen.getByAltText('un').className).toContain('slideshow-image--outgoing')
+      expect(screen.queryByAltText('deux')).not.toBeInTheDocument()
+
+      next() // Trois -> Quatre: another interruption
+      act(() => { vi.advanceTimersByTime(50) })
+      expect(screen.getByAltText('un').className).toContain('slideshow-image--outgoing')
+      expect(screen.queryByAltText('trois')).not.toBeInTheDocument()
+    })
+
+    // Something must visibly animate on every click, not just the last one
+    // -- an unresponsive-looking arrow is exactly the failure the client
+    // reported. Pinned here as: every click's own target slide mounts as
+    // the incoming image with its OWN fresh `entering` state (never
+    // `is-entered` on its very first paint, which would mean no transition
+    // to animate at all -- see the file comment on why `entered` is its own
+    // piece of state, independent of the outgoing image's `leaving`).
+    it('gives every click its own fresh entering state, never pre-entered on mount', () => {
+      renderShow({ slides: fourSlides })
+      next() // Un -> Deux
+      act(() => { vi.advanceTimersByTime(400) }) // past the outgoing fade, mid the incoming one
+      next() // Deux -> Trois: interrupts while `leaving` (outgoing's own flag) is already true
+
+      const incoming = screen.getByAltText('trois')
+      expect(incoming.className).toContain('slideshow-image--entering')
+      expect(incoming.className).not.toContain('is-entered')
+    })
+
+    it('a subsequent automatic advance still transitions after a rapid burst settles', () => {
+      renderShow({ slides: fourSlides })
+      next()
+      act(() => { vi.advanceTimersByTime(100) })
+      next()
+      act(() => { vi.advanceTimersByTime(100) })
+      next() // lands on "quatre"
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.getByAltText('quatre')).toBeInTheDocument()
+
+      // Manual navigation restarts the autoplay countdown (existing,
+      // unrelated behaviour) -- a full fresh interval after settling.
+      act(() => { vi.advanceTimersByTime(5000) })
+      // Now on "un" (wrapped), mid-transition: both must be mounted, proving
+      // the automatic advance actually transitions rather than snapping or
+      // silently failing to advance at all.
+      expect(screen.getByAltText('quatre')).toBeInTheDocument()
+      expect(screen.getByAltText('un')).toBeInTheDocument()
+
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.queryByAltText('quatre')).not.toBeInTheDocument()
+      expect(screen.getByAltText('un')).toBeInTheDocument()
+    })
   })
 })

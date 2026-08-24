@@ -84,57 +84,94 @@ export function GallerySlider({ items = [], onActivate, interval = 5000 }) {
   const [outgoing, setOutgoing] = useState(null)
   const [entering, setEntering] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const prevRef = useRef(null)
+  const [entered, setEntered] = useState(false)
+  // The last item that finished settling -- see Slideshow.jsx's own,
+  // longer comment on the identical fix (this file deliberately does not
+  // share code with it -- see the file-level comment above). Short version:
+  // `outgoing` is always derived from this ref, which only advances once a
+  // transition genuinely finishes, never mid an interrupting one -- so a
+  // rapid burst of arrow clicks keeps calling setOutgoing with the SAME
+  // value, React does not remount that node, and its live, partially-faded
+  // opacity is never thrown away.
+  const settledRef = useRef(null)
   const outgoingTimeoutRef = useRef(null)
   const leavingFrameRef = useRef(null)
+  const enteringFrameRef = useRef(null)
 
+  // Task 33, section 4: re-entrancy fix, identical in shape to
+  // Slideshow.jsx's own (see that file for the full account of why). Interrupts
+  // rather than blocks: every click still produces a fade, nothing is
+  // swallowed. `entered` is its own state, independent of `leaving`, for the
+  // same reason as there: a freshly-mounted incoming image must never carry
+  // its "entered" class on its very first paint (nothing to transition FROM),
+  // which sharing one flag between both halves would risk the moment
+  // `leaving` is already true from an outgoing fade this run does not reset.
   useEffect(() => {
-    const prev = prevRef.current
-    prevRef.current = current
+    const prevSettled = settledRef.current
+    const wasAlreadyTransitioning = outgoingTimeoutRef.current != null
 
-    if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
-    if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
-
-    if (!prev || !current || prev === current || reduced) {
+    if (!prevSettled || !current || prevSettled === current || reduced) {
+      if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
+      if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
+      if (enteringFrameRef.current) { cancelAnimationFrame(enteringFrameRef.current); enteringFrameRef.current = null }
       setOutgoing(null)
       setLeaving(false)
       setEntering(false)
+      setEntered(false)
+      settledRef.current = current
       return undefined
     }
 
-    setOutgoing(prev)
-    setLeaving(false)
-    setEntering(true)
-    // Let the outgoing image paint once at full opacity before flipping the
-    // class that transitions it to 0, so the browser actually animates the
-    // change instead of jumping straight to it.
-    //
-    // Task 32, item 4: same fix as Slideshow.jsx, applied independently here
-    // (this file deliberately does not share code with Slideshow -- see the
-    // file-level comment above). A single rAF loses the race against a
-    // click handler's own frame -- the outgoing/incoming images' final
-    // classes can commit before the freshly-mounted "before" state ever
-    // paints, so there is nothing for the CSS transition to animate from,
-    // and the fade collapses into an instant swap. A timer-driven update
-    // (autoplay) doesn't hit this because it runs as its own task, after
-    // the previous frame already painted. Nesting a second rAF guarantees a
-    // real paint lands between the two commits either way.
-    leavingFrameRef.current = requestAnimationFrame(() => {
+    if (!wasAlreadyTransitioning) {
+      // A fresh transition, starting from rest: mount the outgoing image
+      // and kick off its own two-frame paint-then-fade dance.
+      setOutgoing(prevSettled)
+      setLeaving(false)
+      // Task 32, item 4: same fix as Slideshow.jsx, applied independently
+      // here. A single rAF loses the race against a click handler's own
+      // frame -- the outgoing image's final class can commit before the
+      // freshly-mounted "before" state ever paints, so there is nothing for
+      // the CSS transition to animate from, and the fade collapses into an
+      // instant swap. A timer-driven update (autoplay) doesn't hit this
+      // because it runs as its own task, after the previous frame already
+      // painted. Nesting a second rAF guarantees a real paint lands between
+      // the two commits either way. Untouched by the re-entrancy fix below:
+      // this only ever runs for a transition starting from rest.
       leavingFrameRef.current = requestAnimationFrame(() => {
-        setLeaving(true)
-        leavingFrameRef.current = null
+        leavingFrameRef.current = requestAnimationFrame(() => {
+          setLeaving(true)
+          leavingFrameRef.current = null
+        })
+      })
+    }
+    // else: interrupting a transition already in flight. `outgoing` is
+    // already `prevSettled` and already mid-fade toward 0 on its own
+    // untouched schedule -- deliberately not touched here, the fix itself.
+
+    // The incoming image is always new on every call, so it always
+    // restarts its own mount-then-animate dance.
+    setEntering(true)
+    setEntered(false)
+    if (enteringFrameRef.current) cancelAnimationFrame(enteringFrameRef.current)
+    enteringFrameRef.current = requestAnimationFrame(() => {
+      enteringFrameRef.current = requestAnimationFrame(() => {
+        setEntered(true)
+        enteringFrameRef.current = null
       })
     })
+
+    if (outgoingTimeoutRef.current) clearTimeout(outgoingTimeoutRef.current)
     outgoingTimeoutRef.current = setTimeout(() => {
       setOutgoing(null)
       setLeaving(false)
       setEntering(false)
+      setEntered(false)
+      settledRef.current = current
       outgoingTimeoutRef.current = null
     }, TRANSITION_MS)
 
     return () => {
-      if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
-      if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
+      if (enteringFrameRef.current) { cancelAnimationFrame(enteringFrameRef.current); enteringFrameRef.current = null }
     }
   }, [current, reduced])
 
@@ -171,7 +208,7 @@ export function GallerySlider({ items = [], onActivate, interval = 5000 }) {
         >
           <img
             key={`current-${currentLarge?.path}`}
-            className={`gallery-slider-image${entering ? ' gallery-slider-image--entering' : ''}${entering && leaving ? ' is-entered' : ''}`}
+            className={`gallery-slider-image${entering ? ' gallery-slider-image--entering' : ''}${entered ? ' is-entered' : ''}`}
             src={src(currentLarge)}
             alt={current?.image?.alt || ''}
             width={currentLarge?.width}

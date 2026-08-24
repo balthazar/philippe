@@ -73,64 +73,139 @@ export function Slideshow({ slides = [], interval = 5000 }) {
   const [outgoing, setOutgoing] = useState(null)
   const [entering, setEntering] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const prevSlideRef = useRef(null)
+  const [entered, setEntered] = useState(false)
+  // The last slide that finished settling (fully visible, nothing mid-fade)
+  // -- see the effect below for why this, and not a ref reassigned on every
+  // run, is what "previous" means here.
+  const settledSlideRef = useRef(null)
   const outgoingTimeoutRef = useRef(null)
   const leavingFrameRef = useRef(null)
+  const enteringFrameRef = useRef(null)
 
+  // Task 33, section 4: re-entrancy. A new slide change can arrive while the
+  // previous one is still fading (rapid arrow clicks, faster than the 600ms
+  // transition). The client's own diagnosis, independently confirmed here:
+  // clicking faster than the transition was cancelling something. The chosen
+  // fix is to INTERRUPT, not block -- every click still produces a fade,
+  // nothing is swallowed, which matters on a page whose arrows exist
+  // precisely so someone can scan through works quickly.
+  //
+  // The bug was never really about `prevSlideRef` being reassigned every run
+  // (though the old code did that) -- it's about what "previous" means once
+  // a change interrupts one already in flight. `settledSlideRef` only ever
+  // advances when a slide has genuinely finished appearing (the TRANSITION_MS
+  // timeout below, or the immediate no-op path when there is nothing to
+  // animate) -- never on an interrupting run. That makes `outgoing` stable
+  // across a whole burst of rapid clicks: it is computed from
+  // settledSlideRef, which does not move mid-burst, so `setOutgoing` is
+  // called with the SAME value on every interrupting run, and React does not
+  // remount the DOM node for an unchanged value (same `key`, same element) --
+  // its live, partially-faded opacity is never thrown away, CSS just keeps
+  // interpolating it toward 0 exactly as already scheduled. This is the
+  // "keep the node that is currently visible as the outgoing node and
+  // re-target it, rather than mounting a replacement for it" requirement:
+  // it falls out for free from never recomputing `outgoing` away from the
+  // last settled slide, rather than from any special-cased node-identity
+  // trick.
+  //
+  // The incoming ("entering") image is different: it is a genuinely new
+  // image on every single call, click or timer, fresh or interrupting, so
+  // its own two-frame mount-then-animate dance (the click-vs-timer race fix
+  // below, untouched) always restarts. `entered` is deliberately its own
+  // piece of state, independent of `leaving` -- the old code gated the
+  // incoming image's `is-entered` class on `entering && leaving` (one flag
+  // shared by both halves), which is exactly what would make a freshly
+  // interrupting incoming image jump straight to its end state: `leaving`
+  // could already be `true` from the in-flight outgoing fade this run does
+  // NOT reset (see above), and a brand-new element mounting with its
+  // "entered" class already applied on its very first paint never animates
+  // at all (a transition needs a prior painted state to animate FROM, which
+  // a newly-inserted node does not have).
   useEffect(() => {
-    const prev = prevSlideRef.current
-    prevSlideRef.current = currentSlide
+    const prevSettled = settledSlideRef.current
+    const wasAlreadyTransitioning = outgoingTimeoutRef.current != null
 
-    if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
-    if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
-
-    if (!prev || !currentSlide || prev === currentSlide || reduced) {
+    if (!prevSettled || !currentSlide || prevSettled === currentSlide || reduced) {
+      if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
+      if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
+      if (enteringFrameRef.current) { cancelAnimationFrame(enteringFrameRef.current); enteringFrameRef.current = null }
       setOutgoing(null)
       setLeaving(false)
       setEntering(false)
+      setEntered(false)
+      settledSlideRef.current = currentSlide
       return undefined
     }
 
-    setOutgoing(prev)
-    setLeaving(false)
-    setEntering(true)
-    // Let the outgoing image paint once at full opacity before flipping the
-    // class that transitions it to 0, so the browser actually animates the
-    // change instead of jumping straight to it.
-    //
-    // Task 32, item 4: a SINGLE rAF here lost this race when the update
-    // originated in a click handler (the arrows) rather than a timer
-    // (autoplay). A click handler runs early enough in the browser's frame
-    // that a rAF scheduled from inside it can still fire before that same
-    // frame paints -- so the "setOutgoing/setEntering" commit above was
-    // never actually painted before `leaving` (and therefore `is-entered`,
-    // `is-leaving`) flipped, and the outgoing/incoming images went straight
-    // from freshly-mounted to their final state with nothing painted in
-    // between for the transition to start from: an instant swap, no fade. A
-    // timer callback runs as its own task, effectively always after the
-    // previous frame's paint, so the same single rAF reliably landed in the
-    // NEXT frame there and the fade worked. Nesting a second rAF forces a
-    // real paint to land between the two commits regardless of which kind
-    // of event triggered the update. Confirmed by reproducing the instant
-    // swap on a click with a single rAF and watching it disappear with the
-    // nested one, in a real browser -- jsdom has no paint pipeline, so it
-    // cannot see this race at all (see Slideshow.test.jsx).
-    leavingFrameRef.current = requestAnimationFrame(() => {
+    if (!wasAlreadyTransitioning) {
+      // A fresh transition, starting from rest: mount the outgoing image and
+      // kick off its own two-frame paint-then-fade dance.
+      setOutgoing(prevSettled)
+      setLeaving(false)
+      // Task 32, item 4: a SINGLE rAF here lost this race when the update
+      // originated in a click handler (the arrows) rather than a timer
+      // (autoplay). A click handler runs early enough in the browser's frame
+      // that a rAF scheduled from inside it can still fire before that same
+      // frame paints -- so the "setOutgoing" commit above was never actually
+      // painted before `leaving` flipped, and the outgoing image went
+      // straight from freshly-mounted to its final state with nothing
+      // painted in between for the transition to start from: an instant
+      // swap, no fade. A timer callback runs as its own task, effectively
+      // always after the previous frame's paint, so the same single rAF
+      // reliably landed in the NEXT frame there and the fade worked. Nesting
+      // a second rAF forces a real paint to land between the two commits
+      // regardless of which kind of event triggered the update. Confirmed by
+      // reproducing the instant swap on a click with a single rAF and
+      // watching it disappear with the nested one, in a real browser --
+      // jsdom has no paint pipeline, so it cannot see this race at all (see
+      // Slideshow.test.jsx). This path is untouched by the re-entrancy fix
+      // below: it only ever runs for a transition starting from rest.
       leavingFrameRef.current = requestAnimationFrame(() => {
-        setLeaving(true)
-        leavingFrameRef.current = null
+        leavingFrameRef.current = requestAnimationFrame(() => {
+          setLeaving(true)
+          leavingFrameRef.current = null
+        })
+      })
+    }
+    // else: interrupting a transition already in flight. `outgoing` is
+    // already `prevSettled` (by construction -- see the comment above this
+    // effect) and already mid-fade toward 0 on its own untouched schedule.
+    // Deliberately not touched here: this is the fix. Re-running
+    // setOutgoing/setLeaving on every interrupting call was what discarded
+    // the live opacity and produced the jump the client saw.
+
+    // The incoming image is always new (a genuinely different photo) on
+    // every call, so it always restarts its own mount-then-animate dance,
+    // independent of whether `outgoing` changed above.
+    setEntering(true)
+    setEntered(false)
+    if (enteringFrameRef.current) cancelAnimationFrame(enteringFrameRef.current)
+    enteringFrameRef.current = requestAnimationFrame(() => {
+      enteringFrameRef.current = requestAnimationFrame(() => {
+        setEntered(true)
+        enteringFrameRef.current = null
       })
     })
+
+    // Unmounts the outgoing image and marks the slide settled once its own
+    // full transition has had time to finish. Deliberately restarted on
+    // every call (interrupting or not): this clock answers "how long until
+    // the CURRENT target is fully visible and outgoing can go away", which
+    // genuinely changes on every interruption -- restarting it does not
+    // touch `outgoing`'s own identity or its already-scheduled `is-leaving`
+    // fade above.
+    if (outgoingTimeoutRef.current) clearTimeout(outgoingTimeoutRef.current)
     outgoingTimeoutRef.current = setTimeout(() => {
       setOutgoing(null)
       setLeaving(false)
       setEntering(false)
+      setEntered(false)
+      settledSlideRef.current = currentSlide
       outgoingTimeoutRef.current = null
     }, TRANSITION_MS)
 
     return () => {
-      if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
-      if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
+      if (enteringFrameRef.current) { cancelAnimationFrame(enteringFrameRef.current); enteringFrameRef.current = null }
     }
   }, [currentSlide, reduced])
 
@@ -178,7 +253,7 @@ export function Slideshow({ slides = [], interval = 5000 }) {
         )}
         <img
           key={`current-${currentLarge?.path}`}
-          className={`slideshow-image${entering ? ' slideshow-image--entering' : ''}${entering && leaving ? ' is-entered' : ''}`}
+          className={`slideshow-image${entering ? ' slideshow-image--entering' : ''}${entered ? ' is-entered' : ''}`}
           src={src(currentLarge)}
           alt={slide.image?.alt || ''}
           width={currentLarge?.width}

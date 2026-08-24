@@ -8,6 +8,18 @@ const items = [
   { image: { alt: 'chassis', variants: { large: { path: 'b.webp', width: 2400, height: 1600 } } } },
 ]
 
+// Four distinct items, needed for the re-entrancy tests below -- see
+// Slideshow.test.jsx's identical fixture for why two is not enough.
+const fourItems = [
+  { image: { alt: 'un', variants: { large: { path: 'a.webp', width: 2400, height: 1600 } } } },
+  { image: { alt: 'deux', variants: { large: { path: 'b.webp', width: 2400, height: 1600 } } } },
+  { image: { alt: 'trois', variants: { large: { path: 'c.webp', width: 2400, height: 1600 } } } },
+  { image: { alt: 'quatre', variants: { large: { path: 'd.webp', width: 2400, height: 1600 } } } },
+]
+
+// Mirrors GallerySlider.jsx's own FADE_OUT_MS + FADE_IN_MS (not exported).
+const TRANSITION_MS = 600
+
 const mockMotion = (reduced) =>
   vi.stubGlobal('matchMedia', (query) => ({
     matches: reduced && query.includes('reduce'),
@@ -136,5 +148,74 @@ describe('GallerySlider', () => {
     act(() => { vi.advanceTimersByTime(600) })
     expect(screen.queryByAltText('porte')).not.toBeInTheDocument()
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  // Task 33, section 4: same re-entrancy fix as Slideshow.jsx (this file
+  // deliberately duplicates rather than shares its fade mechanism -- see
+  // the file-level comment in GallerySlider.jsx), verified the same way.
+  describe('re-entrancy: clicking faster than the transition (Task 33, section 4)', () => {
+    const next = () => fireEvent.click(screen.getByRole('button', { name: /suivant/i }))
+
+    it('lands on the item actually navigated to, not an intermediate one, after a rapid burst', () => {
+      render(<GallerySlider items={fourItems} interval={5000} />)
+      next() // Un -> Deux
+      act(() => { vi.advanceTimersByTime(100) })
+      next() // Deux -> Trois: interrupts
+      act(() => { vi.advanceTimersByTime(100) })
+      next() // Trois -> Quatre: interrupts again
+
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.queryByAltText('un')).not.toBeInTheDocument()
+      expect(screen.queryByAltText('deux')).not.toBeInTheDocument()
+      expect(screen.queryByAltText('trois')).not.toBeInTheDocument()
+      expect(screen.getByAltText('quatre')).toBeInTheDocument()
+    })
+
+    it('keeps the same item as the outgoing (fading-out) node throughout a rapid burst', () => {
+      render(<GallerySlider items={fourItems} interval={5000} />)
+      next() // Un -> Deux
+      act(() => { vi.advanceTimersByTime(50) })
+      expect(screen.getByAltText('un').className).toContain('gallery-slider-image--outgoing')
+
+      next() // Deux -> Trois: interrupts
+      act(() => { vi.advanceTimersByTime(50) })
+      expect(screen.getByAltText('un').className).toContain('gallery-slider-image--outgoing')
+      expect(screen.queryByAltText('deux')).not.toBeInTheDocument()
+
+      next() // Trois -> Quatre: interrupts again
+      act(() => { vi.advanceTimersByTime(50) })
+      expect(screen.getByAltText('un').className).toContain('gallery-slider-image--outgoing')
+      expect(screen.queryByAltText('trois')).not.toBeInTheDocument()
+    })
+
+    it('gives every click its own fresh entering state, never pre-entered on mount', () => {
+      render(<GallerySlider items={fourItems} interval={5000} />)
+      next() // Un -> Deux
+      act(() => { vi.advanceTimersByTime(400) }) // past the outgoing fade, mid the incoming one
+      next() // Deux -> Trois: interrupts while `leaving` is already true
+
+      const incoming = screen.getByAltText('trois')
+      expect(incoming.className).toContain('gallery-slider-image--entering')
+      expect(incoming.className).not.toContain('is-entered')
+    })
+
+    it('a subsequent automatic advance still transitions after a rapid burst settles', () => {
+      render(<GallerySlider items={fourItems} interval={5000} />)
+      next()
+      act(() => { vi.advanceTimersByTime(100) })
+      next()
+      act(() => { vi.advanceTimersByTime(100) })
+      next() // lands on "quatre"
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.getByAltText('quatre')).toBeInTheDocument()
+
+      act(() => { vi.advanceTimersByTime(5000) })
+      expect(screen.getByAltText('quatre')).toBeInTheDocument()
+      expect(screen.getByAltText('un')).toBeInTheDocument()
+
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.queryByAltText('quatre')).not.toBeInTheDocument()
+      expect(screen.getByAltText('un')).toBeInTheDocument()
+    })
   })
 })
