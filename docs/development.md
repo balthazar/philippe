@@ -94,3 +94,35 @@ Note what this means for the migration: `migrate/load.js` rewrites `title`,
 production database it would overwrite edits made in the admin. The migration
 has already been run and its output loaded; treat re-running it against
 production as a content-destroying operation, not a refresh.
+
+## The old WordPress host is load-bearing
+
+`www.philippegronon.com` still serves eleven `.doc`/`.pdf`/`.jpeg` documents
+that the bibliography links to: texts on Gronon's work by Éric de Chassey,
+Hubert Besacier, Catherine Francblin, Nathalie Desmet, Régis Durand, Éric
+Mézil and Jérôme Sans. They are not in the media store (the image pipeline
+takes images only), and **none of them is in the Wayback Machine** -- checked,
+0 of 11. The day that host is decommissioned those texts leave the public web
+entirely, not merely the links.
+
+A copy of all of them, plus the `PDFs.zip` bundle the site used to offer, is
+in `.archive-documents/` (gitignored, ~2.5MB), pulled while the host was still
+up. That is insurance, not a fix: nothing serves them.
+
+Three ways out, none of them done yet:
+
+1. **Ask the Wayback Machine to save each URL** (`https://web.archive.org/save/<url>`)
+   and repoint the links at the snapshots. Cheapest, and it preserves the
+   documents publicly. They are already public on the live site, so this
+   changes their reach very little -- but it is an irreversible act on a third
+   party's archive, so ask first.
+2. **Host them ourselves.** The honest fix, and a real feature: the media
+   route and `imagePipeline` are image-only, so serving documents means a
+   second asset path (no variants, no sharp, a stricter allowlist of types)
+   plus admin upload for it.
+3. **Drop the links** and keep the citations as plain text. The bibliography
+   still reads correctly; it just stops offering the texts.
+
+Two of the original thirteen are already solved: Michel Poivert's *La
+photographie contemporaine* and Régis Durand's *Le Regard pensif* both exist
+as full scans on archive.org, and now link there instead.

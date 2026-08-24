@@ -15,3 +15,8 @@ migrate/uploads/
 # docker-compose.dev.yml volume mounts
 .dev/
 .gstack/
+
+# Copies of the artist's texts pulled off the old WordPress host before it
+# is decommissioned (see docs/development.md). Binary .doc/.pdf originals --
+# not site content, and not ours to publish without asking.
+.archive-documents/
