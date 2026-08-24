@@ -9,6 +9,7 @@ import { Exhibitions } from '@/pages/Exhibitions.jsx'
 import { ArticleDetail } from '@/pages/ArticleDetail.jsx'
 import { SimplePage } from '@/pages/SimplePage.jsx'
 import { NotFound } from '@/pages/NotFound.jsx'
+import { ExhibitionsLayout } from '@/components/ExhibitionsLayout.jsx'
 
 // Lazy: the admin editor's own code (and admin.css) must never ship in the
 // public bundle. Only loaded when a visitor actually requests /admin.
@@ -21,27 +22,39 @@ const Admin = lazy(() => import('@/admin/Admin.jsx'))
 // toggle points at that article's own counterpart slug rather than at the
 // bare translated section. See Header.jsx's counterpartPath() for the
 // fallback this wiring overrides.
-function localizedRoutes(lang, onTranslatedPath, onExhibitionsLayout) {
+function localizedRoutes(lang, onTranslatedPath, onExhibitionsLayout, isExhibitionsArticle) {
   const s = (key) => SEGMENTS[key][lang]
   return (
     <>
       <Route index element={<Home />} />
       <Route path={s('works')} element={<Works />} />
-      <Route path={s('exhibitions')} element={<Exhibitions />} />
+      {/*
+        Task 32, item 1: the exhibitions index and every article slug share
+        this one layout route so the timeline rail it renders mounts once
+        and never unmounts while navigating between them (see
+        ExhibitionsLayout.jsx). `:slug` still matches a work article too --
+        works and exhibitions share one flat slug namespace (Task 27, Part
+        A) -- the layout itself renders a bare `<Outlet/>` for those,
+        identical to before this task.
+
+        React Router ranks a static segment (e.g. /contact, below) over a
+        dynamic one (:slug) regardless of declaration order, so grouping
+        :slug here with the exhibitions index -- ahead of the other named
+        sections -- does not risk a section path resolving as an article
+        slug instead of its own page.
+      */}
+      <Route element={<ExhibitionsLayout isExhibitionsArticle={isExhibitionsArticle} />}>
+        <Route path={s('exhibitions')} element={<Exhibitions />} />
+        <Route
+          path=":slug"
+          element={<ArticleDetail onTranslatedPath={onTranslatedPath} onExhibitionsLayout={onExhibitionsLayout} />}
+        />
+      </Route>
       <Route path={s('biography')} element={<SimplePage pageKey="biography" />} />
       <Route path={s('contact')} element={<SimplePage pageKey="contact" />} />
       <Route path={s('bibliography')} element={<SimplePage pageKey="bibliography" />} />
       <Route path={s('links')} element={<SimplePage pageKey="links" />} />
       <Route path={s('legal')} element={<SimplePage pageKey="legal" />} />
-      {/*
-        Task 27, Part A (SEO-critical): individual articles live at the root
-        now -- works and exhibitions share this one flat slug namespace,
-        matching the URLs the site being replaced used. Ordered LAST among
-        this language's routes so every named section above matches first;
-        otherwise a section path like /contact would resolve here as an
-        article slug instead of its own page.
-      */}
-      <Route path=":slug" element={<ArticleDetail onTranslatedPath={onTranslatedPath} onExhibitionsLayout={onExhibitionsLayout} />} />
     </>
   )
 }
@@ -92,8 +105,8 @@ export default function App() {
       */}
       <Route path="/admin/*" element={<Suspense fallback={null}><Admin /></Suspense>} />
       <Route element={<PublicLayout translatedPath={translatedPath} isExhibitionsArticle={isExhibitionsArticle} />}>
-        <Route path="/">{localizedRoutes('fr', setTranslatedPath, setIsExhibitionsArticle)}</Route>
-        <Route path="/en">{localizedRoutes('en', setTranslatedPath, setIsExhibitionsArticle)}</Route>
+        <Route path="/">{localizedRoutes('fr', setTranslatedPath, setIsExhibitionsArticle, isExhibitionsArticle)}</Route>
+        <Route path="/en">{localizedRoutes('en', setTranslatedPath, setIsExhibitionsArticle, isExhibitionsArticle)}</Route>
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

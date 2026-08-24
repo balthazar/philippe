@@ -4,34 +4,9 @@ import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
 import { usePageData } from '@/preload.jsx'
 import { routeFor } from '@/routes.js'
-import { Container } from '@/components/Container.jsx'
 import { ArticleBody } from '@/components/ArticleBody.jsx'
-import { ExhibitionsChrome } from '@/components/ExhibitionsChrome.jsx'
-import { sortExhibitionsByYear } from '@/lib/exhibitionsOrder.js'
 import { usePageTitle } from '@/lib/usePageTitle.js'
 import { articlePageTitle } from '@/lib/pageTitle.js'
-
-/**
- * Task 28, part 3: the exhibitions timeline is persistent chrome for the
- * whole section, not just the /expositions index -- every exhibition
- * article page shows the same year list, with its own year marked current.
- * A separate component (rather than a conditional hook call inside
- * ArticleDetail itself) because the timeline's own fetch must only ever run
- * for an exhibition article: React's rules of hooks forbid calling a hook
- * conditionally in the component that owns it, but a child component that is
- * only ever mounted for exhibitions can call its own hooks unconditionally.
- */
-function ExhibitionArticle({ article, lang }) {
-  const { data: items } = usePageData(`exhibitionsTimeline:${lang}`, () =>
-    apiGet('/articles', { category: 'exhibitions', lang }).then((res) => sortExhibitionsByYear(res.items))
-  )
-  // `items` starts null while the timeline list is still loading -- the
-  // article's own content (already loaded, or this component would not be
-  // mounted yet) renders immediately regardless, with the timeline column
-  // filling in a moment later, rather than blanking the whole page for that
-  // one extra request.
-  return <ExhibitionsChrome items={items || []} article={article} />
-}
 
 /**
  * The public API always resolves `slug` to the requested language and never
@@ -57,6 +32,19 @@ function ExhibitionArticle({ article, lang }) {
  * slug alone -- already globally unique -- rather than a `routeKey` prop
  * this component no longer needs (a route-provided section no longer means
  * anything to `routeFor` once a slug is given).
+ *
+ * Task 32, item 1: `:slug` is now always reached through ExhibitionsLayout.jsx
+ * (a nested layout route -- see App.jsx), which owns the persistent
+ * `<main class="page-main">` for every article, work or exhibition alike.
+ * This component therefore never renders its own `<main>`/Container any
+ * more -- it used to, and briefly still did during this task, but that
+ * doubled up with ExhibitionsLayout's own `<main>` and (worse) made
+ * ArticleDetail's own mount depend on `isExhibitionsArticle`, which
+ * ArticleDetail itself sets: toggling it moved `<Outlet/>` to a different
+ * position in ExhibitionsLayout's tree, which unmounted and remounted this
+ * component, which reset the flag on unmount, which moved `<Outlet/>` back
+ * -- an infinite loop. See ExhibitionsLayout.jsx's own comment for the full
+ * account.
  */
 export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   const { slug } = useParams()
@@ -81,16 +69,27 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   }, [translatedPath, onTranslatedPath])
 
   // Task 30 (client feedback): reports this article's own category up to
-  // PublicLayout (via App.jsx) so it can indent the footer to the content
-  // column on an exhibition article page -- an individual article lives at
-  // the flat root (/:slug), indistinguishable by URL alone, so this can only
-  // be known once the article itself has loaded. Cleared on unmount so a
-  // stale "yes, exhibitions" never survives into whatever page is visited
-  // next, mirroring onTranslatedPath's own cleanup just above.
+  // App.jsx so PublicLayout can indent the footer, and ExhibitionsLayout can
+  // show/hide the rail, on an exhibition article page -- an individual
+  // article lives at the flat root (/:slug), indistinguishable by URL
+  // alone, so this can only be known once the article itself has loaded.
+  //
+  // Task 32, item 1: this ONLY ever reports a definite, freshly-loaded
+  // answer -- never an intermediate `false` while a new article is loading.
+  // The previous version fired `onExhibitionsLayout(false)` on every single
+  // dependency change (both the new effect body running with `article`
+  // still null, AND the old effect's own cleanup), which flipped the flag
+  // false and back true on EVERY navigation, even between two exhibition
+  // years -- exactly the flicker this task exists to remove, since
+  // ExhibitionsLayout uses this same flag to decide whether to render the
+  // rail at all. A genuine unmount (leaving the exhibitions section
+  // entirely for a page that isn't `:slug` at all) is handled by the
+  // second effect below instead, which never fires on a mere param change.
   useEffect(() => {
-    onExhibitionsLayout?.(article?.category === 'exhibitions')
-    return () => onExhibitionsLayout?.(false)
+    if (article) onExhibitionsLayout?.(article.category === 'exhibitions')
   }, [article, onExhibitionsLayout])
+
+  useEffect(() => () => onExhibitionsLayout?.(false), [onExhibitionsLayout])
 
   // `article` is checked before `error` as belt and braces. usePageData now
   // resets both synchronously on a key change, so a stale error from a
@@ -98,24 +97,20 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
   // costs nothing and keeps the success path the one that wins.
   if (!article) {
     if (error?.status === 404) {
-      return (
-        <Container as="main" className="page-main">
-          <p>{lang === 'fr' ? 'Page introuvable.' : 'Page not found.'}</p>
-        </Container>
-      )
+      return <p>{lang === 'fr' ? 'Page introuvable.' : 'Page not found.'}</p>
     }
-    // Task 26, correction to B4: reserve the page's minimum height while
-    // loading instead of rendering nothing, so the footer never rides up.
-    return <Container as="main" className="page-main" aria-busy="true" />
+    // Task 26, correction to B4's original reasoning ("reserve the page's
+    // minimum height while loading") is now handled by ExhibitionsLayout's
+    // own always-present `<main>`, one level up, rather than here -- an
+    // aria-busy marker on this region is still useful in its own right, so
+    // it stays, just no longer paired with a landmark this component
+    // doesn't own any more.
+    return <div aria-busy="true" />
   }
 
-  return (
-    <Container as="main" className="page-main">
-      {article.category === 'exhibitions' ? (
-        <ExhibitionArticle article={article} lang={lang} />
-      ) : (
-        <article><ArticleBody article={article} /></article>
-      )}
-    </Container>
+  return article.category === 'exhibitions' ? (
+    <ArticleBody article={article} />
+  ) : (
+    <article><ArticleBody article={article} /></article>
   )
 }

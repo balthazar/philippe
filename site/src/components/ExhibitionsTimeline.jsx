@@ -20,7 +20,8 @@ function isPersistentDot(index, length, isCurrent) {
  * Task 28, part 3 / task 31: a year timeline for the exhibitions section,
  * rendered as persistent chrome by both the /expositions index (most recent
  * year current) and every individual exhibition article page (its own year
- * current) -- see ExhibitionsChrome.jsx, the shared wrapper both use.
+ * current) -- see ExhibitionsLayout.jsx, the shared nested layout route
+ * both render through (Task 32, item 1).
  *
  * `items` must already be sorted (lib/exhibitionsOrder.js): this component
  * only renders, it does not decide chronology.

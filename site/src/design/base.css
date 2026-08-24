@@ -243,6 +243,29 @@ picture {
    share of .site-shell's height as a loaded one would. */
 .page-main {
   flex: 1 0 auto;
+  /* Task 32, item 2: `<main>` is a flex ITEM of `.site-shell` (a column
+     flex container), and `.container` (the other class always paired with
+     `.page-main` -- see Container.jsx) sets `margin-inline: auto`. The
+     flexbox spec disables cross-axis stretch whenever an item's cross-axis
+     margins are auto, exactly the way an auto margin on the MAIN axis
+     already eats free space instead of letting the item grow -- so
+     `<main>` was never actually filling `.site-shell`'s width. It fell back
+     to shrink-to-fit sizing instead, using whatever width its own content's
+     intrinsic size happened to produce. That was invisible on a page whose
+     content is naturally wide (a full works grid, a long line of body
+     copy), which is every page this bug had been checked against before,
+     but on /expositions and an exhibition article -- a narrow rail plus
+     whatever a single year's content happens to need -- shrink-to-fit
+     produced a visibly narrower box than the header's, so the rail (in
+     that box's first grid column) drifted off the wordmark's own left
+     edge, and further per article as the content's own intrinsic width
+     changed. `width: 100%` overrides the shrink-to-fit fallback outright
+     (an explicit width always wins over the stretch/auto-margin question
+     entirely), so `<main>` fills `.site-shell` the way it always should
+     have; `.container`'s own max-width/padding-inline still cap and inset
+     its content exactly as before. Confirmed only in a real browser --
+     jsdom implements no layout, so this cannot be a unit-tested fact. */
+  width: 100%;
 }
 
 /* A simple page reduced to a single block (task 26, part B3: /contact) is
@@ -614,8 +637,9 @@ picture {
 /* Exhibitions timeline (task 28, part 3; redesigned to a dot rail in task
    31). Persistent chrome for the whole exhibitions section -- the
    /expositions index and every individual exhibition article page render
-   this exact structure (see ExhibitionsChrome.jsx), so it lives here rather
-   than as one-off styling for either page.
+   this exact structure (see ExhibitionsLayout.jsx, a nested layout route as
+   of task 32, item 1), so it lives here rather than as one-off styling for
+   either page.
 
    Task 31 replaced the 25 stacked text labels with 25 small dots, one per
    exhibition year. Dots are short enough that the whole rail fits inside a
@@ -670,7 +694,11 @@ picture {
   .exhibitions-timeline ol {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.375rem;
+    /* Task 32, item 3: tightened from 0.375rem. The link's own padding
+       (below) is what keeps each dot's actual click target comfortable, not
+       this gap, so shrinking it just tightens the visual rhythm between
+       dots without touching hit-area math at all. */
+    gap: 0.125rem;
     padding: 0;
     overflow-x: visible;
   }
@@ -687,14 +715,21 @@ picture {
 .exhibitions-timeline a {
   display: flex;
   align-items: center;
-  padding: var(--space-1);
+  /* Task 32, item 3: bumped from var(--space-1) (0.5rem) to 0.5625rem so the
+     link's own hit area stays a full 24x24 CSS px (0.5625*2 + the 0.375rem
+     dot below = 1.5rem), the WCAG 2.5.8 AA minimum target size, even though
+     the dot itself shrank. The dot reads smaller; the click target does
+     not. */
+  padding: 0.5625rem;
   text-decoration: none;
 }
 
 .exhibitions-timeline-dot {
   display: block;
-  width: 0.5rem;
-  height: 0.5rem;
+  /* Task 32, item 3: shrunk from 0.5rem -- see the padding bump above,
+     which keeps the actual hit area unchanged at 24x24 CSS px. */
+  width: 0.375rem;
+  height: 0.375rem;
   border-radius: 50%;
   background: var(--ink-soft);
   transition: background-color 150ms ease, transform 150ms ease;

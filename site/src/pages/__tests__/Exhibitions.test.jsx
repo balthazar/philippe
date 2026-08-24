@@ -33,37 +33,30 @@ beforeEach(() => {
 
 const renderPage = () => render(<MemoryRouter><LangProvider><Exhibitions /></LangProvider></MemoryRouter>)
 
+// Task 32, item 1: the timeline rail and the persistent `<main>` around it
+// moved to ExhibitionsLayout.jsx (a nested layout route -- see App.jsx and
+// ExhibitionsLayout.test.jsx), so this component -- reached through that
+// layout's `<Outlet/>` in the real app -- is tested here for only what it
+// still owns: the section's own intro copy and the current (most recent)
+// year's own content. It intentionally renders no `<main>`, no timeline, no
+// `.exhibitions-layout` wrapper of its own any more.
 describe('Exhibitions page', () => {
-  it('renders a year timeline with every exhibition, sorted most recent first', async () => {
-    const { container } = renderPage()
-    await waitFor(() => expect(container.querySelector('.exhibitions-timeline')).toBeInTheDocument())
-    const links = screen.getByRole('navigation').querySelectorAll('a')
-    expect([...links].map((a) => a.textContent)).toEqual(['2024', '2023', '1989'])
-  })
-
-  it('links every year to its own root-level article URL', async () => {
+  it('renders the current (most recent) year\'s own content', async () => {
     renderPage()
-    await waitFor(() => expect(screen.getByRole('link', { name: '1989' })).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: '2024' })).toHaveAttribute('href', '/2024')
-    expect(screen.getByRole('link', { name: '2023' })).toHaveAttribute('href', '/2023')
-    expect(screen.getByRole('link', { name: '1989' })).toHaveAttribute('href', '/1989')
-  })
-
-  it('marks the most recent year current and renders its content on the right', async () => {
-    renderPage()
-    await waitFor(() => expect(screen.getByRole('link', { name: '2024' })).toHaveAttribute('aria-current', 'true'))
-    expect(screen.getByRole('link', { name: '2023' })).not.toHaveAttribute('aria-current')
-    expect(screen.getByRole('link', { name: '1989' })).not.toHaveAttribute('aria-current')
-    expect(screen.getByText('2024 content')).toBeInTheDocument()
-  })
-
-  // Task 29, part 1: the timeline already marks 2024 as the current year
-  // (aria-current, checked above) -- repeating it as a page heading beside
-  // the timeline is a duplicate label, not new information.
-  it('renders no duplicate year heading beside the timeline', async () => {
-    const { container } = renderPage()
     await waitFor(() => expect(screen.getByText('2024 content')).toBeInTheDocument())
-    expect(container.querySelector('.exhibitions-content h1')).not.toBeInTheDocument()
+  })
+
+  it('fetches the exhibitions list sorted most recent first to pick the current year', async () => {
+    renderPage()
+    // '2024' is the most recent of the three listItems above (2023, 1989,
+    // 2024) once sorted -- proven by which single article gets fetched and
+    // rendered, since the mock only resolves /articles/2024.
+    await waitFor(() => expect(screen.getByText('2024 content')).toBeInTheDocument())
+  })
+
+  it('renders no duplicate year heading for the current year\'s content', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.getByText('2024 content')).toBeInTheDocument())
     expect(screen.queryByRole('heading', { level: 1, name: '2024' })).not.toBeInTheDocument()
   })
 
@@ -73,24 +66,45 @@ describe('Exhibitions page', () => {
     await waitFor(() => expect(document.title).toBe('Expositions | Philippe Gronon'))
   })
 
-  // Task 26, correction to B4: same guard as Works -- no loading state
-  // before this rendered content immediately, indistinguishable from a
-  // loaded-but-empty category.
-  it('reserves space and renders no timeline while still loading', async () => {
+  it('renders its intro copy when the exhibitions page has blocks', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path, params = {}) => {
+      if (path === '/pages/exhibitions') {
+        return { key: 'exhibitions', title: 'Expositions', blocks: [{ type: 'text', value: '<p>Intro copy</p>' }] }
+      }
+      if (path === '/articles') {
+        expect(params.category).toBe('exhibitions')
+        return { items: listItems, total: listItems.length }
+      }
+      if (path === '/articles/2024') return fullArticle('2024', '2024')
+      throw Object.assign(new Error('unexpected path ' + path), { status: 404 })
+    })
+    const { container } = renderPage()
+    await waitFor(() => expect(screen.getByText('Intro copy')).toBeInTheDocument())
+    expect(container.querySelector('.page-intro')).toBeInTheDocument()
+  })
+
+  it('renders nothing while still loading, rather than a flash of partial content', () => {
     let resolveItems
     vi.spyOn(api, 'apiGet').mockImplementation((path) => {
       if (path === '/articles') return new Promise((resolve) => { resolveItems = resolve })
       return Promise.resolve({ key: 'exhibitions', title: 'Expositions', blocks: [] })
     })
-    const { container } = render(<MemoryRouter><LangProvider><Exhibitions /></LangProvider></MemoryRouter>)
+    const { container } = renderPage()
+    expect(container).toBeEmptyDOMElement()
+    // Silence the unused-variable warning for the (deliberately unresolved)
+    // promise capture above -- the test only needs to prove the pre-load
+    // render is empty, not resolve it.
+    void resolveItems
+  })
 
-    const main = container.querySelector('main')
-    expect(main).toBeInTheDocument()
-    expect(main).toHaveAttribute('aria-busy', 'true')
-    expect(container.querySelector('.exhibitions-layout')).not.toBeInTheDocument()
-
-    resolveItems({ items: [], total: 0 })
-    await waitFor(() => expect(container.querySelector('main')).not.toHaveAttribute('aria-busy'))
-    expect(container.querySelector('.exhibitions-layout')).not.toBeInTheDocument()
+  it('renders the real (empty) content when the category is genuinely empty, not a loading flash', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/pages/exhibitions') return { key: 'exhibitions', title: 'Expositions', blocks: [] }
+      if (path === '/articles') return { items: [], total: 0 }
+      throw Object.assign(new Error('unexpected path'), { status: 404 })
+    })
+    const { container } = renderPage()
+    await waitFor(() => expect(document.title).toBe('Expositions | Philippe Gronon'))
+    expect(container).toBeEmptyDOMElement()
   })
 })

@@ -1,9 +1,8 @@
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
 import { usePageData } from '@/preload.jsx'
-import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
-import { ExhibitionsChrome } from '@/components/ExhibitionsChrome.jsx'
+import { ArticleBody } from '@/components/ArticleBody.jsx'
 import { sortExhibitionsByYear } from '@/lib/exhibitionsOrder.js'
 import { usePageTitle } from '@/lib/usePageTitle.js'
 import { staticPageTitle } from '@/lib/pageTitle.js'
@@ -13,9 +12,14 @@ import { staticPageTitle } from '@/lib/pageTitle.js'
  * exhibition. Every exhibition article is already titled by its year (1989
  * to 2024), so that list, sorted by year, becomes a timeline down the left;
  * the most recent year's own article content renders on the right, exactly
- * the way that same year's own page (ArticleDetail) renders it -- see
- * ExhibitionsChrome, the wrapper both share. Every existing article URL
- * (/2023, /1989, ...) is untouched.
+ * the way that same year's own page (ArticleDetail) renders it.
+ *
+ * Task 32, item 1: the timeline rail and the `<main>` around it are no
+ * longer rendered here -- ExhibitionsLayout.jsx (a route parent, see
+ * App.jsx) renders them once and never unmounts them while navigating; this
+ * component, reached through its `<Outlet/>`, renders only the section's
+ * own intro copy and the current year's own content. Every existing
+ * article URL (/2023, /1989, ...) is untouched.
  */
 export function Exhibitions() {
   const { lang } = useLang()
@@ -32,19 +36,20 @@ export function Exhibitions() {
   // Coordinator feedback (task 27): same reasoning as Works.jsx.
   usePageTitle(data?.intro?.title && staticPageTitle(data.intro.title))
 
-  // Task 26, correction to B4: see the identical guard in Works.jsx -- a
-  // still-loading page reserves space and renders no grid; a loaded but
-  // genuinely empty category renders the real (empty) grid, so the two are
-  // never indistinguishable.
-  if (!data) return <Container as="main" className="page-main" aria-busy="true" />
+  // Task 26, correction to B4's original reasoning no longer applies here
+  // the same way -- ExhibitionsLayout's own `<main>` already reserves the
+  // page's height regardless of this component's own loading state -- but
+  // rendering nothing while `data` is null still avoids a flash of
+  // undefined/partial content.
+  if (!data) return null
 
   return (
-    <Container as="main" className="page-main">
+    <>
       {data.intro?.blocks?.length > 0 && (
         <section className="page-intro"><BlockRenderer blocks={data.intro.blocks} /></section>
       )}
 
-      {data.current && <ExhibitionsChrome items={data.items} article={data.current} />}
-    </Container>
+      {data.current && <ArticleBody article={data.current} />}
+    </>
   )
 }
