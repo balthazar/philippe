@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sortExhibitionsByYear, groupExhibitionsByYear } from '../exhibitionsOrder.js'
+import { sortExhibitionsByYear, groupExhibitionsByYear, layoutExhibitionsTimeline } from '../exhibitionsOrder.js'
 
 // Task 33, section 3: before the split, an exhibitions article's title WAS
 // its year (1989..2024) -- title was the only reliable sort key. After the
@@ -90,5 +90,84 @@ describe('groupExhibitionsByYear', () => {
 
   it('defaults to an empty array when given none', () => {
     expect(groupExhibitionsByYear()).toEqual([])
+  })
+})
+
+// Task 36, section 3: 39 exhibitions across a 35-year span (1989..2024) no
+// longer fit one dot per year -- placing dots purely proportionally by year
+// puts same-year exhibitions only a few px apart (2013 holds five; naively
+// subdividing its own ~20px-per-year slot five ways puts them ~4px apart,
+// unreadable and barely clickable). layoutExhibitionsTimeline places dots
+// proportionally by year and then enforces a minimum pixel gap between
+// EVERY pair of consecutive dots in the flat, already-sorted sequence,
+// expanding a dense cluster locally rather than leaving it unusable, while
+// keeping the whole rail within the available height. Only invariants are
+// asserted here (never exact pixel values, per the task brief) -- ordering,
+// minimum spacing, and total extent.
+describe('layoutExhibitionsTimeline', () => {
+  // Real archive shape (task report): 39 exhibitions, 1989..2024, 2013 holds
+  // five, 2008 and 2019 hold three, six years hold two, 11 years in the span
+  // have none at all.
+  const realShapeYears = [
+    2024, 2023, 2022, 2021, 2020, 2020, 2019, 2019, 2019, 2018, 2018, 2017,
+    2016, 2015, 2015, 2014, 2014, 2013, 2013, 2013, 2013, 2013, 2012, 2012,
+    2011, 2010, 2010, 2009, 2008, 2008, 2008, 2007, 2006, 2003, 2001, 1998,
+    1993, 1992, 1989,
+  ]
+  const realShape = realShapeYears.map((yearStart, i) => ({ slug: `e${i}`, yearStart }))
+
+  it('defaults to an empty array when given none', () => {
+    expect(layoutExhibitionsTimeline()).toEqual([])
+  })
+
+  it('places a single exhibition at the top', () => {
+    expect(layoutExhibitionsTimeline([{ slug: 'a', yearStart: 2020 }], { height: 700 })).toEqual([0])
+  })
+
+  it('returns one position per item, in the same order given', () => {
+    const positions = layoutExhibitionsTimeline(realShape, { height: 700, minGap: 10 })
+    expect(positions).toHaveLength(realShape.length)
+  })
+
+  it('keeps positions non-decreasing in the newest-first input order (newest at the top, oldest at the bottom)', () => {
+    const positions = layoutExhibitionsTimeline(realShape, { height: 700, minGap: 10 })
+    for (let i = 1; i < positions.length; i++) {
+      expect(positions[i]).toBeGreaterThanOrEqual(positions[i - 1])
+    }
+  })
+
+  it('respects the minimum gap between every consecutive pair, including within a dense same-year cluster', () => {
+    const minGap = 10
+    const positions = layoutExhibitionsTimeline(realShape, { height: 700, minGap })
+    for (let i = 1; i < positions.length; i++) {
+      expect(positions[i] - positions[i - 1]).toBeGreaterThanOrEqual(minGap - 0.01)
+    }
+  })
+
+  it('keeps the whole rail within the available height', () => {
+    const positions = layoutExhibitionsTimeline(realShape, { height: 700, minGap: 10 })
+    expect(positions[0]).toBeGreaterThanOrEqual(0)
+    expect(positions[positions.length - 1]).toBeLessThanOrEqual(700)
+  })
+
+  it('does not collapse a dense same-year cluster to a single point even before spacing is enforced', () => {
+    // 2013 holds five exhibitions -- naive same-year placement (no
+    // within-year subdivision at all) would put all five at the exact same
+    // proportional position, relying entirely on minGap to ever separate
+    // them. Using a minGap of 0 isolates the base (pre-enforcement)
+    // placement, which must already spread a year's own exhibitions across
+    // that year's slot rather than starting them fully overlapped.
+    const positions = layoutExhibitionsTimeline(realShape, { height: 700, minGap: 0 })
+    const indices = realShapeYears.reduce((acc, y, i) => (y === 2013 ? [...acc, i] : acc), [])
+    const cluster = indices.map((i) => positions[i])
+    const unique = new Set(cluster.map((p) => Math.round(p * 100)))
+    expect(unique.size).toBe(cluster.length)
+  })
+
+  it('still respects ordering and minimum spacing when the measured height is not yet known (e.g. 0)', () => {
+    const positions = layoutExhibitionsTimeline(realShape, { height: 0, minGap: 10 })
+    for (let i = 1; i < positions.length; i++) {
+      expect(positions[i] - positions[i - 1]).toBeGreaterThanOrEqual(10 - 0.01)
+    }
   })
 })

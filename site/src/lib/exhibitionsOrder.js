@@ -46,3 +46,81 @@ export function groupExhibitionsByYear(items = []) {
   }
   return groups
 }
+
+// Task 36, section 3: the archive's real shape (39 exhibitions, 1989..2024)
+// makes pure proportional-by-year placement unusable on its own -- 35 years
+// over roughly 700px of usable height is about 20px per year, and 2013
+// alone holds five exhibitions. Splitting one year's ~20px slot five ways
+// puts those five dots about 4px apart: too tight to read as distinct
+// dots, let alone hit individually.
+//
+// This function places every exhibition in two passes:
+//
+//   1. A base, proportional-by-year position (newest year at 0, oldest at
+//      `height`), with same-year exhibitions subdivided evenly across their
+//      own year's slot in their existing (already-sorted, stable) relative
+//      order -- so a dense year does not start out fully collapsed onto one
+//      point before spacing is even considered.
+//   2. A minimum-gap enforcement pass over the flat, already-sorted
+//      sequence (sortExhibitionsByYear's contract: newest first), which is
+//      what actually keeps a cluster reachable: a forward sweep pushes any
+//      point closer than `minGap` to its predecessor down by exactly
+//      `minGap`, expanding a dense cluster locally into whatever room the
+//      less busy years around it aren't using; if that pushes the last
+//      point past the available height, a backward sweep pulls the whole
+//      sequence back to fit, still honouring `minGap` between neighbours.
+//      This is the standard two-pass "declutter" sweep used for avoiding
+//      overlap along one axis (labels, timeline markers, ticks): cheap,
+//      stable, and it never reorders anything -- the input's own
+//      newest-first order is preserved throughout.
+//
+// Returns one number per item (a top offset in the same units as `height`,
+// 0 at the top), in the same order as `items`. Never asserted against exact
+// pixel values in tests (per the task brief) -- only the invariants this
+// algorithm actually guarantees: newest-first ordering, minGap between
+// every consecutive pair, and the whole sequence landing within `height`
+// whenever that many points can fit at all.
+export function layoutExhibitionsTimeline(items = [], { height = 0, minGap = 0 } = {}) {
+  const n = items.length
+  if (n === 0) return []
+  if (n === 1) return [0]
+
+  const years = items.map((item) => item.yearStart)
+  const maxYear = Math.max(...years)
+  const minYear = Math.min(...years)
+  const span = maxYear - minYear
+  const yearSlot = span > 0 ? height / span : 0
+
+  const groupSizes = new Map()
+  for (const year of years) groupSizes.set(year, (groupSizes.get(year) || 0) + 1)
+  const seenInGroup = new Map()
+
+  const base = items.map((item) => {
+    const year = item.yearStart
+    const indexInGroup = seenInGroup.get(year) || 0
+    seenInGroup.set(year, indexInGroup + 1)
+    const groupSize = groupSizes.get(year)
+    const yearTop = span > 0 ? ((maxYear - year) / span) * height : 0
+    return yearTop + indexInGroup * (yearSlot / groupSize)
+  })
+
+  return enforceMinGap(base, minGap, height)
+}
+
+function enforceMinGap(positions, minGap, height) {
+  const n = positions.length
+  const result = positions.slice()
+
+  for (let i = 1; i < n; i++) {
+    if (result[i] - result[i - 1] < minGap) result[i] = result[i - 1] + minGap
+  }
+
+  if (height > 0 && result[n - 1] > height) {
+    result[n - 1] = height
+    for (let i = n - 2; i >= 0; i--) {
+      if (result[i + 1] - result[i] < minGap) result[i] = result[i + 1] - minGap
+    }
+  }
+
+  return result
+}
