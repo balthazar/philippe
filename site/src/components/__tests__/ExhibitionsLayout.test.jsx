@@ -96,6 +96,14 @@ describe('ExhibitionsLayout', () => {
   it('does not loop when isExhibitionsArticle flips from false to true on first load', async () => {
     render(<TestSection initialPath="/2023" />)
     await waitFor(() => expect(screen.getByText('2023 content')).toBeInTheDocument())
+    // The timeline's item list is a SEPARATE fetch from the article's own
+    // (see ExhibitionsLayout.jsx), and it can still be in flight when the
+    // article's text lands. Snapshotting the call count here rather than
+    // there made this test flaky under full-suite load: that legitimate
+    // second request would arrive inside the window below and be counted as
+    // a runaway loop. Waiting for the rail to render is what says both
+    // fetches have settled, the same way the next test does it.
+    await waitFor(() => expect(screen.getByRole('link', { name: '2024' })).toBeInTheDocument())
     const callsAfterSettling = api.apiGet.mock.calls.length
     // Give any runaway effect loop a further tick to reveal itself.
     await new Promise((resolve) => setTimeout(resolve, 50))

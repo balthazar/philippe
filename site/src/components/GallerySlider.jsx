@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePrefersReducedMotion } from '@/lib/usePrefersReducedMotion.js'
 import { useCrossfade } from '@/lib/useCrossfade.js'
+import { Chevron } from './Chevron.jsx'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
 const largeVariant = (item) => item?.image?.variants?.large || item?.image?.variants?.medium
@@ -99,9 +100,13 @@ export function GallerySlider({ items = [], onActivate, interval = 5000 }) {
       </div>
       {count > 1 && (
         <div className="gallery-slider-controls">
-          <button type="button" onClick={() => move(-1)} aria-label="Précédent">‹</button>
+          <button type="button" onClick={() => move(-1)} aria-label="Précédent">
+            <Chevron direction="left" />
+          </button>
           <span aria-live="polite">{safeIndex + 1} / {count}</span>
-          <button type="button" onClick={() => move(1)} aria-label="Suivant">›</button>
+          <button type="button" onClick={() => move(1)} aria-label="Suivant">
+            <Chevron direction="right" />
+          </button>
         </div>
       )}
     </div>
