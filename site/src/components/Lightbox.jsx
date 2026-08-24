@@ -36,6 +36,13 @@ export function Lightbox({ images = [], index = 0, onClose }) {
   }, [move])
 
   const image = images[current]
+  // Task 38, part 6 (client feedback: "we shouldnt have arrows if theres a
+  // single iamge"). `move` wraps modulo images.length, so on a one-image
+  // gallery both arrows were live controls that did nothing observable --
+  // worse than absent, since a control that visibly does nothing reads as
+  // broken. The close button is unaffected, so the dialog still has
+  // something to hold initial focus and keep the focus trap non-empty.
+  const hasMultiple = images.length > 1
   return (
     <div
       className="lightbox"
@@ -49,9 +56,13 @@ export function Lightbox({ images = [], index = 0, onClose }) {
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <button ref={closeButtonRef} type="button" className="lightbox-close" onClick={onClose} aria-label="Fermer">×</button>
-      <button type="button" className="lightbox-prev" onClick={() => move(-1)} aria-label="Précédent">‹</button>
+      {hasMultiple && (
+        <button type="button" className="lightbox-prev" onClick={() => move(-1)} aria-label="Précédent">‹</button>
+      )}
       <img src={src(image?.variants?.large || image?.variants?.medium)} alt={image?.alt || ''} />
-      <button type="button" className="lightbox-next" onClick={() => move(1)} aria-label="Suivant">›</button>
+      {hasMultiple && (
+        <button type="button" className="lightbox-next" onClick={() => move(1)} aria-label="Suivant">›</button>
+      )}
     </div>
   )
 }

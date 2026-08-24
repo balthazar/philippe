@@ -47,6 +47,50 @@ export function groupExhibitionsByYear(items = []) {
   return groups
 }
 
+/**
+ * Task 38, part 5 (client feedback: "why is 2003 or 1993 not shown in the
+ * timeline? isnt it every 5 years or so?"). It was not. The rule this
+ * replaces counted every fifth DOT -- every fifth exhibition -- which reads
+ * as "every five years" only if the archive is evenly paced, and this one is
+ * not remotely: 2013 alone holds five exhibitions, while 1993 to 1989 holds
+ * four years and three exhibitions between them. Counting dots therefore
+ * spent its labels on the dense recent cluster and raced through the sparse
+ * early decades without stopping. On the real archive it produced 2024,
+ * 2020, 2018, 2014, 2013, 2010, 2008, 1998, 1989 -- four labels inside seven
+ * years, then a twenty-year silence broken once.
+ *
+ * The client reads the rail as a CALENDAR, so the spacing is measured in
+ * years: walking newest to oldest, a year keeps its label when at least
+ * `gap` years have passed since the last label was placed. On the real
+ * archive that gives 2024, 2019, 2014, 2009, 2003, 1998, 1993, 1989 -- even
+ * across the whole span, and 2003 and 1993 restored.
+ *
+ * The newest and oldest years are always labelled, so the rail's span is
+ * readable with no interaction, exactly as before. The oldest is forced even
+ * when it falls short of `gap` (1989 is four years after 1993): an unlabelled
+ * bottom end would leave the rail looking like it stops at whatever year was
+ * last labelled.
+ *
+ * The CURRENT year is not this function's business -- the component adds it,
+ * since it is a property of the page being viewed, not of the archive.
+ *
+ * `groups` must already be sorted newest-first (groupExhibitionsByYear's own
+ * output, which preserves sortExhibitionsByYear's ordering).
+ */
+export function persistentLabelYears(groups = [], gap = 5) {
+  const years = groups.map((g) => g.year)
+  const kept = new Set()
+  let last = null
+  years.forEach((year, i) => {
+    const isEdge = i === 0 || i === years.length - 1
+    if (isEdge || last === null || last - year >= gap) {
+      kept.add(year)
+      last = year
+    }
+  })
+  return kept
+}
+
 // Task 36, section 3: the archive's real shape (39 exhibitions, 1989..2024)
 // makes pure proportional-by-year placement unusable on its own -- 35 years
 // over roughly 700px of usable height is about 20px per year, and 2013

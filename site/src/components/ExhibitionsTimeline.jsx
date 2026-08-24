@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
-import { groupExhibitionsByYear, layoutExhibitionsTimeline } from '@/lib/exhibitionsOrder.js'
+import {
+  groupExhibitionsByYear,
+  layoutExhibitionsTimeline,
+  persistentLabelYears,
+} from '@/lib/exhibitionsOrder.js'
 
 /**
  * Task 36, section 3: the minimum pixel gap enforced between every pair of
@@ -175,19 +179,6 @@ function clampToRail(top, labelHeight, railHeight) {
 }
 
 /**
- * Task 31, part 1 / task 35, Part B / task 36: the client's "every fifth"
- * instruction is read against the dots, not the calendar -- there is one
- * dot per exhibition (not one per calendar year, so 1989-2024's gaps are
- * never represented), and persistent labels land on every fifth dot
- * counting from the newest (index 0, 5, 10, ...), plus the current year,
- * plus the newest and oldest so the span is always readable with no
- * pointer or keyboard interaction at all.
- */
-function isPersistentIndex(index, length, isCurrent) {
-  return isCurrent || index % 5 === 0 || index === length - 1
-}
-
-/**
  * Task 36, item 4: which exhibition the floating scrubber label should
  * currently describe, chosen from a raw pointer Y (relative to the rail's
  * own top) by nearest computed dot position -- this is what lets the
@@ -271,6 +262,10 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   const labelRef = useRef(null)
   const height = useRailHeight(railRef)
   const groups = groupExhibitionsByYear(items)
+  // Task 38, part 5: which years keep a label with no hover or focus at
+  // all. Measured in YEARS, not in dots -- see persistentLabelYears for why
+  // counting dots left two decades of the archive unlabelled.
+  const persistentYears = persistentLabelYears(groups)
   const total = items?.length || 0
   const inset = DOT_HIT_SIZE / 2
   const usableHeight = Math.max(0, height - DOT_HIT_SIZE)
@@ -444,9 +439,10 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
       {groups.map((group, index) => {
         const groupStartIndex = items.findIndex((item) => item.yearStart === group.year)
         const isCurrentGroup = group.year === currentYear
-        const isPersistent =
-          isCurrentGroup ||
-          group.items.some((item, i) => isPersistentIndex(groupStartIndex + i, total, item.slug === currentSlug))
+        // The current year is added here rather than inside
+        // persistentLabelYears: it is a property of the page being viewed,
+        // not of the archive's own shape.
+        const isPersistent = isCurrentGroup || persistentYears.has(group.year)
         const className = [
           'exhibitions-timeline-label',
           isPersistent && 'is-persistent',

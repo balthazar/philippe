@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { sortExhibitionsByYear, groupExhibitionsByYear, layoutExhibitionsTimeline } from '../exhibitionsOrder.js'
+import {
+  sortExhibitionsByYear,
+  groupExhibitionsByYear,
+  layoutExhibitionsTimeline,
+  persistentLabelYears,
+} from '../exhibitionsOrder.js'
 
 // Task 33, section 3: before the split, an exhibitions article's title WAS
 // its year (1989..2024) -- title was the only reliable sort key. After the
@@ -169,5 +174,46 @@ describe('layoutExhibitionsTimeline', () => {
     for (let i = 1; i < positions.length; i++) {
       expect(positions[i] - positions[i - 1]).toBeGreaterThanOrEqual(10 - 0.01)
     }
+  })
+})
+
+// Task 38, part 5 (client feedback: "why is 2003 or 1993 not shown in the
+// timeline? isnt it every 5 years or so?"). The component test covers the
+// real archive's shape end to end; these pin the degenerate inputs and the
+// forced edges, which no realistic archive exercises.
+describe('persistentLabelYears', () => {
+  const groupsOf = (...years) => years.map((year) => ({ year, items: [] }))
+
+  it('returns nothing for an empty archive', () => {
+    expect([...persistentLabelYears([])]).toEqual([])
+    expect([...persistentLabelYears()]).toEqual([])
+  })
+
+  it('labels a single year, which is both the newest and the oldest', () => {
+    expect([...persistentLabelYears(groupsOf(2013))]).toEqual([2013])
+  })
+
+  it('labels both ends of a two-year archive however close together they are', () => {
+    expect([...persistentLabelYears(groupsOf(2013, 2012))]).toEqual([2013, 2012])
+  })
+
+  it('forces the oldest year even when it falls short of the gap', () => {
+    // 1989 is four years after 1993, inside the five-year cadence -- kept
+    // anyway, so the rail never looks like it stops at 1993.
+    expect([...persistentLabelYears(groupsOf(2000, 1995, 1993, 1989))]).toEqual([2000, 1995, 1989])
+  })
+
+  it('measures the gap from the last LABELLED year, not from the previous year', () => {
+    // 2016 is one year after 2017 but five after the last label (2021), so
+    // it is kept; a previous-year comparison would keep none of these.
+    expect([...persistentLabelYears(groupsOf(2021, 2020, 2019, 2018, 2017, 2016, 2015))])
+      .toEqual([2021, 2016, 2015])
+  })
+
+  it('takes the gap as a parameter, so the cadence is not baked into the walk', () => {
+    expect([...persistentLabelYears(groupsOf(2024, 2022, 2020, 2018), 2)])
+      .toEqual([2024, 2022, 2020, 2018])
+    expect([...persistentLabelYears(groupsOf(2024, 2022, 2020, 2018), 10)])
+      .toEqual([2024, 2018])
   })
 })

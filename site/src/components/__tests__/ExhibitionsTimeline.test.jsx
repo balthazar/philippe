@@ -126,62 +126,66 @@ describe('ExhibitionsTimeline', () => {
     expect(screen.getByRole('link', { name: '2023' })).toHaveFocus()
   })
 
-  // Task 31, part 1 (client decision, not re-litigated): persistent labels
-  // land on every fifth dot, the current year, and the newest/oldest.
-  // Task 35, Part B / task 36 re-check this against the new dot count:
-  // "every fifth" counts across the flat 11-dot (39, on the real archive)
-  // sequence, not the ~10 (25) year groups -- a group is persistent if ANY
-  // of its dots lands on the rule, so a multi-exhibition year absorbs an
-  // every-fifth hit without showing its label twice.
-  it('keeps a persistent label on the group containing every fifth dot, plus the newest and oldest', () => {
+  // Task 38, part 5 (client feedback): persistent labels are spaced by
+  // CALENDAR YEARS -- at least five since the last one placed -- plus the
+  // current year and the newest/oldest. See persistentLabelYears for why
+  // the previous rule (every fifth DOT) left whole decades unlabelled.
+  it('keeps a persistent label every five years, plus the newest and oldest', () => {
     const { container } = renderTimeline({ currentSlug: 'nope', currentYear: 1500 })
     const persistentYears = [...container.querySelectorAll('.exhibitions-timeline-label.is-persistent')]
       .map((el) => el.textContent.trim())
-    // flat index 5 (the every-fifth hit) is "Premier lieu", inside the 2019
-    // group -- its group is persistent, shown once, not twice.
+    // 2019 is five years back from 2024; 2016 is only three back from 2019,
+    // so it waits. 1989 is the oldest and labelled regardless of its gap.
     expect(persistentYears).toEqual(['2024', '2019', '1989'])
   })
 
-  it('adds the current year to the persistent set even when it falls off the every-fifth pattern', () => {
+  it('adds the current year to the persistent set even when it falls off the five-year pattern', () => {
     const { container } = renderTimeline({ currentSlug: 'expo-2017', currentYear: 2017 }) // flat 8
     const persistentYears = [...container.querySelectorAll('.exhibitions-timeline-label.is-persistent')]
       .map((el) => el.textContent.trim())
     expect(persistentYears).toEqual(['2024', '2019', '2017', '1989'])
   })
 
-  // Discriminates "every fifth FLAT dot" from "every fifth GROUP" -- with a
-  // multi-exhibition year positioned so the two rules would pick different
-  // groups. Group order (desc.): 2024, 2023, 2022, 2021, 2020(x2), 2019,
-  // 2018, 2017, 2016, 1989 -- flat index 5 lands inside the 2020 group
-  // (group index 4), while GROUP index 5 would be 2019. Only a genuinely
-  // flat-index-based rule marks 2020 persistent here.
-  it('counts every fifth against the flat exhibition sequence, not the year-group count', () => {
-    const withEarlierMultiYear = [
-      { slug: 'y2024', title: 'Y2024', yearStart: 2024 },
-      { slug: 'y2023', title: 'Y2023', yearStart: 2023 },
-      { slug: 'y2022', title: 'Y2022', yearStart: 2022 },
-      { slug: 'y2021', title: 'Y2021', yearStart: 2021 },
-      { slug: 'y2020a', title: '2020 A', yearStart: 2020 },
-      { slug: 'y2020b', title: '2020 B', yearStart: 2020 },
-      { slug: 'y2019', title: 'Y2019', yearStart: 2019 },
-      { slug: 'y2018', title: 'Y2018', yearStart: 2018 },
-      { slug: 'y2017', title: 'Y2017', yearStart: 2017 },
-      { slug: 'y2016', title: 'Y2016', yearStart: 2016 },
-      { slug: 'y1989', title: 'Y1989', yearStart: 1989 },
+  // The client's own report, reproduced: on the REAL archive's shape the
+  // dot-counting rule spent four labels inside seven years and then went
+  // twenty years without one, so 2003 and 1993 never appeared. Counting
+  // years instead spreads them evenly across the whole span. Every year in
+  // this fixture, and every multi-exhibition count, is the production
+  // archive's own (39 exhibitions across 25 years, 1989..2024).
+  it('labels evenly across the real archive, where counting dots skipped two decades', () => {
+    const REAL = [
+      [2024, 1], [2023, 1], [2022, 1], [2021, 1], [2020, 2], [2019, 3], [2018, 2],
+      [2017, 1], [2016, 1], [2015, 2], [2014, 2], [2013, 5], [2012, 2], [2011, 1],
+      [2010, 2], [2009, 1], [2008, 3], [2007, 1], [2006, 1], [2003, 1], [2001, 1],
+      [1998, 1], [1993, 1], [1992, 1], [1989, 1],
     ]
+    const archive = REAL.flatMap(([year, count]) =>
+      Array.from({ length: count }, (_, i) => ({
+        slug: `y${year}-${i}`,
+        title: `Expo ${year} #${i}`,
+        yearStart: year,
+      }))
+    )
+    expect(archive).toHaveLength(39)
+
     const { container } = render(
       <MemoryRouter>
         <LangProvider>
-          <ExhibitionsTimeline items={withEarlierMultiYear} currentSlug="nope" currentYear={1500} />
+          <ExhibitionsTimeline items={archive} currentSlug="nope" currentYear={1500} />
         </LangProvider>
       </MemoryRouter>
     )
     const persistentYears = [...container.querySelectorAll('.exhibitions-timeline-label.is-persistent')]
       .map((el) => el.textContent.trim())
-    expect(persistentYears).toEqual(['2024', '2020', '1989'])
+    expect(persistentYears).toEqual(['2024', '2019', '2014', '2009', '2003', '1998', '1993', '1989'])
+    // The two the client named, and the cluster the old rule wasted its
+    // labels on.
+    expect(persistentYears).toContain('2003')
+    expect(persistentYears).toContain('1993')
+    expect(persistentYears).not.toContain('2013')
   })
 
-  it('does not mark a non-current, non-every-fifth, non-edge year as persistent', () => {
+  it('does not mark a non-current, non-edge year outside the five-year cadence as persistent', () => {
     const { container } = renderTimeline({ currentSlug: 'nope', currentYear: 1500 })
     const label2021 = [...container.querySelectorAll('.exhibitions-timeline-label')]
       .find((el) => el.textContent.trim() === '2021')

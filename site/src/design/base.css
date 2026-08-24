@@ -1283,7 +1283,12 @@ picture {
   gap: var(--space-2);
   margin-top: var(--space-1);
   font-family: var(--font-chrome);
-  font-size: var(--text-s);
+  /* Task 38, part 6 (client feedback): up from var(--text-s) (11px). The
+     counter and its arrows are the only way to tell a slider gallery has
+     more images at all -- at 11px, under an image several hundred pixels
+     tall, they read as a caption's afterthought rather than as a control.
+     var(--text-l) is the same 16px the header's own chrome uses. */
+  font-size: var(--text-l);
   color: var(--ink-soft);
   letter-spacing: 0.06em;
 }
@@ -1293,7 +1298,9 @@ picture {
   background: none;
   padding: var(--space-1);
   color: var(--ink);
-  font-size: var(--text-l);
+  /* Task 38, part 6: up from var(--text-l), keeping the arrows a step
+     above the counter they flank -- they are the part you aim at. */
+  font-size: var(--text-xl);
   line-height: 1;
   cursor: pointer;
 }
@@ -1333,14 +1340,27 @@ picture {
   right: var(--space-2);
 }
 
-.lightbox-prev {
-  left: var(--space-2);
+/* Task 38, part 6 (client feedback): the same size bump as the slider's own
+   arrows, a step further because these sit on a full-viewport surface with
+   nothing else on it -- var(--text-xl) (22px) read as small against an
+   image at 90vw. Only prev/next: the close control stays at the shared
+   .lightbox button size, since it is in the corner where a larger glyph
+   would crowd the image's own top edge.
+
+   Lightbox.jsx renders neither of these at all for a single-image gallery
+   (they would cycle a one-item list back onto itself), so there is no
+   disabled state to style here. */
+.lightbox-prev,
+.lightbox-next {
   top: 50%;
   transform: translateY(-50%);
+  font-size: 2rem;
+}
+
+.lightbox-prev {
+  left: var(--space-2);
 }
 
 .lightbox-next {
   right: var(--space-2);
-  top: 50%;
-  transform: translateY(-50%);
 }

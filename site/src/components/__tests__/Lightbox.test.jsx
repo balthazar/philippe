@@ -35,6 +35,24 @@ describe('Lightbox', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  // Task 38, part 6 (client feedback: "we shouldnt have arrows if theres a
+  // single iamge"). `move` wraps modulo images.length, so on a one-image
+  // gallery the arrows were live controls that did nothing observable.
+  it('renders both arrows for a multi-image gallery', () => {
+    render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Précédent' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Suivant' })).toBeInTheDocument()
+  })
+
+  it('renders no arrows for a single-image gallery, keeping only the close control', () => {
+    render(<Lightbox images={[images[0]]} index={0} onClose={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Précédent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Suivant' })).not.toBeInTheDocument()
+    // The dialog still has something to hold initial focus, so the focus
+    // trap is never empty.
+    expect(screen.getByRole('button', { name: 'Fermer' })).toHaveFocus()
+  })
+
   it('does not close when clicking the image itself', async () => {
     const onClose = vi.fn()
     const user = userEvent.setup()
