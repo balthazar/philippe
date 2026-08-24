@@ -69,6 +69,39 @@ describe('ArticlePreview', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 
+  // Task 32, item 5: resolveBlocks.js used to resolve only captions for
+  // `image`/`gallery` blocks -- `block.image`/`item.image` themselves were
+  // left untouched, so an id-only reference (e.g. a save response that came
+  // back unpopulated) rendered nothing at all, even when the very same
+  // image was populated elsewhere in this same article (its cover, or
+  // another gallery item). These prove the single shared index resolves
+  // across fields, not just within one.
+  it('resolves a bare block image id from the populated cover, when the two reference the same image', () => {
+    const image = { _id: 'img1', variants: { medium: { path: 'gallery-medium.jpg', width: 800, height: 600 } } }
+    const article = {
+      title: { fr: '', en: '' },
+      cover: image,
+      blocks: [{ type: 'image', image: 'img1', caption: { fr: '', en: '' }, size: 'wide' }],
+    }
+    const { container } = render(<ArticlePreview article={article} lang="fr" />)
+    expect(container.querySelector('.block-image img')).toHaveAttribute('src', '/media/gallery-medium.jpg')
+  })
+
+  it('resolves a bare gallery item image id from a populated image block elsewhere in the article', () => {
+    const image = { _id: 'img2', variants: { medium: { path: 'block-medium.jpg', width: 800, height: 600 } } }
+    const article = {
+      title: { fr: '', en: '' },
+      cover: null,
+      blocks: [
+        { type: 'image', image, caption: { fr: '', en: '' }, size: 'wide' },
+        { type: 'gallery', columns: 3, items: [{ image: 'img2', caption: { fr: '', en: '' }, span: 1 }] },
+      ],
+    }
+    const { container } = render(<ArticlePreview article={article} lang="fr" />)
+    const galleryImg = container.querySelector('.block-gallery img')
+    expect(galleryImg).toHaveAttribute('src', '/media/block-medium.jpg')
+  })
+
   it('renders a brand-new, empty article without throwing', () => {
     const article = { title: { fr: '', en: '' }, yearLabel: { fr: '', en: '' }, cover: null, blocks: [] }
     expect(() => render(<ArticlePreview article={article} lang="fr" />)).not.toThrow()

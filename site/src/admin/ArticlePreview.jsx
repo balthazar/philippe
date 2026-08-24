@@ -1,35 +1,23 @@
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
-import { resolve, resolveBlock } from './resolveBlocks.js'
+import { resolve, resolveBlock, buildImageIndex, resolveImage } from './resolveBlocks.js'
 
-// Task 30 bug report: `cover` is populated (an object with `variants`)
-// right after a load, but can legitimately be a bare id string in between
-// saves -- right after the gallery star toggle sets a new cover (pre-save),
-// or right after a save whose response wasn't populated (see the api-side
-// fix in admin.js's POST handler). Falling straight back to "no cover" for
-// a bare id is the WRONG fallback: it is indistinguishable from the article
-// genuinely having none, so a display-shape problem reads to the artist as
-// data loss. Since the cover migration, every cover is one of the article's
-// own gallery images, so a bare id is resolved locally against the blocks
-// already in the editor first; only a cover that is truly absent (or an id
-// this article's own blocks don't recognize at all) falls back to the
-// placeholder.
-function findImageById(blocks, id) {
-  for (const block of blocks || []) {
-    if (block.type === 'image' && block.image && typeof block.image === 'object' && block.image._id === id) {
-      return block.image
-    }
-    if (block.type === 'gallery') {
-      for (const item of block.items || []) {
-        if (item.image && typeof item.image === 'object' && item.image._id === id) return item.image
-      }
-    }
-  }
-  return null
-}
-
-function coverSrc(cover, blocks) {
-  const image = cover && typeof cover === 'string' ? findImageById(blocks, cover) : cover
-  const medium = image && typeof image === 'object' ? image.variants?.medium : null
+// Task 30 bug report, extended by task 32 item 5: `cover` (and, as of this
+// task, `block.image`/`item.image` too) is populated (an object with
+// `variants`) right after a load, but can legitimately be a bare id string
+// in between saves -- right after the gallery star toggle sets a new cover
+// (pre-save), or right after a save whose response wasn't populated.
+// Falling straight back to "no image" for a bare id is the WRONG fallback:
+// it is indistinguishable from the field genuinely having none, so a
+// display-shape problem reads to the artist as data loss. `resolveImage`
+// (resolveBlocks.js) is the single place that answers "object or id, and if
+// id, which object" now, used here for the cover exactly the same way
+// resolveBlock uses it for every block's own image fields below -- there
+// used to be two different answers to this question (this file's own
+// `findImageById`, cover-only, and resolveBlock not answering it for blocks
+// at all); now there is one.
+function coverSrc(cover, imageIndex) {
+  const image = resolveImage(cover, imageIndex)
+  const medium = image?.variants?.medium
   return medium?.path ? `/media/${medium.path}` : null
 }
 
@@ -56,8 +44,9 @@ export function ArticlePreview({ article, lang }) {
   // else -- the same position ArticleDetail.jsx (the public page) uses.
   const subtitle = resolve(article.subtitle, lang)
   const yearLabel = resolve(article.yearLabel, lang)
-  const blocks = (article.blocks || []).map((block) => resolveBlock(block, lang))
-  const cover = coverSrc(article.cover, article.blocks)
+  const imageIndex = buildImageIndex(article)
+  const blocks = (article.blocks || []).map((block) => resolveBlock(block, lang, imageIndex))
+  const cover = coverSrc(article.cover, imageIndex)
 
   return (
     <div className="article-preview">
