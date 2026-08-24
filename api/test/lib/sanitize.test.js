@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sanitize } from '../../src/lib/sanitize.js'
+import { sanitize, safeUrl } from '../../src/lib/sanitize.js'
 
 describe('sanitize', () => {
   it('keeps the whitelisted structural tags', () => {
@@ -31,5 +31,46 @@ describe('sanitize', () => {
   // introduce a second one.
   it('strips h1, since the article title owns the page\'s only h1', () => {
     expect(sanitize('<h1>Pas ici</h1><p>Texte</p>')).toBe('Pas ici<p>Texte</p>')
+  })
+})
+
+// Task 39. A `references` item's url reaches the DOM as an href without ever
+// passing through sanitize-html, so allowedSchemes never sees it. This is
+// the check that stands in for it.
+describe('safeUrl', () => {
+  it('keeps absolute http, https and mailto URLs, trimmed', () => {
+    expect(safeUrl('https://villamedici.it/programme/laltro-lato-de-philippe-gronon/'))
+      .toBe('https://villamedici.it/programme/laltro-lato-de-philippe-gronon/')
+    expect(safeUrl('http://archives.mamco.ch/x.html')).toBe('http://archives.mamco.ch/x.html')
+    expect(safeUrl('mailto:info@philippegronon.com')).toBe('mailto:info@philippegronon.com')
+    expect(safeUrl('  https://example.org/a  ')).toBe('https://example.org/a')
+  })
+
+  it('drops javascript:, however it is spelled', () => {
+    expect(safeUrl('javascript:alert(1)')).toBe('')
+    expect(safeUrl('JaVaScRiPt:alert(1)')).toBe('')
+    // Leading whitespace and embedded control characters are what defeats a
+    // naive startsWith() check; the URL parser strips them and still reports
+    // the real protocol.
+    expect(safeUrl('  javascript:alert(1)')).toBe('')
+    expect(safeUrl('java\tscript:alert(1)')).toBe('')
+    expect(safeUrl('java\nscript:alert(1)')).toBe('')
+  })
+
+  it('drops data: and other non-navigational schemes', () => {
+    expect(safeUrl('data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==')).toBe('')
+    expect(safeUrl('vbscript:msgbox(1)')).toBe('')
+    expect(safeUrl('file:///etc/passwd')).toBe('')
+  })
+
+  it('drops relative and malformed values rather than throwing', () => {
+    // The bibliography's own WordPress export carried exactly this shape: a
+    // document's name left where the URL should be.
+    expect(safeUrl('Texte-Catherine-Perret-2010-Philippe-Gronon.-def')).toBe('')
+    expect(safeUrl('/oeuvres')).toBe('')
+    expect(safeUrl('')).toBe('')
+    expect(safeUrl(undefined)).toBe('')
+    expect(safeUrl(null)).toBe('')
+    expect(safeUrl(42)).toBe('')
   })
 })

@@ -1222,6 +1222,93 @@ picture {
   stroke-linejoin: round;
 }
 
+/* Task 39: a `references` block -- bibliography entries and links as a grid
+   of cards (ReferenceGrid.jsx). Replaces the single blob of anchors the
+   bibliography page inherited from WordPress, where forty citations ran
+   together as one wall of text.
+
+   auto-fill with a minmax floor rather than a fixed column count: the same
+   block is used for a section of five books and a section of forty
+   citations, and on the exhibitions-width column as well as the full page.
+   `minmax(min(16rem, 100%), 1fr)` is the standard guard for the narrow case
+   -- a bare 16rem floor would overflow a viewport narrower than that, since
+   auto-fill never places a track smaller than its own minimum. */
+.block-references {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+  gap: var(--space-4) var(--gutter);
+  margin: var(--space-3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* `start`, not the default `stretch`: entries with no visual are common (a
+   catalogue with no web presence is still a real entry), and stretching
+   would pull each citation to the height of the tallest cover on its row,
+   leaving the short ones marooned in whitespace. Aligned to the top, a
+   ragged bottom edge reads as a list of different things, which is what it
+   is. */
+.block-references > .reference {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-self: start;
+}
+
+/* The whole entry is one link (see ReferenceGrid.jsx) -- so the anchor, not
+   an element inside it, carries the layout. */
+.block-references > .reference > a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-decoration: none;
+  color: inherit;
+}
+
+/* A cover and an installation view have wildly different proportions (a
+   book is portrait, an installation view landscape), and forcing either
+   into a shared aspect-ratio would crop the work. The image keeps its own
+   shape; only its height is capped, so one tall portrait cover cannot set
+   the rhythm for a whole row. */
+.block-references .reference-visual img {
+  display: block;
+  width: 100%;
+  max-height: 18rem;
+  object-fit: contain;
+  object-position: left top;
+}
+
+.block-references .reference-citation {
+  display: block;
+  font-size: var(--text-m);
+  line-height: 1.5;
+  color: var(--ink-strong);
+}
+
+/* The citation is sanitized HTML and arrives wrapped in its own <p> (it came
+   from a WordPress paragraph and stays editable as rich text), whose default
+   margins would fight the grid's own gap. */
+.block-references .reference-citation > p {
+  margin: 0;
+}
+
+.block-references .reference-citation > p + p {
+  margin-top: var(--space-1);
+}
+
+/* Only a linked entry responds to the pointer: an unlinked one is not a
+   target, and must not pretend to be. Underlining on hover rather than at
+   rest keeps forty citations from reading as forty underlined links. */
+.block-references > .reference.is-link a:hover .reference-citation,
+.block-references > .reference.is-link a:focus-visible .reference-citation {
+  text-decoration: underline;
+}
+
+.block-references > .reference.is-link a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+
 /* Gallery block, slider mode (Task 30, part 4). Shares its transition
    tokens and fade-through-white approach with the homepage .slideshow-image
    rules above (same reasoning: mixed aspect ratios within one gallery), but

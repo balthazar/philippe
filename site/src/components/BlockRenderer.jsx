@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Lightbox } from './Lightbox.jsx'
 import { GallerySlider } from './GallerySlider.jsx'
+import { ReferenceGrid } from './ReferenceGrid.jsx'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
 
@@ -48,6 +49,12 @@ export function BlockRenderer({ blocks = [] }) {
                 ))}
               </dl>
             )
+          // Task 39: bibliography entries and links, as a grid of cards.
+          // Its own component -- an entry has three renderings depending on
+          // which of its two optional fields are present, which is more
+          // branching than belongs inline in this switch.
+          case 'references':
+            return <ReferenceGrid key={i} items={block.items} />
           case 'image':
             return (
               <figure key={i} className={`block-image size-${block.size || 'wide'}`}>

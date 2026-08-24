@@ -126,6 +126,43 @@ describe('admin articles', () => {
     expect(res.body.blocks[0].value.fr).toBe('<p>Hi</p>')
   })
 
+  // Task 39: a references block keeps its HTML in its ITEMS, not in the
+  // block's own value, so cleanBlocks has a second place to reach.
+  // directAgent, not loginAgent: this file already runs exactly ten logins,
+  // which is the process-wide login limiter's ceiling (see directAgent's own
+  // comment above). Two more would push the tests that follow into 429s --
+  // as they did, the first time these were written.
+  it('sanitizes the citation HTML inside references items on write', async () => {
+    const agent = await directAgent()
+    const res = await agent.post('/api/admin/articles').send({
+      category: 'works',
+      title: { fr: 'T' },
+      blocks: [{
+        type: 'references',
+        items: [{ value: { fr: '<p class="x">Versos <em>2016</em></p><script>alert(1)</script>' } }],
+      }],
+    })
+    expect(res.body.blocks[0].items[0].value.fr).toBe('<p>Versos <em>2016</em></p>')
+  })
+
+  it('strips a dangerous url on a references item, keeping the citation', async () => {
+    const agent = await directAgent()
+    const res = await agent.post('/api/admin/articles').send({
+      category: 'works',
+      title: { fr: 'T' },
+      blocks: [{
+        type: 'references',
+        items: [
+          { value: { fr: '<p>Une citation</p>' }, url: 'javascript:alert(1)' },
+          { value: { fr: '<p>Une autre</p>' }, url: 'https://example.org/a' },
+        ],
+      }],
+    })
+    expect(res.body.blocks[0].items[0].url).toBe('')
+    expect(res.body.blocks[0].items[0].value.fr).toBe('<p>Une citation</p>')
+    expect(res.body.blocks[0].items[1].url).toBe('https://example.org/a')
+  })
+
   it('reorders articles by the supplied id list', async () => {
     const a = await Article.create({ category: 'works', slug: { fr: 'a' }, title: { fr: 'A' } })
     const b = await Article.create({ category: 'works', slug: { fr: 'b' }, title: { fr: 'B' } })

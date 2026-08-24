@@ -14,9 +14,18 @@ const EMPTY = {
   image: { type: 'image', image: null, caption: { fr: '', en: '' }, size: 'wide' },
   gallery: { type: 'gallery', columns: 3, items: [] },
   specs: { type: 'specs', items: [] },
+  // Task 39: bibliography entries and links. Each item is an optional
+  // image, a citation, and an optional URL -- see the editor further down.
+  references: { type: 'references', items: [] },
 }
 
-const LABELS = { text: 'Texte', image: 'Image', gallery: 'Galerie', specs: 'Caractéristiques' }
+const LABELS = {
+  text: 'Texte',
+  image: 'Image',
+  gallery: 'Galerie',
+  specs: 'Caractéristiques',
+  references: 'Références',
+}
 
 // Specs terms/values are NEVER rich text (controller correction 3): unlike
 // `text` blocks, they are not sanitized server-side. They're safe today only
@@ -323,6 +332,68 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
                   )
                 }}
               />
+            )}
+
+            {/*
+              Task 39. Unlike specs terms/values above, a reference's
+              citation IS rich text and IS sanitized server-side (see
+              cleanBlocks in api/src/routes/admin.js, which reaches into
+              these items) -- a bibliography sets book titles in italics, so
+              RichText here is correct rather than the plain LocalizedInput
+              the specs rows deliberately use.
+
+              The URL is a plain input, validated server-side by safeUrl:
+              anything that is not an absolute http/https/mailto URL is
+              stored as '' and the entry simply renders unlinked. An entry
+              needs neither an image nor a URL to be worth keeping -- a
+              catalogue with no web presence anywhere is still a real
+              bibliography entry.
+            */}
+            {block.type === 'references' && (
+              <div className="references-editor">
+                {block.items.map((item, j) => {
+                  const setItem = (patch) =>
+                    replace(i, { ...block, items: block.items.map((it, k) => (k === j ? { ...it, ...patch } : it)) })
+                  return (
+                    <div key={j} className="reference-row">
+                      <ImagePicker value={item.image} onChange={(image) => setItem({ image })} />
+                      <div className="reference-row-fields">
+                        {/* Same localized-write shape as the `text` block
+                            above: RichText itself is language-agnostic, so
+                            the caller reads and writes the current lang's
+                            slot and leaves the other untouched. */}
+                        <RichText
+                          value={item.value?.[lang] || ''}
+                          onChange={(html) => setItem({ value: { ...item.value, [lang]: html } })}
+                        />
+                        <label htmlFor={`ref-url-${i}-${j}`}>Lien</label>
+                        <input
+                          id={`ref-url-${i}-${j}`}
+                          type="url"
+                          inputMode="url"
+                          placeholder="https://"
+                          value={item.url || ''}
+                          onChange={(e) => setItem({ url: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => replace(i, { ...block, items: block.items.filter((_, k) => k !== j) })}
+                        >
+                          Supprimer la référence
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() =>
+                    replace(i, { ...block, items: [...block.items, { image: null, value: { fr: '', en: '' }, url: '' }] })
+                  }
+                >
+                  Ajouter une référence
+                </button>
+              </div>
             )}
 
             {block.type === 'specs' && (

@@ -36,7 +36,7 @@ export function buildImageIndex(article) {
   add(article?.cover)
   for (const block of article?.blocks || []) {
     if (block.type === 'image') add(block.image)
-    if (block.type === 'gallery') {
+    if (block.type === 'gallery' || block.type === 'references') {
       for (const item of block.items || []) add(item.image)
     }
   }
@@ -71,6 +71,19 @@ export function resolveBlock(block, lang, imageIndex) {
           ...item,
           image: resolveImage(item.image, imageIndex),
           caption: resolve(item.caption, lang),
+        })),
+      }
+    // Task 39: like a gallery item, a reference item carries its own
+    // image; unlike one, its text is HTML (the citation, sanitized
+    // server-side) rather than a plain caption. `url` needs no resolving --
+    // it is a plain string, not localized.
+    case 'references':
+      return {
+        ...block,
+        items: (block.items || []).map((item) => ({
+          ...item,
+          image: resolveImage(item.image, imageIndex),
+          value: resolve(item.value, lang),
         })),
       }
     case 'specs':

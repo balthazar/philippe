@@ -12,7 +12,7 @@ import { requireAuth, requireCsrfHeader } from '#middleware/auth.js'
 import { asyncHandler } from '#middleware/asyncHandler.js'
 import { upload } from '#middleware/upload.js'
 import { processImage } from '#lib/imagePipeline.js'
-import { sanitize } from '#lib/sanitize.js'
+import { sanitize, safeUrl } from '#lib/sanitize.js'
 import { uniqueSlug } from '#lib/slug.js'
 import { localize } from '#lib/localize.js'
 import { PAGE_KEYS, RESERVED_SLUGS } from '#lib/constants.js'
@@ -23,13 +23,33 @@ export const adminRouter = Router()
 adminRouter.use(requireAuth)
 adminRouter.use((req, res, next) => (req.method === 'GET' ? next() : requireCsrfHeader(req, res, next)))
 
-/** Text blocks are the only place stored HTML exists, so sanitize on write. */
+/**
+ * Stored HTML is sanitized on write, everywhere it exists.
+ *
+ * Two places now, not one. A `text` block's own `value` is the original, and
+ * as of task 39 a `references` block's ITEMS each carry a `value` too -- the
+ * citation, which is HTML because a book title has to keep its italics. An
+ * item's `url` is not HTML at all but still reaches the DOM as an `href`,
+ * without sanitize-html's allowedSchemes ever seeing it, so it gets its own
+ * check (safeUrl).
+ */
 function cleanBlocks(blocks = []) {
-  return blocks.map((b) =>
-    b.type === 'text'
-      ? { ...b, value: { fr: sanitize(b.value?.fr), en: sanitize(b.value?.en) } }
-      : b
-  )
+  return blocks.map((b) => {
+    if (b.type === 'text') {
+      return { ...b, value: { fr: sanitize(b.value?.fr), en: sanitize(b.value?.en) } }
+    }
+    if (b.type === 'references') {
+      return {
+        ...b,
+        items: (b.items || []).map((item) => ({
+          ...item,
+          value: { fr: sanitize(item.value?.fr), en: sanitize(item.value?.en) },
+          url: safeUrl(item.url),
+        })),
+      }
+    }
+    return b
+  })
 }
 
 // Task 27, Part A: articles now live at the root (/:slug, /en/:slug), so a

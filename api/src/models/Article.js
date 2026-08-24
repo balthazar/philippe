@@ -23,6 +23,14 @@ const blockSchema = new mongoose.Schema(
           term: localizedField(),                              // specs
           value: localizedField(),
           span: { type: Number, min: 1, max: 6, default: 1 },      // gallery item width
+          // Task 39 (`references` blocks): where this entry points -- a
+          // publisher's page, an article, an archived copy. Optional: a
+          // catalogue with no web presence anywhere is still a real entry,
+          // it simply renders as a card rather than a link. Validated on
+          // write (safeUrl, lib/sanitize.js) because unlike an href inside a
+          // sanitized text block, this value reaches the DOM as an attribute
+          // without passing through sanitize-html at all.
+          url: String,                                             // references item
           // Task 27, client feedback item 1: a gallery item can be present in
           // the data (so it can also serve as the article's `cover`) without
           // showing in the public grid or lightbox. Defaults false so every

@@ -4,7 +4,14 @@ export const PAGE_KEYS = ['home', 'works', 'exhibitions', 'biography', 'contact'
 // now a `text` block carrying an <h2>/<h3> (see api/src/lib/sanitize.js's
 // whitelist, and RichText.jsx's TipTap heading extension, restricted to
 // those two levels -- never h1, which the article title itself owns).
-export const BLOCK_TYPES = ['text', 'image', 'gallery', 'specs']
+// Task 39: `references` is a list of bibliography/link entries -- each an
+// optional image, a citation (sanitized HTML, so a book title keeps its
+// italics), and an optional URL. It is what turns the bibliography page from
+// one long blob of anchors into a grid, and it is deliberately a BLOCK type
+// rather than a model of its own: an entry is page content, ordered and
+// edited exactly like every other block, and it inherits the block editor's
+// existing image picker, drag-ordering and localization for free.
+export const BLOCK_TYPES = ['text', 'image', 'gallery', 'specs', 'references']
 
 // Mirrors site/src/routes.js's SEGMENTS: the api and site are separate
 // deployables (see api/Dockerfile, k8s/*.yaml -- neither container has the

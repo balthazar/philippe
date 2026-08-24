@@ -930,6 +930,45 @@
   flex: 1;
 }
 
+/* Task 39: the references editor -- one row per bibliography entry or link.
+   Image on the left (optional), citation and URL on the right.
+
+   A fixed-width image column rather than a fraction: an entry with no image
+   yet is the common case while a bibliography is being filled in, and a
+   fractional column would collapse to nothing for those rows, so the
+   citation fields would start at a different x-position on every row and the
+   list would read as ragged rather than as a table. */
+.references-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.reference-row {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: 0.9rem;
+  align-items: start;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rule, #e3e0da);
+}
+
+.reference-row:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.reference-row-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.reference-row-fields input[type='url'] {
+  width: 100%;
+}
+
 /* Task 27, client feedback item 5: the gallery block's own column-count
    field, moved into the block header beside the move arrows. A plain
    native select, sized to match the icon buttons beside it. */
