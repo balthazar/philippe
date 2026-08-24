@@ -17,6 +17,22 @@ import { groupExhibitionsByYear, layoutExhibitionsTimeline } from '@/lib/exhibit
 const MIN_DOT_GAP = 10
 
 /**
+ * Task 36, section 2: matches each dot's own rendered hit area in base.css
+ * (`.exhibitions-timeline a`'s 0.5625rem padding on all sides around the
+ * 0.375rem dot: 0.5625*2 + 0.375 = 1.5rem = 24px at the default root size).
+ * A dot's `<li>` is centred on its computed `top` (`transform:
+ * translateY(-50%)`), so the newest (top: 0) and oldest (top: height) dots'
+ * OWN hit boxes would otherwise extend 12px above/below the rail's [0,
+ * height] domain -- past the header at the top, and (confirmed in a real
+ * browser) enough to push the whole page 12px taller than the viewport at
+ * the bottom, forcing exactly the page scroll this task exists to remove.
+ * Insetting the usable domain by half this size, and offsetting every
+ * computed position by that same half, keeps every dot's hit box fully
+ * inside the rail's own box.
+ */
+const DOT_HIT_SIZE = 24
+
+/**
  * Task 36, section 2/6: the rail must never scroll, so its own available
  * height has to be known in real pixels before dots can be placed -- CSS
  * alone cannot express "spread these out, enforcing a minimum gap, within
@@ -148,7 +164,11 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   const height = useRailHeight(railRef)
   const groups = groupExhibitionsByYear(items)
   const total = items?.length || 0
-  const positions = layoutExhibitionsTimeline(items, { height, minGap: MIN_DOT_GAP })
+  const inset = DOT_HIT_SIZE / 2
+  const usableHeight = Math.max(0, height - DOT_HIT_SIZE)
+  const positions = layoutExhibitionsTimeline(items, { height: usableHeight, minGap: MIN_DOT_GAP }).map(
+    (p) => p + inset
+  )
 
   const [activeSlug, setActiveSlug] = useState(null)
   const activeIndex = activeSlug ? items.findIndex((item) => item.slug === activeSlug) : -1

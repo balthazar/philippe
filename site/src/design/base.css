@@ -875,20 +875,25 @@ picture {
    wanted. Reserving room INSIDE the box (padding, not a negative offset
    outside it) keeps the label inside the clip region instead. */
 @media (max-width: 767.98px) {
+  /* Task 36: out of scope for this task (desktop only), kept only from
+     becoming outright broken. Each year label used to be positioned above
+     its OWN dot's row-flow position because it lived inside that dot's
+     shared `<li>` (task 35, Part B's nested grouping). Task 36 flattened
+     the DOM (labels are now siblings positioned by explicit desktop `top`
+     pixel values, not by DOM adjacency -- see .exhibitions-timeline-label
+     above), which has no meaning on this row layout: every label's
+     absolute-positioning containing block is now the whole `<nav>`, not
+     its own dot, so they would all stack at the nav's own origin instead
+     of floating over their dot. Rather than design a second, horizontal
+     placement scheme this task was not asked for, labels are hidden below
+     768px -- the dot row itself is unaffected (dots stay `position:
+     static`, plain row flow, ignoring the desktop `top` styles entirely)
+     and remains just as usable as before this task. */
   .exhibitions-timeline-rail {
-    padding-top: 2rem;
+    padding-top: 0;
   }
 
-  .exhibitions-timeline-label {
-    top: auto;
-    right: auto;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    margin-right: 0;
-    margin-bottom: 0.125rem;
-  }
-
+  .exhibitions-timeline-label,
   .exhibitions-timeline-scrub {
     display: none;
   }
