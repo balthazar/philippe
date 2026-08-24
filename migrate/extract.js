@@ -314,6 +314,80 @@ function countCreditsBeforeGallery(blocks = []) {
   return n
 }
 
+function stripToHeadingText(html) {
+  return String(html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+}
+
+// Task 33, section 3 (client feedback): each exhibitions "year" article is
+// really N separate exhibitions -- heading (an <h2>, the exhibition's own
+// name), optional credit, gallery -- concatenated into one WordPress post.
+// A year page needing to scroll (2013 alone holds five) is a direct result
+// of that shape. Splits it into N articles, one per <h2>, each dated by the
+// PARENT's own year (there is no finer real date in the source) and, within
+// a year, kept in the order they already appear on the page -- the only
+// ordering the source data has, and the one the client himself curated when
+// writing it. `moveCreditsAfterGallery`/`defaultGalleryMode`/etc. above have
+// already run on the full block list by the time this is called (extractAll
+// calls it last), and are unaffected by running before a split that only
+// ever slices at block boundaries those transforms already respect.
+//
+// The <h2> block itself stays IN the resulting article's own blocks, not
+// stripped out into `title` alone: ArticleBody.jsx deliberately suppresses
+// the <h1> for the exhibitions category (an exhibition's own year, next to
+// it in the timeline, would otherwise be a duplicate label) and always has
+// -- the in-body <h2> is, and remains, the visible title on the page.
+// `title` itself still needs the plain-text form, for the browser tab title
+// and any future admin list.
+//
+// `slug` is deliberately left blank: extraction has no access to the live
+// Mongo state a real uniqueness check needs, so slug generation happens at
+// load time instead (migrate/load.js), against the database, the same
+// pattern the admin API's own ensureSlug() already uses (reusing
+// api/src/lib/slug.js's uniqueSlug + RESERVED_SLUGS, not reimplementing
+// either).
+//
+// `legacyWpId` is synthesized per split entry -- deterministically (so a
+// re-run of the same source produces the same id, which is what
+// load.js's own legacyWpId-keyed upsert needs to stay idempotent) and
+// negative (so it can never collide with a real, always-positive, WordPress
+// post id -- including another year's own split entries, since every
+// parent post id is itself unique). See the task report for how this
+// interacts with preserveArtistFields across the migration boundary.
+export function splitExhibitionYear(article) {
+  if (article.category !== 'exhibitions') return [article]
+
+  const blocks = article.blocks || []
+  const h2Indexes = blocks.reduce((acc, b, i) => {
+    if (b.type === 'text' && /^\s*<h2>/.test(b.value?.fr || '')) acc.push(i)
+    return acc
+  }, [])
+  // None exist in the real archive (verified against all 25 years), but an
+  // exhibitions post with no <h2> at all is left as a single article,
+  // exactly as it was before this task, rather than silently losing
+  // content a split has no rule for.
+  if (!h2Indexes.length) return [article]
+
+  const year = Number(article.title?.fr) || article.yearStart || null
+
+  return h2Indexes.map((start, index) => {
+    const end = h2Indexes[index + 1] ?? blocks.length
+    const segmentBlocks = blocks.slice(start, end)
+    const heading = segmentBlocks[0]
+    return {
+      ...article,
+      legacyWpId: -(article.legacyWpId * 100 + index),
+      slug: { fr: '', en: '' },
+      title: {
+        fr: stripToHeadingText(heading.value?.fr),
+        en: heading.value?.en ? stripToHeadingText(heading.value.en) : '',
+      },
+      yearStart: year,
+      yearEnd: year,
+      blocks: segmentBlocks,
+    }
+  })
+}
+
 async function metaFor(ids, key) {
   if (!ids.length) return new Map()
   const rows = await query(
@@ -378,7 +452,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
     let creditBlocksMoved = 0
     let slidersDefaulted = 0
 
-    const articles = pairByTrid(postRows).map((pair) => {
+    const articles = pairByTrid(postRows).flatMap((pair) => {
       const base = parseYearLabel(pair.fr.post_title)
       const en = pair.en && !pair.enOnly ? parseYearLabel(pair.en.post_title) : null
       const category = mapCategory(pair.fr.category_name)
@@ -420,7 +494,7 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
       const withGalleryMode = defaultGalleryMode(category, withCover)
       slidersDefaulted += withGalleryMode.filter((b) => b.type === 'gallery' && b.mode === 'slider').length
 
-      return {
+      const built = {
         legacyWpId: pair.fr.ID,
         category,
         status: 'published',
@@ -434,6 +508,11 @@ export async function extractAll({ outDir = new URL('./data/', import.meta.url).
         coverLegacyId,
         blocks: withGalleryMode,
       }
+
+      // Task 33, section 3: fans a single exhibitions "year" post out into
+      // one article per exhibition. A no-op (returns [built]) for every
+      // other category, and for an exhibitions post with no <h2> at all.
+      return splitExhibitionYear(built)
     })
 
     console.log(

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks,
   reduceContactPageBlocks, removeEmptyTextBlocks, removeSubtitleDuplicateBlocks, ensureCoverInGallery,
-  coverLegacyIdFor, moveCreditsAfterGallery, defaultGalleryMode,
+  coverLegacyIdFor, moveCreditsAfterGallery, defaultGalleryMode, splitExhibitionYear,
 } from '../extract.js'
 
 describe('mapCategory', () => {
@@ -443,6 +443,155 @@ describe('moveCreditsAfterGallery', () => {
   it('leaves a block sequence with no credit-before-gallery adjacency completely unchanged', () => {
     const blocks = [heading, gallery]
     expect(moveCreditsAfterGallery(blocks)).toEqual(blocks)
+  })
+})
+
+// Task 33, section 3: a "year" exhibitions article is really N separate
+// exhibitions, each delimited by its own <h2> heading (the exhibition's own
+// name) inside the one WP post's blocks. Splits it into N articles, sorted
+// chronologically (each carries the parent's own year as yearStart/yearEnd)
+// and, within a year, in the order they already appear on the page -- the
+// only ordering the source data has, and the one the client himself
+// curated when writing the page.
+describe('splitExhibitionYear', () => {
+  const baseArticle = (overrides = {}) => ({
+    legacyWpId: 17452,
+    category: 'exhibitions',
+    status: 'published',
+    enOnly: false,
+    slug: { fr: '2013', en: '2013' },
+    title: { fr: '2013', en: '2013' },
+    subtitle: { fr: '', en: '' },
+    yearLabel: { fr: '', en: '' },
+    yearStart: null,
+    yearEnd: null,
+    coverLegacyId: null,
+    blocks: [],
+    ...overrides,
+  })
+
+  it('leaves a non-exhibitions article untouched, as a single-element array', () => {
+    const article = baseArticle({ category: 'works', title: { fr: 'Porte', en: '' } })
+    expect(splitExhibitionYear(article)).toEqual([article])
+  })
+
+  it('leaves an exhibitions article with no <h2> at all untouched (defensive: none exist in the real archive)', () => {
+    const article = baseArticle({ blocks: [{ type: 'text', value: { fr: '<p>x</p>', en: '' } }] })
+    expect(splitExhibitionYear(article)).toEqual([article])
+  })
+
+  it('splits a single heading+gallery entry into one article, titled from the heading, dated by the parent year', () => {
+    const article = baseArticle({
+      blocks: [
+        { type: 'text', value: { fr: '<h2>Musée Untel</h2>', en: '<h2>Musée Untel</h2>' } },
+        { type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 1 } }] },
+      ],
+    })
+    const result = splitExhibitionYear(article)
+    expect(result).toHaveLength(1)
+    expect(result[0].title).toEqual({ fr: 'Musée Untel', en: 'Musée Untel' })
+    expect(result[0].yearStart).toBe(2013)
+    expect(result[0].yearEnd).toBe(2013)
+    // The heading block itself stays IN the body -- ArticleBody suppresses
+    // the <h1> for exhibitions, so the in-body <h2> is the visible title.
+    expect(result[0].blocks).toEqual(article.blocks)
+  })
+
+  it('splits a year with multiple entries into that many articles, one per <h2>', () => {
+    const article = baseArticle({
+      blocks: [
+        { type: 'text', value: { fr: '<h2>Premier lieu</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 1 } }] },
+        { type: 'text', value: { fr: '<h2>Second lieu</h2>', en: '' } },
+        { type: 'text', value: { fr: '<p>© Photographe</p>', en: '' } },
+        { type: 'gallery', columns: 3, items: [{ image: { legacyWpId: 2 } }] },
+      ],
+    })
+    const result = splitExhibitionYear(article)
+    expect(result).toHaveLength(2)
+    expect(result[0].title.fr).toBe('Premier lieu')
+    expect(result[0].blocks).toEqual(article.blocks.slice(0, 2))
+    expect(result[1].title.fr).toBe('Second lieu')
+    expect(result[1].blocks).toEqual(article.blocks.slice(2))
+  })
+
+  it('strips tags and collapses embedded whitespace/newlines from the heading text', () => {
+    const article = baseArticle({
+      blocks: [
+        {
+          type: 'text',
+          value: {
+            fr: '<h2>Cycle l’Eternel détour, séquence printemps 2013,\nPartage de minuit</h2>',
+            en: '',
+          },
+        },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    expect(splitExhibitionYear(article)[0].title.fr).toBe('Cycle l’Eternel détour, séquence printemps 2013, Partage de minuit')
+  })
+
+  it('leaves the English title blank when the English heading is blank', () => {
+    const article = baseArticle({
+      blocks: [
+        { type: 'text', value: { fr: '<h2>Musée Untel</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    expect(splitExhibitionYear(article)[0].title.en).toBe('')
+  })
+
+  it('assigns each split entry a deterministic, negative, unique legacyWpId derived from the parent', () => {
+    const article = baseArticle({
+      legacyWpId: 17452,
+      blocks: [
+        { type: 'text', value: { fr: '<h2>Premier</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+        { type: 'text', value: { fr: '<h2>Second</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    const result = splitExhibitionYear(article)
+    expect(result[0].legacyWpId).toBeLessThan(0)
+    expect(result[1].legacyWpId).toBeLessThan(0)
+    expect(result[0].legacyWpId).not.toBe(result[1].legacyWpId)
+    // Stable across a re-run of the same source: re-splitting the identical
+    // input produces the identical ids, not fresh ones each time.
+    expect(splitExhibitionYear(article).map((a) => a.legacyWpId)).toEqual(result.map((a) => a.legacyWpId))
+  })
+
+  it('never collides with a real (positive) WordPress post id from a different year', () => {
+    const year1 = baseArticle({
+      legacyWpId: 100,
+      blocks: [
+        { type: 'text', value: { fr: '<h2>A</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    const year2 = baseArticle({
+      legacyWpId: 200,
+      blocks: [
+        { type: 'text', value: { fr: '<h2>B</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    const ids = [...splitExhibitionYear(year1), ...splitExhibitionYear(year2)].map((a) => a.legacyWpId)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids.every((id) => id < 0)).toBe(true)
+  })
+
+  // Blank here (never generated during extraction, which has no access to
+  // the live Mongo state a real uniqueness check needs) -- resolved at
+  // load time instead (migrate/load.js), the same place/pattern the admin
+  // API's own ensureSlug() already uses.
+  it('leaves the slug blank, for load.js to resolve uniquely against the live database', () => {
+    const article = baseArticle({
+      blocks: [
+        { type: 'text', value: { fr: '<h2>Musée Untel</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    expect(splitExhibitionYear(article)[0].slug).toEqual({ fr: '', en: '' })
   })
 })
 
