@@ -107,7 +107,7 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
   return (
     <Container as="main" className="page-main">
       <div className={showRail ? 'exhibitions-layout' : undefined}>
-        {showRail && <ExhibitionsTimeline items={items || []} currentYear={currentYear} />}
+        {showRail && <ExhibitionsTimeline items={items || []} currentSlug={currentSlug} currentYear={currentYear} />}
         <div className={showRail ? 'exhibitions-content' : undefined}>
           {/*
             Task 33, section 3: hands the already-fetched exhibitions list

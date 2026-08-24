@@ -17,24 +17,32 @@ export function sortExhibitionsByYear(items = []) {
 }
 
 /**
- * Task 33, section 3: the timeline still shows years, one dot each, even
- * though a year can now hold several exhibitions articles (nine do; 2013
- * holds five) -- multiple exhibitions in one year must not produce
- * duplicate year dots. Collapses an already-sorted (sortExhibitionsByYear)
- * list into one entry per distinct year, keeping the FIRST item's slug as
- * that year's own link target: with a stable sort, same-year items stay
- * adjacent in their original source order, so "first" here means the first
- * exhibition of that year on the original page -- the only ordering the
- * source data has.
+ * Task 35, Part B: the rail shows one dot per EXHIBITION now (all 39), not
+ * one per year -- a year-collapsed rail linked only to that year's FIRST
+ * exhibition, leaving the other 14 of the real archive's 39 exhibitions
+ * (nine years hold more than one; 2013 holds five) unreachable from it. The
+ * YEAR LABEL is still shown once per year, though, not once per dot -- "one
+ * year label with its dots grouped beneath, not the year repeated once per
+ * dot" (task brief) -- so grouping by year is still the right shape, it
+ * just needs to keep every item in the group instead of only the first.
+ *
+ * Collapses an already-sorted (sortExhibitionsByYear) list into one entry
+ * per distinct year, each carrying ALL of that year's exhibitions in their
+ * original relative order (stable sort keeps same-year items adjacent in
+ * the order the source page itself used -- the only ordering that data
+ * has). ExhibitionsTimeline.jsx renders one label per group and one dot
+ * (its own link, its own accessible name) per item inside it.
  */
 export function groupExhibitionsByYear(items = []) {
   const groups = []
-  let last = null
+  let current = null
   for (const item of items) {
     const year = item.yearStart
-    if (last && last.year === year) continue
-    last = { year, slug: item.slug }
-    groups.push(last)
+    if (!current || current.year !== year) {
+      current = { year, items: [] }
+      groups.push(current)
+    }
+    current.items.push(item)
   }
   return groups
 }

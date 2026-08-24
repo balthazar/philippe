@@ -45,14 +45,15 @@ describe('sortExhibitionsByYear', () => {
   })
 })
 
-// Task 33, section 3: the timeline still shows years, one dot per year, even
-// though there can now be several exhibitions articles per year. Grouping
-// keeps the FIRST item (by the already-sorted, stable order above) as the
-// group's own link target -- "first" here means the first exhibition of
-// that year in the original page's own order, the only ordering the source
-// data has.
+// Task 35, Part B: the rail moved from one dot per YEAR (collapsing same-year
+// exhibitions down to a single link, to that year's first exhibition only --
+// the other 14 of the 39 real exhibitions were unreachable from the rail)
+// to one dot per EXHIBITION, all 39, each linking to its own article. The
+// YEAR label is still shown once per year, not once per dot -- so grouping
+// is still year-based, but a group now keeps every item in that year (in
+// their already-sorted, stable, original-page order), not just the first.
 describe('groupExhibitionsByYear', () => {
-  it('collapses multiple same-year items into one group', () => {
+  it('groups multiple same-year items together, keeping every one of them', () => {
     const items = sortExhibitionsByYear([
       { slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
       { slug: 'second-lieu', title: 'Second lieu', yearStart: 2013 },
@@ -60,8 +61,11 @@ describe('groupExhibitionsByYear', () => {
     ])
     const groups = groupExhibitionsByYear(items)
     expect(groups).toEqual([
-      { year: 2013, slug: 'premier-lieu' },
-      { year: 2012, slug: 'expo-2012' },
+      { year: 2013, items: [
+        { slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
+        { slug: 'second-lieu', title: 'Second lieu', yearStart: 2013 },
+      ] },
+      { year: 2012, items: [{ slug: 'expo-2012', title: 'Expo 2012', yearStart: 2012 }] },
     ])
   })
 
@@ -71,9 +75,17 @@ describe('groupExhibitionsByYear', () => {
       { slug: 'b', title: 'B', yearStart: 2023 },
     ])
     expect(groupExhibitionsByYear(items)).toEqual([
-      { year: 2024, slug: 'a' },
-      { year: 2023, slug: 'b' },
+      { year: 2024, items: [{ slug: 'a', title: 'A', yearStart: 2024 }] },
+      { year: 2023, items: [{ slug: 'b', title: 'B', yearStart: 2023 }] },
     ])
+  })
+
+  it('keeps a group\'s items in their original relative order, not re-sorted', () => {
+    const items = sortExhibitionsByYear([
+      { slug: 'second-lieu', title: 'Second lieu', yearStart: 2013 },
+      { slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
+    ])
+    expect(groupExhibitionsByYear(items)[0].items.map((i) => i.slug)).toEqual(['second-lieu', 'premier-lieu'])
   })
 
   it('defaults to an empty array when given none', () => {
