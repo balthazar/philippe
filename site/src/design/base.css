@@ -985,6 +985,11 @@ picture {
   cursor: zoom-in;
 }
 
+/* Task 35, Part A rewrite: shares useCrossfade.js (and this exact two-rule
+   pattern) with .slideshow-image in this same file -- see that rule's own
+   comment for why one persistent element plus a single class toggle is
+   enough, with no z-index/stacking rule needed any more (there is only ever
+   one image element here now). */
 .gallery-slider-image {
   position: absolute;
   inset: 0;
@@ -995,33 +1000,17 @@ picture {
   height: auto;
   object-fit: contain;
   opacity: 1;
+  transition: opacity var(--fade-in-ms) ease-out;
 }
 
-.gallery-slider-image--outgoing {
-  z-index: 1;
+.gallery-slider-image.is-hidden {
+  opacity: 0;
   transition: opacity var(--fade-out-ms) ease-in;
 }
 
-.gallery-slider-image--outgoing.is-leaving {
-  opacity: 0;
-}
-
-.gallery-slider-image--entering {
-  opacity: 0;
-  transition: opacity var(--fade-in-ms) ease-out var(--fade-out-ms);
-}
-
-.gallery-slider-image--entering.is-entered {
-  opacity: 1;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .gallery-slider-image--outgoing,
-  .gallery-slider-image--entering {
+  .gallery-slider-image {
     transition: none;
-  }
-  .gallery-slider-image--entering {
-    opacity: 1;
   }
 }
 

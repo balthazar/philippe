@@ -17,8 +17,8 @@ const fourItems = [
   { image: { alt: 'quatre', variants: { large: { path: 'd.webp', width: 2400, height: 1600 } } } },
 ]
 
-// Mirrors GallerySlider.jsx's own FADE_OUT_MS + FADE_IN_MS (not exported).
-const TRANSITION_MS = 600
+// Mirrors GallerySlider.jsx's own FADE_OUT_MS (not exported).
+const FADE_OUT_MS = 300
 
 const mockMotion = (reduced) =>
   vi.stubGlobal('matchMedia', (query) => ({
@@ -29,16 +29,7 @@ const mockMotion = (reduced) =>
 beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); mockMotion(false) })
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
-// Task 32, item 4: same structural guard as Slideshow.test.jsx -- see its
-// comment. GallerySlider duplicates Slideshow's fade mechanism on purpose
-// (file-level comment in GallerySlider.jsx), so it carries the identical
-// fault and the identical fix, verified here the same way.
-const mockRAF = () => {
-  let queue = []
-  vi.stubGlobal('requestAnimationFrame', vi.fn((cb) => { queue.push(cb); return queue.length }))
-  vi.stubGlobal('cancelAnimationFrame', vi.fn())
-  return { flushFrame: () => { const cbs = queue; queue = []; cbs.forEach((cb) => cb()) } }
-}
+const image = () => document.querySelector('.gallery-slider-image')
 
 describe('GallerySlider', () => {
   it('renders nothing for an empty item list', () => {
@@ -46,9 +37,17 @@ describe('GallerySlider', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('shows the first image initially', () => {
+  it('shows the first image initially, visible, no fade in progress', () => {
     render(<GallerySlider items={items} interval={5000} />)
     expect(screen.getByAltText('porte')).toBeInTheDocument()
+    expect(image()).not.toHaveClass('is-hidden')
+  })
+
+  it('is always exactly one image element, at rest or mid-fade', () => {
+    render(<GallerySlider items={items} interval={5000} />)
+    expect(screen.getAllByRole('img')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /suivant/i }))
+    expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
   it('shows no prev/next controls with only one image', () => {
@@ -56,27 +55,34 @@ describe('GallerySlider', () => {
     expect(screen.queryByRole('button', { name: /suivant|précédent/i })).not.toBeInTheDocument()
   })
 
-  it('advances after the interval', () => {
+  it('advances after the interval, fading out first then swapping', () => {
     render(<GallerySlider items={items} interval={5000} />)
     act(() => { vi.advanceTimersByTime(5000) })
+    expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    expect(screen.getByAltText('porte')).toBeInTheDocument()
+    expect(image()).toHaveClass('is-hidden')
+
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
+    expect(image()).not.toHaveClass('is-hidden')
   })
 
   it('advances on next click and restarts the countdown (does not double-advance at the original interval mark)', () => {
     render(<GallerySlider items={items} interval={5000} />)
     act(() => { vi.advanceTimersByTime(3000) })
     fireEvent.click(screen.getByRole('button', { name: /suivant/i }))
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
 
     // t=5000: the pre-empted timer would land back on 'porte' if not cleared.
-    act(() => { vi.advanceTimersByTime(2000) })
-    expect(screen.queryByAltText('porte')).not.toBeInTheDocument()
-    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+    act(() => { vi.advanceTimersByTime(2000 - FADE_OUT_MS) })
+    expect(screen.getByText('2 / 2')).toBeInTheDocument()
   })
 
   it('navigates with the previous button and wraps around', () => {
     render(<GallerySlider items={items} interval={5000} />)
     fireEvent.click(screen.getByRole('button', { name: /précédent/i }))
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
   })
 
@@ -96,6 +102,7 @@ describe('GallerySlider', () => {
     // Move focus into the slider itself, then the same key does advance it.
     act(() => { screen.getByRole('button', { name: 'porte' }).focus() })
     await user.keyboard('{ArrowRight}')
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
   })
 
@@ -106,14 +113,27 @@ describe('GallerySlider', () => {
     expect(screen.getByAltText('porte')).toBeInTheDocument()
   })
 
+  it('swaps instantly with no fade class under reduced motion', async () => {
+    mockMotion(true)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    render(<GallerySlider items={items} interval={5000} />)
+    act(() => { screen.getByRole('button', { name: 'porte' }).focus() })
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+    expect(image()).not.toHaveClass('is-hidden')
+    expect(screen.getAllByRole('img')).toHaveLength(1)
+  })
+
   it('pauses autoplay while the pointer is over the slider', () => {
     const { container } = render(<GallerySlider items={items} interval={5000} />)
     fireEvent.mouseEnter(container.querySelector('.gallery-slider'))
     act(() => { vi.advanceTimersByTime(5000) })
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('porte')).toBeInTheDocument()
 
     fireEvent.mouseLeave(container.querySelector('.gallery-slider'))
     act(() => { vi.advanceTimersByTime(5000) })
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
   })
 
@@ -124,61 +144,30 @@ describe('GallerySlider', () => {
     expect(onActivate).toHaveBeenCalledWith(0)
   })
 
-  it('waits for two animation frames before flipping the fade to its final state', () => {
-    const { flushFrame } = mockRAF()
-    render(<GallerySlider items={items} interval={5000} />)
-    fireEvent.click(screen.getByRole('button', { name: /suivant/i }))
-
-    const outgoing = () => document.querySelector('.gallery-slider-image--outgoing')
-    expect(outgoing()).not.toHaveClass('is-leaving')
-
-    act(() => { flushFrame() })
-    expect(outgoing()).not.toHaveClass('is-leaving')
-
-    act(() => { flushFrame() })
-    expect(outgoing()).toHaveClass('is-leaving')
-  })
-
-  it('renders both the outgoing and incoming images mid-transition, and only the incoming one once it completes', () => {
-    render(<GallerySlider items={items} interval={5000} />)
-    act(() => { vi.advanceTimersByTime(5000) })
-    expect(screen.getByAltText('porte')).toBeInTheDocument()
-    expect(screen.getByAltText('chassis')).toBeInTheDocument()
-
-    act(() => { vi.advanceTimersByTime(600) })
-    expect(screen.queryByAltText('porte')).not.toBeInTheDocument()
-    expect(screen.getByAltText('chassis')).toBeInTheDocument()
-  })
-
-  // Task 33, section 4: same re-entrancy fix as Slideshow.jsx (this file
-  // deliberately duplicates rather than shares its fade mechanism -- see
-  // the file-level comment in GallerySlider.jsx), verified the same way.
-  describe('re-entrancy: clicking faster than the transition (Task 33, section 4)', () => {
+  // Task 35, Part A rewrite: re-entrancy is a property of the shared
+  // useCrossfade hook (see its own unit tests, and Slideshow.test.jsx's
+  // identical wiring-level tests); GallerySlider and Slideshow now share
+  // that one implementation instead of each carrying their own copy of the
+  // same fade mechanism.
+  describe('re-entrancy: clicking faster than the transition', () => {
     const next = () => fireEvent.click(screen.getByRole('button', { name: /suivant/i }))
     const prev = () => fireEvent.click(screen.getByRole('button', { name: /pr[ée]c[ée]dent/i }))
 
-    // Task 34, section 2: same fault as Slideshow.jsx's identical guard --
-    // see that file's test for the full account. GallerySlider duplicates
-    // the mechanism on purpose, so it carries the identical bug and fix.
     it('keeps fading instead of snapping when a click sequence returns to the settled item mid-transition', () => {
       render(<GallerySlider items={fourItems} interval={5000} />)
-      next() // Un -> Deux: fresh transition, outgoing becomes "un"
+      next() // Un -> Deux
       act(() => { vi.advanceTimersByTime(100) })
+      expect(image()).toHaveClass('is-hidden')
 
       prev() // Deux -> Un: net target is back at the settled anchor while
              // "un" is still mid-fade-out.
       act(() => { vi.advanceTimersByTime(50) })
+      expect(screen.getByAltText('un')).toBeInTheDocument()
+      expect(image()).toHaveClass('is-hidden')
 
-      expect(screen.getAllByAltText('un')).toHaveLength(2)
-      const outgoingNode = document.querySelector('.gallery-slider-image--outgoing')
-      expect(outgoingNode).not.toBeNull()
-      expect(outgoingNode).toHaveAttribute('alt', 'un')
-      const incoming = screen.getAllByAltText('un').find((n) => n !== outgoingNode)
-      expect(incoming.className).toContain('gallery-slider-image--entering')
-      expect(incoming.className).not.toContain('is-entered')
-
-      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
-      expect(screen.getAllByAltText('un')).toHaveLength(1)
+      act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
+      expect(screen.getByAltText('un')).toBeInTheDocument()
+      expect(image()).not.toHaveClass('is-hidden')
     })
 
     it('lands on the item actually navigated to, not an intermediate one, after a rapid burst', () => {
@@ -189,39 +178,13 @@ describe('GallerySlider', () => {
       act(() => { vi.advanceTimersByTime(100) })
       next() // Trois -> Quatre: interrupts again
 
-      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.getByText('4 / 4')).toBeInTheDocument()
+
+      act(() => { vi.advanceTimersByTime(100) })
       expect(screen.queryByAltText('un')).not.toBeInTheDocument()
       expect(screen.queryByAltText('deux')).not.toBeInTheDocument()
       expect(screen.queryByAltText('trois')).not.toBeInTheDocument()
       expect(screen.getByAltText('quatre')).toBeInTheDocument()
-    })
-
-    it('keeps the same item as the outgoing (fading-out) node throughout a rapid burst', () => {
-      render(<GallerySlider items={fourItems} interval={5000} />)
-      next() // Un -> Deux
-      act(() => { vi.advanceTimersByTime(50) })
-      expect(screen.getByAltText('un').className).toContain('gallery-slider-image--outgoing')
-
-      next() // Deux -> Trois: interrupts
-      act(() => { vi.advanceTimersByTime(50) })
-      expect(screen.getByAltText('un').className).toContain('gallery-slider-image--outgoing')
-      expect(screen.queryByAltText('deux')).not.toBeInTheDocument()
-
-      next() // Trois -> Quatre: interrupts again
-      act(() => { vi.advanceTimersByTime(50) })
-      expect(screen.getByAltText('un').className).toContain('gallery-slider-image--outgoing')
-      expect(screen.queryByAltText('trois')).not.toBeInTheDocument()
-    })
-
-    it('gives every click its own fresh entering state, never pre-entered on mount', () => {
-      render(<GallerySlider items={fourItems} interval={5000} />)
-      next() // Un -> Deux
-      act(() => { vi.advanceTimersByTime(400) }) // past the outgoing fade, mid the incoming one
-      next() // Deux -> Trois: interrupts while `leaving` is already true
-
-      const incoming = screen.getByAltText('trois')
-      expect(incoming.className).toContain('gallery-slider-image--entering')
-      expect(incoming.className).not.toContain('is-entered')
     })
 
     it('a subsequent automatic advance still transitions after a rapid burst settles', () => {
@@ -230,17 +193,18 @@ describe('GallerySlider', () => {
       act(() => { vi.advanceTimersByTime(100) })
       next()
       act(() => { vi.advanceTimersByTime(100) })
-      next() // lands on "quatre"
-      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      next() // net target: "quatre"
+      act(() => { vi.advanceTimersByTime(100) })
       expect(screen.getByAltText('quatre')).toBeInTheDocument()
 
       act(() => { vi.advanceTimersByTime(5000) })
+      expect(screen.getByText('1 / 4')).toBeInTheDocument()
       expect(screen.getByAltText('quatre')).toBeInTheDocument()
-      expect(screen.getByAltText('un')).toBeInTheDocument()
+      expect(image()).toHaveClass('is-hidden')
 
-      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
-      expect(screen.queryByAltText('quatre')).not.toBeInTheDocument()
+      act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
       expect(screen.getByAltText('un')).toBeInTheDocument()
+      expect(image()).not.toHaveClass('is-hidden')
     })
   })
 })

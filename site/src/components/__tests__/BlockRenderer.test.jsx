@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BlockRenderer } from '../BlockRenderer.jsx'
 
@@ -131,7 +131,10 @@ describe('BlockRenderer', () => {
       expect(screen.getByRole('button', { name: 'Suivant' })).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Suivant' }))
       const currentButton = screen.getByRole('button', { name: 'une porte' })
-      expect(within(currentButton).getByRole('img')).toHaveAttribute('src', '/media/visible-2.webp')
+      // GallerySlider fades through white (useCrossfade.js): the displayed
+      // image's own src only swaps once the fade-out half completes, so this
+      // waits for it rather than asserting on the still-mid-transition src.
+      await waitFor(() => expect(within(currentButton).getByRole('img')).toHaveAttribute('src', '/media/visible-2.webp'))
 
       await userEvent.click(currentButton)
       const dialog = screen.getByRole('dialog')
