@@ -515,6 +515,29 @@ describe('splitExhibitionYear', () => {
     expect(result[1].blocks).toEqual(article.blocks.slice(2))
   })
 
+  // The public API's article list sorts by `position` first (see
+  // api/src/routes/public.js), ahead of yearStart/createdAt -- without a
+  // real position here, two same-year exhibitions would fall back to
+  // createdAt, which (since load.js inserts them in this same array order,
+  // each getting a LATER timestamp than the last) sorts them in REVERSE of
+  // the order they actually appear on the original page. This is what
+  // makes "the year's first exhibition" mean the first one in source
+  // order, not an accident of insertion order.
+  it('numbers each split entry by its position among the year\'s own siblings, in source order', () => {
+    const article = baseArticle({
+      blocks: [
+        { type: 'text', value: { fr: '<h2>Premier lieu</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+        { type: 'text', value: { fr: '<h2>Second lieu</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+        { type: 'text', value: { fr: '<h2>Troisieme lieu</h2>', en: '' } },
+        { type: 'gallery', columns: 3, items: [] },
+      ],
+    })
+    const result = splitExhibitionYear(article)
+    expect(result.map((a) => a.position)).toEqual([0, 1, 2])
+  })
+
   it('strips tags and collapses embedded whitespace/newlines from the heading text', () => {
     const article = baseArticle({
       blocks: [

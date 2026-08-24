@@ -383,6 +383,15 @@ export function splitExhibitionYear(article) {
       },
       yearStart: year,
       yearEnd: year,
+      // The exhibition's own position among its year's siblings, in source
+      // order -- the public API's article list sorts by `position` FIRST
+      // (see api/src/routes/public.js), ahead of yearStart/createdAt, so
+      // this is what makes "the year's first exhibition" (the timeline
+      // dot's link target, the legacy year page's own top link, the
+      // /expositions index's "current" pick) actually mean the first one
+      // in the original page's own order -- not an accident of insertion
+      // order, which createdAt would otherwise fall back to.
+      position: index,
       blocks: segmentBlocks,
     }
   })

@@ -145,6 +145,16 @@ export function preserveArtistFields(existing, fresh) {
     cover: existing.cover ?? null,
     featured: existing.featured ?? false,
     blocks,
+    // Task 33, section 3: `position` is only ever present on `fresh` for a
+    // split exhibition (source-order index among its year's siblings -- see
+    // extract.js's splitExhibitionYear); every other category never sets it
+    // here at all, and this is a no-op for them (the condition is false, so
+    // the spread above is untouched, exactly as before this task). Preserves
+    // an artist-chosen reorder (via the admin) the same way status/cover/
+    // featured are preserved above: `existing.position` wins whenever it's
+    // already set, falling back to the freshly-computed source order only
+    // when there is nothing yet to preserve (a genuinely new document).
+    ...(fresh.position !== undefined ? { position: existing.position ?? fresh.position } : {}),
   }
 }
 
@@ -386,6 +396,13 @@ export async function loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri, dbNam
         featured: false,
         blocks: dropRedundantHiddenDuplicates(resolveBlockImages(article.blocks, byLegacyId)),
         legacyWpId: article.legacyWpId,
+        // Task 33, section 3: only a split exhibition carries its own
+        // `position` out of extract.js (source-order index among its
+        // year's siblings) -- every other category's position is left
+        // untouched here, exactly as before this task (see
+        // preserveArtistFields' own comment for what that means on a
+        // re-run).
+        ...(article.category === 'exhibitions' ? { position: article.position ?? 0 } : {}),
       }
       await Article.findOneAndUpdate(
         { legacyWpId: article.legacyWpId },

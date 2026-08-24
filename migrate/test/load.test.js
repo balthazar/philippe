@@ -762,6 +762,86 @@ describe('loadAll', () => {
     }, 60_000)
   })
 
+  // Task 33, section 3: the public API's article list sorts by `position`
+  // first (see api/src/routes/public.js), ahead of yearStart/createdAt.
+  // splitExhibitionYear sets each split entry's own `position` to its index
+  // among its year's siblings, in the original page's own source order --
+  // this is what makes "the year's first exhibition" (the timeline dot's
+  // link target, the legacy year page's own top link) actually mean the
+  // first one on the original page, not an accident of insertion order
+  // (createdAt, the next tiebreak, is descending by insertion time -- the
+  // wrong direction for source order).
+  describe('exhibitions position (Task 33, section 3)', () => {
+    const splitExhibition = (legacyWpId, title, position, yearStart = 2013) => ({
+      legacyWpId,
+      category: 'exhibitions',
+      status: 'published',
+      slug: { fr: '', en: '' },
+      title: { fr: title, en: '' },
+      yearLabel: { fr: '', en: '' },
+      yearStart,
+      yearEnd: yearStart,
+      coverLegacyId: null,
+      position,
+      blocks: [],
+    })
+
+    it('writes each split exhibition\'s own position, not the schema default for every one', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        splitExhibition(-201, 'Premier lieu', 0),
+        splitExhibition(-202, 'Second lieu', 1),
+        splitExhibition(-203, 'Troisieme lieu', 2),
+      ]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+
+      const dbName = `test-${counter++}`
+      await loadAll({ dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName })
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        expect((await Article.findOne({ legacyWpId: -201 })).position).toBe(0)
+        expect((await Article.findOne({ legacyWpId: -202 })).position).toBe(1)
+        expect((await Article.findOne({ legacyWpId: -203 })).position).toBe(2)
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+
+    it('preserves an artist-chosen position across a re-run, the same way status/cover/featured are preserved', async () => {
+      await writeFile(join(dataDir, 'media.json'), JSON.stringify([]))
+      await writeFile(join(dataDir, 'articles.json'), JSON.stringify([
+        splitExhibition(-301, 'Premier lieu', 0),
+        splitExhibition(-302, 'Second lieu', 1),
+      ]))
+      await writeFile(join(dataDir, 'pages.json'), JSON.stringify([]))
+
+      const dbName = `test-${counter++}`
+      const opts = { dataDir, uploadsRoot, mediaRoot, mongoUri: mongod.getUri(), dbName }
+      await loadAll(opts)
+
+      // The artist reorders these two in the admin (a direct Mongo write
+      // here stands in for the admin's own PATCH /articles/:id/reorder).
+      await connect(mongod.getUri(), dbName)
+      try {
+        await Article.updateOne({ legacyWpId: -301 }, { position: 5 })
+      } finally {
+        await disconnect()
+      }
+
+      // Re-run: the source data is unchanged (still position 0/1), but the
+      // artist's own later choice must survive this second load.
+      await loadAll(opts)
+
+      await connect(mongod.getUri(), dbName)
+      try {
+        expect((await Article.findOne({ legacyWpId: -301 })).position).toBe(5)
+      } finally {
+        await disconnect()
+      }
+    }, 60_000)
+  })
+
   // Task 33, section 3: the split changes which documents exist. A pre-split
   // year-level exhibitions document (e.g. slug "2013", a real, positive
   // WordPress post id) has no counterpart at all in a fresh extraction any
