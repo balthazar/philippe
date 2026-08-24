@@ -110,7 +110,15 @@ export function GallerySlider({ items = [], onActivate, interval = 5000 }) {
     const prevSettled = settledRef.current
     const wasAlreadyTransitioning = outgoingTimeoutRef.current != null
 
-    if (!prevSettled || !current || prevSettled === current || reduced) {
+    // Task 34, section 2: identical fault and fix as Slideshow.jsx's own
+    // guard -- see that file's comment for the full account. Short version:
+    // `prevSettled === current` alone is only safe to treat as "nothing to
+    // animate" when nothing was already mid-flight; alternating direction
+    // (e.g. next then prev inside the 600ms window) can bring the NET
+    // target back to the settled anchor while its fade-out is still live,
+    // and bailing then yanked the still-fading node out instead of letting
+    // it keep fading -- an instant snap.
+    if (!prevSettled || !current || reduced || (prevSettled === current && !wasAlreadyTransitioning)) {
       if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
       if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
       if (enteringFrameRef.current) { cancelAnimationFrame(enteringFrameRef.current); enteringFrameRef.current = null }

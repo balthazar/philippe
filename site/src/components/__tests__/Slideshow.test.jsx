@@ -268,6 +268,43 @@ describe('Slideshow', () => {
   // separately (see the task report).
   describe('re-entrancy: clicking faster than the transition (Task 33, section 4)', () => {
     const next = () => fireEvent.click(screen.getByRole('button', { name: /suivant|next/i }))
+    const prev = () => fireEvent.click(screen.getByRole('button', { name: /pr[ée]c[ée]dent|previous/i }))
+
+    // Task 34, section 2: the fix above still leaves one interrupting case
+    // broken -- alternating direction so the click sequence's NET target
+    // lands back on the already-settled slide while the outgoing fade is
+    // still in flight (e.g. next, then prev, inside the 600ms window). The
+    // guard above treats `prevSettled === currentSlide` as "nothing to
+    // animate" unconditionally, which is right at rest but wrong mid-flight:
+    // it yanks out the live fading-out node and remounts the settled slide
+    // with no transition classes at all -- an instant snap, not a fade.
+    it('keeps fading instead of snapping when a click sequence returns to the settled slide mid-transition', () => {
+      renderShow({ slides: fourSlides })
+      next() // Un -> Deux: fresh transition, outgoing becomes "un"
+      act(() => { vi.advanceTimersByTime(100) })
+
+      prev() // Deux -> Un: net target is back at the settled anchor while
+             // "un" is still mid-fade-out.
+      act(() => { vi.advanceTimersByTime(50) })
+
+      // Both halves of the fade-through-white must still be live: the
+      // settled "un" continuing its fade-out (outgoing), and a freshly
+      // (re)mounted "un" fading back in (current/entering) -- never a
+      // single, already-settled "un" with no transition classes, which is
+      // what an instant snap looks like.
+      expect(screen.getAllByAltText('un')).toHaveLength(2)
+      const outgoingNode = document.querySelector('.slideshow-image--outgoing')
+      expect(outgoingNode).not.toBeNull()
+      expect(outgoingNode).toHaveAttribute('alt', 'un')
+      const incoming = screen.getAllByAltText('un').find((n) => n !== outgoingNode)
+      expect(incoming.className).toContain('slideshow-image--entering')
+      expect(incoming.className).not.toContain('is-entered')
+
+      // It does eventually settle back on a single "un", nothing stuck
+      // mid-fade forever.
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.getAllByAltText('un')).toHaveLength(1)
+    })
 
     it('lands on the slide actually navigated to, not an intermediate one, after a rapid burst', () => {
       renderShow({ slides: fourSlides })

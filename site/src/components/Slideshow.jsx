@@ -125,7 +125,20 @@ export function Slideshow({ slides = [], interval = 5000 }) {
     const prevSettled = settledSlideRef.current
     const wasAlreadyTransitioning = outgoingTimeoutRef.current != null
 
-    if (!prevSettled || !currentSlide || prevSettled === currentSlide || reduced) {
+    // Task 34, section 2: `prevSettled === currentSlide` alone used to bail
+    // out here unconditionally, on the assumption that landing back on the
+    // settled slide always means "nothing to animate". True at rest, but
+    // not when a transition is already in flight: alternating direction
+    // (e.g. next then prev, inside the 600ms window) can bring the NET
+    // target back to the settled anchor while its own fade-out is still
+    // live. Bailing there yanked the still-fading outgoing node out from
+    // under itself and remounted the settled slide with no transition
+    // classes at all -- an instant snap, the client's "inconsistent"
+    // report. `wasAlreadyTransitioning` distinguishes the two: only a
+    // genuine rest state (nothing was mid-flight) short-circuits here now;
+    // an in-flight reversal falls through to the normal interrupting-click
+    // path below, which keeps the fade going rather than aborting it.
+    if (!prevSettled || !currentSlide || reduced || (prevSettled === currentSlide && !wasAlreadyTransitioning)) {
       if (outgoingTimeoutRef.current) { clearTimeout(outgoingTimeoutRef.current); outgoingTimeoutRef.current = null }
       if (leavingFrameRef.current) { cancelAnimationFrame(leavingFrameRef.current); leavingFrameRef.current = null }
       if (enteringFrameRef.current) { cancelAnimationFrame(enteringFrameRef.current); enteringFrameRef.current = null }

@@ -155,6 +155,31 @@ describe('GallerySlider', () => {
   // the file-level comment in GallerySlider.jsx), verified the same way.
   describe('re-entrancy: clicking faster than the transition (Task 33, section 4)', () => {
     const next = () => fireEvent.click(screen.getByRole('button', { name: /suivant/i }))
+    const prev = () => fireEvent.click(screen.getByRole('button', { name: /pr[ée]c[ée]dent/i }))
+
+    // Task 34, section 2: same fault as Slideshow.jsx's identical guard --
+    // see that file's test for the full account. GallerySlider duplicates
+    // the mechanism on purpose, so it carries the identical bug and fix.
+    it('keeps fading instead of snapping when a click sequence returns to the settled item mid-transition', () => {
+      render(<GallerySlider items={fourItems} interval={5000} />)
+      next() // Un -> Deux: fresh transition, outgoing becomes "un"
+      act(() => { vi.advanceTimersByTime(100) })
+
+      prev() // Deux -> Un: net target is back at the settled anchor while
+             // "un" is still mid-fade-out.
+      act(() => { vi.advanceTimersByTime(50) })
+
+      expect(screen.getAllByAltText('un')).toHaveLength(2)
+      const outgoingNode = document.querySelector('.gallery-slider-image--outgoing')
+      expect(outgoingNode).not.toBeNull()
+      expect(outgoingNode).toHaveAttribute('alt', 'un')
+      const incoming = screen.getAllByAltText('un').find((n) => n !== outgoingNode)
+      expect(incoming.className).toContain('gallery-slider-image--entering')
+      expect(incoming.className).not.toContain('is-entered')
+
+      act(() => { vi.advanceTimersByTime(TRANSITION_MS) })
+      expect(screen.getAllByAltText('un')).toHaveLength(1)
+    })
 
     it('lands on the item actually navigated to, not an intermediate one, after a rapid burst', () => {
       render(<GallerySlider items={fourItems} interval={5000} />)
