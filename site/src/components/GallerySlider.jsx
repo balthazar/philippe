@@ -108,9 +108,22 @@ export function GallerySlider({ items = [], onActivate, interval = 5000 }) {
     // Let the outgoing image paint once at full opacity before flipping the
     // class that transitions it to 0, so the browser actually animates the
     // change instead of jumping straight to it.
+    //
+    // Task 32, item 4: same fix as Slideshow.jsx, applied independently here
+    // (this file deliberately does not share code with Slideshow -- see the
+    // file-level comment above). A single rAF loses the race against a
+    // click handler's own frame -- the outgoing/incoming images' final
+    // classes can commit before the freshly-mounted "before" state ever
+    // paints, so there is nothing for the CSS transition to animate from,
+    // and the fade collapses into an instant swap. A timer-driven update
+    // (autoplay) doesn't hit this because it runs as its own task, after
+    // the previous frame already painted. Nesting a second rAF guarantees a
+    // real paint lands between the two commits either way.
     leavingFrameRef.current = requestAnimationFrame(() => {
-      setLeaving(true)
-      leavingFrameRef.current = null
+      leavingFrameRef.current = requestAnimationFrame(() => {
+        setLeaving(true)
+        leavingFrameRef.current = null
+      })
     })
     outgoingTimeoutRef.current = setTimeout(() => {
       setOutgoing(null)

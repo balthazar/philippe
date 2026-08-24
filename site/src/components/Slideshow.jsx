@@ -97,9 +97,29 @@ export function Slideshow({ slides = [], interval = 5000 }) {
     // Let the outgoing image paint once at full opacity before flipping the
     // class that transitions it to 0, so the browser actually animates the
     // change instead of jumping straight to it.
+    //
+    // Task 32, item 4: a SINGLE rAF here lost this race when the update
+    // originated in a click handler (the arrows) rather than a timer
+    // (autoplay). A click handler runs early enough in the browser's frame
+    // that a rAF scheduled from inside it can still fire before that same
+    // frame paints -- so the "setOutgoing/setEntering" commit above was
+    // never actually painted before `leaving` (and therefore `is-entered`,
+    // `is-leaving`) flipped, and the outgoing/incoming images went straight
+    // from freshly-mounted to their final state with nothing painted in
+    // between for the transition to start from: an instant swap, no fade. A
+    // timer callback runs as its own task, effectively always after the
+    // previous frame's paint, so the same single rAF reliably landed in the
+    // NEXT frame there and the fade worked. Nesting a second rAF forces a
+    // real paint to land between the two commits regardless of which kind
+    // of event triggered the update. Confirmed by reproducing the instant
+    // swap on a click with a single rAF and watching it disappear with the
+    // nested one, in a real browser -- jsdom has no paint pipeline, so it
+    // cannot see this race at all (see Slideshow.test.jsx).
     leavingFrameRef.current = requestAnimationFrame(() => {
-      setLeaving(true)
-      leavingFrameRef.current = null
+      leavingFrameRef.current = requestAnimationFrame(() => {
+        setLeaving(true)
+        leavingFrameRef.current = null
+      })
     })
     outgoingTimeoutRef.current = setTimeout(() => {
       setOutgoing(null)

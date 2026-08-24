@@ -31,6 +31,20 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 const renderShow = (props = {}) =>
   render(<MemoryRouter><LangProvider><Slideshow slides={slides} interval={5000} {...props} /></LangProvider></MemoryRouter>)
 
+// Task 32, item 4: a real browser paint cannot be observed in jsdom at all
+// (no layout, no paint pipeline -- see Slideshow.jsx's own comment on the
+// fix), but the STRUCTURAL fact that the fade waits for two animation
+// frames before flipping its final class, rather than one, is exactly what
+// makes that fix work and is fully deterministic to assert. This installs a
+// manually-driven requestAnimationFrame in place of fake-timers' own
+// (time-based) polyfill so each frame can be flushed one at a time.
+const mockRAF = () => {
+  let queue = []
+  vi.stubGlobal('requestAnimationFrame', vi.fn((cb) => { queue.push(cb); return queue.length }))
+  vi.stubGlobal('cancelAnimationFrame', vi.fn())
+  return { flushFrame: () => { const cbs = queue; queue = []; cbs.forEach((cb) => cb()) } }
+}
+
 describe('Slideshow', () => {
   it('shows the first slide initially', () => {
     renderShow()
@@ -89,6 +103,33 @@ describe('Slideshow', () => {
     act(() => { vi.advanceTimersByTime(600) })
     expect(screen.queryByAltText('porte')).not.toBeInTheDocument()
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  // The bug this guards: a single requestAnimationFrame loses the race when
+  // the update comes from a click handler, because a rAF scheduled from
+  // inside a click can still fire before that same frame paints -- so the
+  // freshly-mounted images' final classes committed with nothing painted in
+  // between for the CSS transition to animate from, and arrow navigation
+  // swapped instantly with no visible fade. Waiting for a SECOND frame is
+  // what guarantees a real paint lands in between regardless of what
+  // triggered the update.
+  it('waits for two animation frames before flipping the fade to its final state', () => {
+    const { flushFrame } = mockRAF()
+    renderShow()
+    fireEvent.click(screen.getByRole('button', { name: /suivant|next/i }))
+
+    const outgoing = () => document.querySelector('.slideshow-image--outgoing')
+    expect(outgoing()).not.toHaveClass('is-leaving')
+
+    act(() => { flushFrame() })
+    // After exactly one frame: still not flipped. Flipping here is the bug
+    // -- it is indistinguishable from "already painted" in a browser that
+    // hasn't actually painted yet.
+    expect(outgoing()).not.toHaveClass('is-leaving')
+
+    act(() => { flushFrame() })
+    // Only the second frame drives the actual class flip.
+    expect(outgoing()).toHaveClass('is-leaving')
   })
 
   it('swaps instantly with no double-rendered slide under reduced motion', async () => {

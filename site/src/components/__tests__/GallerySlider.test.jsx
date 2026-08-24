@@ -17,6 +17,17 @@ const mockMotion = (reduced) =>
 beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); mockMotion(false) })
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
+// Task 32, item 4: same structural guard as Slideshow.test.jsx -- see its
+// comment. GallerySlider duplicates Slideshow's fade mechanism on purpose
+// (file-level comment in GallerySlider.jsx), so it carries the identical
+// fault and the identical fix, verified here the same way.
+const mockRAF = () => {
+  let queue = []
+  vi.stubGlobal('requestAnimationFrame', vi.fn((cb) => { queue.push(cb); return queue.length }))
+  vi.stubGlobal('cancelAnimationFrame', vi.fn())
+  return { flushFrame: () => { const cbs = queue; queue = []; cbs.forEach((cb) => cb()) } }
+}
+
 describe('GallerySlider', () => {
   it('renders nothing for an empty item list', () => {
     const { container } = render(<GallerySlider items={[]} interval={5000} />)
@@ -99,6 +110,21 @@ describe('GallerySlider', () => {
     render(<GallerySlider items={items} interval={5000} onActivate={onActivate} />)
     await userEvent.click(screen.getByRole('button', { name: 'porte' }))
     expect(onActivate).toHaveBeenCalledWith(0)
+  })
+
+  it('waits for two animation frames before flipping the fade to its final state', () => {
+    const { flushFrame } = mockRAF()
+    render(<GallerySlider items={items} interval={5000} />)
+    fireEvent.click(screen.getByRole('button', { name: /suivant/i }))
+
+    const outgoing = () => document.querySelector('.gallery-slider-image--outgoing')
+    expect(outgoing()).not.toHaveClass('is-leaving')
+
+    act(() => { flushFrame() })
+    expect(outgoing()).not.toHaveClass('is-leaving')
+
+    act(() => { flushFrame() })
+    expect(outgoing()).toHaveClass('is-leaving')
   })
 
   it('renders both the outgoing and incoming images mid-transition, and only the incoming one once it completes', () => {
