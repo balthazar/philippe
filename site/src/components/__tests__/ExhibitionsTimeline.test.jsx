@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { LangProvider } from '@/lang.jsx'
 import { ExhibitionsTimeline } from '../ExhibitionsTimeline.jsx'
+
+// Task 37, part B: a plain, testid-tagged readout of the current route so a
+// test can assert WHERE a click actually navigated, independent of which
+// DOM element the click event itself targeted.
+function LocationDisplay() {
+  return <div data-testid="location">{useLocation().pathname}</div>
+}
 
 // Task 35, Part B / task 36: the split that produced 39 real exhibitions
 // across 25 years (nine years hold more than one; 2013 holds five) means a
@@ -201,6 +208,33 @@ describe('ExhibitionsTimeline', () => {
     expect(scrub).toHaveTextContent('2024')
   })
 
+  // Task 37, part C1. Before this fix the scrubber label was always
+  // vertically CENTRED on the dot it named (`transform: translateY(-50%)`
+  // on a `top` equal to the dot's own position). Centred on the topmost dot
+  // (top: 0, right under the header) its own upper half poked above the
+  // header; centred on the bottommost dot (top: railHeight, the viewport's
+  // own bottom edge) its lower half poked past the bottom of the viewport
+  // and forced a scrollbar -- confirmed in a real browser (see the task
+  // report). jsdom has no ResizeObserver, so the scrubber's own measured
+  // height falls back to a fixed estimate (FALLBACK_SCRUB_HEIGHT, 44px);
+  // half of that (22px) is the least/most a clamped `top` can be within a
+  // FALLBACK_RAIL_HEIGHT-tall (700px) rail.
+  it('clamps the floating scrubber label at the rail\'s own top edge, rather than letting it centre past it', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    const scrub = container.querySelector('.exhibitions-timeline-scrub')
+    expect(parseFloat(scrub.style.top)).toBeGreaterThanOrEqual(22)
+  })
+
+  it('clamps the floating scrubber label at the rail\'s own bottom edge, rather than letting it centre past it', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 700 })
+    const scrub = container.querySelector('.exhibitions-timeline-scrub')
+    expect(parseFloat(scrub.style.top)).toBeLessThanOrEqual(700 - 22)
+  })
+
   it('clears the floating scrubber label when the pointer leaves the rail (and nothing is focused)', () => {
     const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
     const rail = container.querySelector('.exhibitions-timeline-rail')
@@ -251,6 +285,132 @@ describe('ExhibitionsTimeline', () => {
     for (let i = 0; i < items.length; i++) await user.tab()
     expect(screen.getByRole('button', { name: 'after' })).toHaveFocus()
     expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
+  })
+
+  // Task 37, part B. Dots sit as little as 10px apart while each one's own
+  // clickable hit-box is much larger (24px, DOT_HIT_SIZE in the component),
+  // so adjacent hit-boxes overlap heavily and whichever sibling paints last
+  // wins a raw hit-test -- not necessarily the dot nearest the pointer, the
+  // one the floating label just named. The fix routes every click through
+  // that SAME nearest-by-Y computation, so the label and the navigation
+  // target can never disagree. Proven here by firing the click directly on
+  // a DIFFERENT link's own DOM node (exactly what an overlapping hit-box
+  // would let happen) at a clientY that names a THIRD item -- if the fix
+  // works, navigation follows the Y position, not which node the browser's
+  // hit-test happened to hand the event to.
+  it('navigates to the same exhibition the floating label names for a given pointer position, even when a different link\'s own DOM node receives the click', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <LocationDisplay />
+          <ExhibitionsTimeline items={items} currentSlug="expo-2023" currentYear={2023} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+    const rail = screen.getByRole('link', { name: '2024' }).closest('.exhibitions-timeline-rail')
+
+    // clientY: 0 is nearest the newest item (flat index 0, "expo-2024") by
+    // nearestIndexByY -- confirm the label agrees first.
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    expect(screen.getByText('2024', { selector: '.exhibitions-timeline-scrub-year' })).toBeInTheDocument()
+
+    // Click a DIFFERENT link's own DOM node (the oldest, "1989") but at the
+    // SAME clientY the label above was computed from.
+    const wrongLink = screen.getByRole('link', { name: '1989' })
+    fireEvent.click(wrongLink, { clientY: 0 })
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/expo-2024')
+  })
+
+  it('leaves a ctrl/cmd-clicked link to the browser\'s own default (open in a new tab), rather than overriding it', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <LocationDisplay />
+          <ExhibitionsTimeline items={items} currentSlug="expo-2023" currentYear={2023} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+    const rail = screen.getByRole('link', { name: '2024' }).closest('.exhibitions-timeline-rail')
+    const link = screen.getByRole('link', { name: '1989' })
+    fireEvent.click(link, { clientY: 0, metaKey: true })
+    // Not overridden to the clientY-nearest target -- the click is left
+    // alone entirely (jsdom does not itself follow the link's href).
+    expect(screen.getByTestId('location')).toHaveTextContent('/')
+    expect(rail).toBeInTheDocument()
+  })
+
+  // Task 37, part C2 (client feedback). `ExhibitionsTimeline` never unmounts
+  // across an exhibition-to-exhibition navigation (ExhibitionsLayout keeps
+  // the rail mounted deliberately), so `activeSlug` -- this component's own
+  // state -- survived a click straight through to the newly loaded page,
+  // still naming whatever it named the instant before the click. Proven by
+  // reproducing exactly that: hover names one item (the stale value the bug
+  // would leave behind), a DIFFERENT item is clicked and focused (as a real
+  // click does), and the parent re-renders with the newly current slug --
+  // exactly what ExhibitionsLayout does once the URL updates.
+  it('clears the floating scrubber label\'s stale value once navigation completes, restoring it from the link that still holds focus', () => {
+    const { container, rerender } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <ExhibitionsTimeline items={items} currentSlug="expo-2023" currentYear={2023} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveTextContent('2024')
+
+    // Click "1989" (a different item than the stale hover above) -- a real
+    // click focuses its target the same way a keyboard Enter does.
+    const link = screen.getByRole('link', { name: '1989' })
+    link.focus()
+    fireEvent.click(link, { clientY: 700 })
+
+    // The parent (ExhibitionsLayout) re-renders with the newly current
+    // slug once the URL updates.
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <ExhibitionsTimeline items={items} currentSlug="expo-1989" currentYear={1989} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+
+    const scrub = container.querySelector('.exhibitions-timeline-scrub')
+    expect(scrub).toHaveTextContent('1989')
+    expect(scrub).not.toHaveTextContent('2024')
+  })
+
+  it('clears the floating scrubber label entirely on navigation when nothing holds focus within the rail', () => {
+    const { container, rerender } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <ExhibitionsTimeline items={items} currentSlug="expo-2023" currentYear={2023} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toBeInTheDocument()
+    document.activeElement?.blur()
+
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <LangProvider>
+          <ExhibitionsTimeline items={items} currentSlug="expo-1989" currentYear={1989} />
+        </LangProvider>
+      </MemoryRouter>
+    )
+
+    expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
+  })
+
+  it('leaves the floating scrubber label alone while the current exhibition does not change', () => {
+    const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    const rail = container.querySelector('.exhibitions-timeline-rail')
+    fireEvent.mouseMove(rail, { clientY: 0 })
+    expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveTextContent('2024')
   })
 
   it('is aria-hidden, since each dot\'s own link already carries its accessible name', () => {

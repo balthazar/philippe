@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
 import { groupExhibitionsByYear, layoutExhibitionsTimeline } from '@/lib/exhibitionsOrder.js'
 
@@ -70,6 +70,84 @@ function useRailHeight(ref) {
   }, [ref])
 
   return height
+}
+
+/**
+ * Task 37, part C1. A rough guess at the floating scrubber's own rendered
+ * height (year line + title line + padding, see .exhibitions-timeline-scrub
+ * in base.css), used only for the very first paint of a given activation --
+ * before `useElementHeight` below has measured the real box -- and as the
+ * jsdom fallback (no ResizeObserver there either). Close enough that a
+ * first, unmeasured clamp still keeps the label roughly on-screen; the real
+ * measurement takes over a frame later and never causes visible movement
+ * for a normal one-line title, only for exceptionally long ones.
+ */
+const FALLBACK_SCRUB_HEIGHT = 44
+
+/** Measures `ref`'s own rendered height in real pixels, live -- the scrub
+ * label's height changes with its content (a one-line vs. a wrapping title),
+ * not just the viewport, so this re-measures on every resize of the element
+ * itself, not only of the rail. Rounded UP (`Math.ceil`, not the integer
+ * `offsetHeight` a browser would otherwise round to nearest), since
+ * clampScrubTop's whole point is to guarantee the label's rendered box
+ * never crosses the rail's own edges -- an UNDER-estimate of its height
+ * would let the true (fractional, sub-pixel) box still poke past by a
+ * fraction of a pixel, which is exactly the residual overflow a real
+ * browser confirmed (see the task report) when this used `offsetHeight`.
+ *
+ * `mountKey` exists because the scrub label is only in the DOM at all while
+ * `activeItem` is truthy (see its own conditional render below) -- `ref`
+ * itself (a `useRef` object) never changes identity, so an effect keyed
+ * only on `[ref, fallback]` would attach its ResizeObserver once, against
+ * whatever `ref.current` happened to be (usually null) at that FIRST
+ * mount, and never again -- confirmed against a real browser: the very
+ * first reveal of a session used the fallback height forever, clamping
+ * against a height that was never actually measured. The caller passes
+ * `activeSlug` here, which changes every time the label's underlying DOM
+ * node is torn down and recreated, forcing this effect (and its
+ * ResizeObserver) to re-attach to the CURRENT node each time. */
+function useElementHeight(ref, fallback, mountKey) {
+  const [height, setHeight] = useState(fallback)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const measure = () => setHeight(Math.ceil(el.getBoundingClientRect().height) || fallback)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref, fallback, mountKey])
+
+  return height
+}
+
+/**
+ * Task 37, part C1. The scrubber label used to share a dot's own `top` and
+ * `translateY(-50%)` centring unconditionally, which is exactly what let it
+ * escape the viewport at the rail's own extremes: centred on the topmost
+ * dot (top: 0, right under the header), its own upper half pokes above the
+ * header's bottom edge; centred on the bottommost dot (top: near the rail's
+ * full height, which IS the viewport's own bottom edge -- see
+ * .exhibitions-layout's `height: calc(100dvh - header-height)`), its lower
+ * half pokes past the bottom of the viewport, which (nothing here clips or
+ * scrolls, by design -- see .exhibitions-timeline's own comment) inflates
+ * the page's scrollHeight and forces exactly the scrollbar this whole rail
+ * exists to avoid.
+ *
+ * Clamped here to the rail's own [0, railHeight] box instead: for a `top`
+ * within half the label's own height of either edge, the label's near edge
+ * is pinned to that edge (flush against it) rather than left to overflow
+ * past it, using the SAME real, measured label height responsible for the
+ * overflow in the first place (useElementHeight above) -- so this adapts
+ * correctly to a long, two-line title's own taller box, not just the common
+ * one-line case.
+ */
+function clampScrubTop(top, labelHeight, railHeight) {
+  const half = labelHeight / 2
+  if (railHeight <= labelHeight) return railHeight / 2
+  return Math.min(Math.max(top, half), railHeight - half)
 }
 
 /**
@@ -160,7 +238,9 @@ function nearestIndexByY(positions, y) {
  */
 export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   const { href, lang } = useLang()
+  const navigate = useNavigate()
   const railRef = useRef(null)
+  const scrubRef = useRef(null)
   const height = useRailHeight(railRef)
   const groups = groupExhibitionsByYear(items)
   const total = items?.length || 0
@@ -173,24 +253,85 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   const [activeSlug, setActiveSlug] = useState(null)
   const activeIndex = activeSlug ? items.findIndex((item) => item.slug === activeSlug) : -1
   const activeItem = activeIndex >= 0 ? items[activeIndex] : null
+  const scrubHeight = useElementHeight(scrubRef, FALLBACK_SCRUB_HEIGHT, activeSlug)
+
+  // Whichever dot currently holds keyboard focus (if any) within the rail --
+  // shared by handleLeave below and the navigation effect further down, so
+  // the two never answer "what's focused right now" two different ways.
+  const focusedSlug = () => {
+    const el = railRef.current
+    const focused = el && document.activeElement !== document.body && el.contains(document.activeElement)
+      ? document.activeElement
+      : null
+    return focused?.dataset.slug || null
+  }
 
   // Restores the label to whichever dot currently holds keyboard focus (if
   // any) rather than always clearing on mouse-leave -- a sighted keyboard
   // user who tabs to a dot and then happens to wiggle the mouse off the
   // rail should not lose the label a moment later.
-  const handleLeave = () => {
-    const el = railRef.current
-    const focused = el && document.activeElement !== document.body && el.contains(document.activeElement)
-      ? document.activeElement
-      : null
-    setActiveSlug(focused?.dataset.slug || null)
-  }
+  const handleLeave = () => setActiveSlug(focusedSlug())
+
+  // Task 37, part C2 (client feedback): a click navigates (Part B, above),
+  // but `activeSlug` is this component's OWN state, and this component
+  // itself never unmounts across an exhibition-to-exhibition navigation
+  // (ExhibitionsLayout deliberately keeps the rail mounted -- see that
+  // file) -- so with nothing to reset it, the label kept showing whatever
+  // it showed the instant BEFORE the click, straight through onto the newly
+  // loaded page. Cleared here whenever the CURRENT exhibition changes
+  // (`currentSlug`, driven by the URL, updates the moment navigation
+  // resolves, for a click or a keyboard Enter alike) -- restored from
+  // focus, not simply blanked, since a mouse click focuses its target the
+  // same way Tab + Enter does: the pointer is very likely still sitting
+  // right over the rail it was just used to click, and that is a real,
+  // common case (the brief's own words), not an edge case to leave dark
+  // until the next pixel of movement.
+  useEffect(() => {
+    setActiveSlug(focusedSlug())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSlug])
 
   const handleMove = (e) => {
     if (!total) return
     const rect = railRef.current.getBoundingClientRect()
     const nearest = nearestIndexByY(positions, e.clientY - rect.top)
     setActiveSlug(items[nearest].slug)
+  }
+
+  // Task 37, part B: dots sit as little as MIN_DOT_GAP (10px) apart, but
+  // each one's own clickable hit-box (DOT_HIT_SIZE, 24px) is far larger --
+  // adjacent boxes overlap heavily, and whichever sibling is LATER in DOM
+  // order paints on top and wins the hit-test. So a raw click on the rail
+  // routinely lands on a different `<Link>` than the dot nearest the
+  // pointer -- the one the floating label (handleMove above) just named.
+  // Both must agree: the label is what the viewer reads as "where a click
+  // goes", so a click has to land exactly there. Rather than trust
+  // whichever overlapping box the browser's own hit-test picked, every
+  // click is intercepted here and routed through the SAME nearest-by-Y
+  // computation that drives the label, then navigated programmatically --
+  // one mechanism, not two that can silently disagree.
+  //
+  // Only a plain left click with no modifier is intercepted: a modified
+  // click (ctrl/cmd/shift/alt, or a non-primary button) is left to the
+  // browser's own default -- open in a new tab, new window, etc. -- exactly
+  // as any other link on the site, targeting whichever link the browser's
+  // native hit-test actually resolved (unavoidable for a new-tab open, but
+  // no worse than before this fix, and never the common case).
+  //
+  // Attached as a CAPTURE-phase listener (onClickCapture below), which runs
+  // BEFORE the clicked `<Link>`'s own bubble-phase click handler -- calling
+  // preventDefault() here is what stops that Link's own react-router
+  // navigation (it checks event.defaultPrevented before navigating) from
+  // ever firing, so exactly one navigation happens, to the computed target,
+  // never a flash of the wrong page first.
+  const handleClick = (e) => {
+    if (!total) return
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    if (!e.target.closest('a')) return
+    const rect = railRef.current.getBoundingClientRect()
+    const nearest = nearestIndexByY(positions, e.clientY - rect.top)
+    e.preventDefault()
+    navigate(href('article', items[nearest].slug))
   }
 
   let flatIndex = -1
@@ -205,6 +346,7 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
         className="exhibitions-timeline-rail"
         onMouseMove={handleMove}
         onMouseLeave={handleLeave}
+        onClickCapture={handleClick}
       >
         {items.map((item, i) => {
           flatIndex += 1
@@ -252,9 +394,10 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
 
       {activeItem && (
         <div
+          ref={scrubRef}
           className="exhibitions-timeline-scrub"
           aria-hidden="true"
-          style={{ top: `${positions[activeIndex]}px` }}
+          style={{ top: `${clampScrubTop(positions[activeIndex], scrubHeight, height)}px` }}
         >
           <span className="exhibitions-timeline-scrub-year">{activeItem.yearStart}</span>
           <span className="exhibitions-timeline-scrub-title">{activeItem.title}</span>
