@@ -15,9 +15,18 @@ import { staticPageTitle } from '@/lib/pageTitle.js'
 // own Bio/Bibliographie nav slot (see Header.jsx). It is a section in its
 // own right, reachable from every page, so listing it here as well would
 // be a second route to it from the one page that already links everything
-// else. Liens and Mentions légales stay: they have no nav slot.
+// else.
+//
+// Liens followed it, for a different reason: its content now lives inside
+// the bibliography page as that page's own "Liens" subsection, so this
+// entry pointed at a second, duplicate copy of it. The /liens route and its
+// page record are deliberately left in place rather than deleted -- the
+// content was moved by a one-off script against the production database, so
+// keeping the source reachable by URL is what makes that move reversible
+// without a restore. Nothing links to it.
+//
+// Mentions légales stays: it has no nav slot and no other home.
 const COLOPHON_LINKS = [
-  { key: 'links', fr: 'Liens', en: 'Links' },
   { key: 'legal', fr: 'Mentions légales', en: 'Terms and Conditions' },
 ]
 

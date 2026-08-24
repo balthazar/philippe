@@ -102,9 +102,9 @@ describe('SimplePage', () => {
 
   // Task 33: the retired footer's contents (bibliography/links/legal, and
   // the copyright line) move to /contact, which becomes the site's
-  // colophon -- the address (already there via BlockRenderer), then those
-  // three links, then the copyright, set beneath. Only /contact grows this;
-  // every other simple page is unaffected.
+  // colophon -- the address (already there via BlockRenderer), then what
+  // remains of those links, then the copyright, set beneath. Only /contact
+  // grows this; every other simple page is unaffected.
   describe('contact page colophon (Task 33)', () => {
     beforeEach(() => {
       vi.spyOn(api, 'apiGet').mockResolvedValue({
@@ -116,8 +116,19 @@ describe('SimplePage', () => {
     it('renders the former-footer links on /contact', async () => {
       render(<MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>)
       await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
-      expect(screen.getByRole('link', { name: 'Liens' })).toHaveAttribute('href', '/liens')
       expect(screen.getByRole('link', { name: 'Mentions légales' })).toHaveAttribute('href', '/mentions-legales')
+    })
+
+    // Client feedback: the links page's content was folded into the
+    // bibliography page as its own "Liens" subsection, so this entry
+    // pointed at a second, duplicate copy of it. The /liens route itself is
+    // deliberately left working (the move was a one-off script against the
+    // production database; keeping the source reachable is what makes it
+    // reversible without a restore) -- it is simply no longer linked.
+    it('no longer links Liens from /contact', async () => {
+      render(<MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>)
+      await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
+      expect(screen.queryByRole('link', { name: 'Liens' })).not.toBeInTheDocument()
     })
 
     // Client feedback: Bibliographie moved out of the colophon and into the
@@ -143,7 +154,7 @@ describe('SimplePage', () => {
       )
       await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
       expect(screen.queryByRole('link', { name: 'Bibliography' })).not.toBeInTheDocument()
-      expect(screen.getByRole('link', { name: 'Links' })).toHaveAttribute('href', '/en/links')
+      expect(screen.queryByRole('link', { name: 'Links' })).not.toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Terms and Conditions' })).toHaveAttribute('href', '/en/terms')
     })
 
