@@ -39,6 +39,36 @@ tar -C /tmp/philippe-media -cf - <relative/path> \
 Prefer uploading images through the production admin and letting the local site
 read the records; that way the file lands where it is served from.
 
+**Copy the files BEFORE the content that references them.** Cloudflare caches
+404s for four hours (`max-age=14400`). If a page goes live naming an image the
+cluster does not have yet, the first request caches a 404 at the edge and the
+image stays broken for four hours after the file arrives -- the origin serves
+it perfectly the whole time, which makes this look like a failed copy when it
+is not. Check the origin past the cache before re-copying anything:
+
+```sh
+curl -sI https://philippe.balthazar.dev/media/<path>          # cf-cache-status: HIT, 404
+curl -sI "https://philippe.balthazar.dev/media/<path>?v=$(date +%s)"   # 200 -- the file is there
+```
+
+Purge the URLs in the Cloudflare dashboard to clear it early. Note it hits
+only the variant the page actually requests (`medium`, via BlockRenderer's
+`Picture`), so `thumb` and `large` of the same image will serve fine and make
+the failure look stranger than it is.
+
+To sync everything the cluster is missing, byte-order sort both sides (the
+pod's `sort` and macOS's disagree on locale, which silently produces a garbage
+diff) and stream only the difference:
+
+```sh
+kubectl --context dadonew -n apps exec deploy/philippe-api -- \
+  sh -c 'cd /data/media && find . -type f | LC_ALL=C sort' > /tmp/prod-files.txt
+cd /tmp/philippe-media && find . -type f | LC_ALL=C sort > /tmp/local-files.txt
+LC_ALL=C comm -23 /tmp/local-files.txt /tmp/prod-files.txt > /tmp/to-copy.txt
+tar -cf - -T /tmp/to-copy.txt \
+  | kubectl --context dadonew -n apps exec -i deploy/philippe-api -- tar -C /data/media -xf -
+```
+
 **The admin login is production's.** `seedAdmin()` only creates a user when the
 collection is empty, and production's already holds the real admin, so no local
 user is seeded. Read the password back with the command in
