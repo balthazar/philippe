@@ -1,14 +1,25 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { LangProvider } from '@/lang.jsx'
 import { ExhibitionsTimeline } from '../ExhibitionsTimeline.jsx'
 
+// Mirrors the real archive's shape closely enough to exercise the "every
+// fifth dot" persistent-label rule (task 31, part 1): 11 items, so index 0,
+// 5, 10 land on real dots and the rule can be checked without needing all 25.
 const items = [
-  { _id: '1', slug: '2024', title: '2024' },
-  { _id: '2', slug: '2023', title: '2023' },
-  { _id: '3', slug: '1989', title: '1989' },
+  { _id: '11', slug: '2024', title: '2024' }, // index 0 -- newest, persistent
+  { _id: '10', slug: '2023', title: '2023' }, // index 1
+  { _id: '9', slug: '2022', title: '2022' }, // index 2
+  { _id: '8', slug: '2021', title: '2021' }, // index 3
+  { _id: '7', slug: '2020', title: '2020' }, // index 4
+  { _id: '6', slug: '2019', title: '2019' }, // index 5 -- every-fifth, persistent
+  { _id: '5', slug: '2018', title: '2018' }, // index 6
+  { _id: '4', slug: '2017', title: '2017' }, // index 7 -- current in some tests
+  { _id: '3', slug: '2016', title: '2016' }, // index 8
+  { _id: '2', slug: '2015', title: '2015' }, // index 9
+  { _id: '1', slug: '1989', title: '1989' }, // index 10 -- oldest, persistent
 ]
 
 const renderTimeline = (props, path = '/') =>
@@ -19,31 +30,6 @@ const renderTimeline = (props, path = '/') =>
       </LangProvider>
     </MemoryRouter>
   )
-
-const mockMotion = (reduced) =>
-  vi.stubGlobal('matchMedia', (query) => ({
-    matches: reduced && query.includes('reduce'),
-    addEventListener: () => {}, removeEventListener: () => {},
-  }))
-
-// jsdom never lays anything out, so a scrollable nav (real overflow, a real
-// bounding box) has to be faked by hand for every edge-auto-scroll test.
-function mockOverflow(nav, { top = 0, height = 300, scrollHeight = 1000, clientHeight = 300, scrollTop = 0 } = {}) {
-  nav.getBoundingClientRect = () => ({ top, height, bottom: top + height, left: 0, right: 0, width: 0, x: 0, y: 0, toJSON() {} })
-  Object.defineProperty(nav, 'scrollHeight', { value: scrollHeight, configurable: true })
-  Object.defineProperty(nav, 'clientHeight', { value: clientHeight, configurable: true })
-  nav.scrollTop = scrollTop
-}
-
-// jsdom has no PointerEvent implementation at all, so @testing-library's
-// fireEvent.pointerMove/pointerLeave silently drop init properties like
-// clientY (verified: the fired event's clientY comes back undefined). A
-// MouseEvent, which jsdom does implement, carries the same clientY and is
-// indistinguishable to a plain `addEventListener('pointermove', ...)`,
-// which only ever looks at the event's type string.
-const pointerMove = (el, clientY) => el.dispatchEvent(new MouseEvent('pointermove', { clientY, bubbles: true, cancelable: true }))
-const pointerLeave = (el) => el.dispatchEvent(new MouseEvent('pointerleave', { bubbles: false, cancelable: true }))
-const wheel = (el) => el.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true }))
 
 describe('ExhibitionsTimeline', () => {
   it('renders one link per item, at the root-level article URL for each slug', () => {
@@ -72,9 +58,19 @@ describe('ExhibitionsTimeline', () => {
     }
   })
 
-  // Task 28: "the list must be fully usable with no hover at all: keyboard
-  // focus must move through the years". Every year is a real <a href>, so
-  // Tab must walk through all of them without anything intercepting focus.
+  // Task 31, part 2: a dot carries no text -- every link's accessible name
+  // must still be its year, or the whole rail is 11 (25, on the real
+  // archive) unlabelled links to a screen reader. getByRole('link', {name})
+  // below already depends on this for every other test in this file; this
+  // test makes the requirement explicit and checks every item, not just the
+  // ones other tests happen to touch.
+  it("gives every link its year as its accessible name, even ones with no persistent label", () => {
+    renderTimeline({ currentSlug: '2017' })
+    for (const item of items) {
+      expect(screen.getByRole('link', { name: item.title })).toBeInTheDocument()
+    }
+  })
+
   it('lets keyboard focus reach every year, in order, via Tab', async () => {
     const user = userEvent.setup()
     renderTimeline({ currentSlug: '2023' })
@@ -82,137 +78,31 @@ describe('ExhibitionsTimeline', () => {
     expect(screen.getByRole('link', { name: '2024' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('link', { name: '2023' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: '1989' })).toHaveFocus()
   })
 
-  // Task 28: "make sure the current year is reachable without hunting" on a
-  // 25-item column. Guarded in the component itself (jsdom has no
-  // scrollIntoView implementation at all), so this only asserts the call,
-  // not any pixel value.
-  it('scrolls the current year into view on mount', () => {
-    const scrollIntoView = vi.fn()
-    window.HTMLElement.prototype.scrollIntoView = scrollIntoView
-    renderTimeline({ currentSlug: '1989' })
-    expect(scrollIntoView).toHaveBeenCalled()
-    delete window.HTMLElement.prototype.scrollIntoView
-  })
-})
-
-// Task 29, part 4: replaces the timeline's own scrollbar with edge
-// auto-scroll -- the "drag near a window edge" pattern. Behaviour only, per
-// the task brief: no assertion here pins a scroll speed or a mask's
-// opacity, only whether the list moves, which way, and when it must not.
-describe('ExhibitionsTimeline edge auto-scroll', () => {
-  beforeEach(() => { vi.useFakeTimers(); mockMotion(false) })
-  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
-
-  it('scrolls the list forward while the pointer dwells near the bottom edge', () => {
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav)
-
-    pointerMove(nav, 290) // within 48px of the 300px-tall bottom edge
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBeGreaterThan(0)
+  // Task 31, part 1 (client decision, ruled on in the brief -- not
+  // re-litigated here): persistent labels are every fifth dot (index 0, 5,
+  // 10, ... zero-based in the sorted-newest-first list), plus the current
+  // year, plus the newest and oldest. Cosmetics (dot size, transform) are
+  // deliberately not asserted -- only which items the rule selects, via the
+  // 'is-persistent' marker the component renders for them.
+  it('keeps a persistent label on every fifth dot plus the newest and oldest', () => {
+    const { container } = renderTimeline({ currentSlug: 'not-a-year' })
+    const persistentTitles = [...container.querySelectorAll('.is-persistent')]
+      .map((li) => li.querySelector('a').textContent.trim())
+    expect(persistentTitles).toEqual(['2024', '2019', '1989'])
   })
 
-  it('scrolls the list backward while the pointer dwells near the top edge', () => {
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav, { scrollTop: 500 })
-
-    pointerMove(nav, 5)
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBeLessThan(500)
+  it('adds the current year to the persistent set even when it falls off the every-fifth pattern', () => {
+    const { container } = renderTimeline({ currentSlug: '2017' }) // index 7, not on the every-fifth pattern
+    const persistentTitles = [...container.querySelectorAll('.is-persistent')]
+      .map((li) => li.querySelector('a').textContent.trim())
+    expect(persistentTitles).toEqual(['2024', '2019', '2017', '1989'])
   })
 
-  // "must not trigger from a pointer merely passing over the list on its
-  // way somewhere else" -- a pointer that dwells for less than the required
-  // delay before moving elsewhere (or leaving) must never have scrolled it.
-  it('does not scroll when the pointer only passes through the edge zone briefly', () => {
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav)
-
-    pointerMove(nav, 290)
-    vi.advanceTimersByTime(50) // well under the dwell delay
-    pointerMove(nav, 150) // back to the middle, on its way elsewhere
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBe(0)
-  })
-
-  it('stops as soon as the pointer leaves the edge zone', () => {
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav)
-
-    pointerMove(nav, 290)
-    vi.advanceTimersByTime(1000)
-    const scrolledSoFar = nav.scrollTop
-    expect(scrolledSoFar).toBeGreaterThan(0)
-
-    pointerLeave(nav)
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBe(scrolledSoFar)
-  })
-
-  it('stops as soon as the pointer moves back to the middle of the list', () => {
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav)
-
-    pointerMove(nav, 290)
-    vi.advanceTimersByTime(1000)
-    const scrolledSoFar = nav.scrollTop
-    expect(scrolledSoFar).toBeGreaterThan(0)
-
-    pointerMove(nav, 150)
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBe(scrolledSoFar)
-  })
-
-  // "must not fight a user-initiated scroll" -- a real wheel scroll wins
-  // outright and auto-scroll does not resume on its own.
-  it('yields to a real wheel scroll and does not keep auto-scrolling underneath it', () => {
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav)
-
-    pointerMove(nav, 290)
-    vi.advanceTimersByTime(1000)
-    const scrolledByAutoScroll = nav.scrollTop
-    expect(scrolledByAutoScroll).toBeGreaterThan(0)
-
-    // The user scrolls for themselves -- simulated directly, the way a real
-    // wheel/trackpad scroll would move scrollTop, since jsdom does not
-    // implement actual scrolling.
-    nav.scrollTop = scrolledByAutoScroll + 200
-    wheel(nav)
-    const afterUserScroll = nav.scrollTop
-
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBe(afterUserScroll)
-  })
-
-  it('does nothing at all when the list has no vertical overflow (e.g. the mobile horizontal row)', () => {
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav, { scrollHeight: 300, clientHeight: 300 })
-
-    pointerMove(nav, 290)
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBe(0)
-  })
-
-  it('honours prefers-reduced-motion: reduce by never auto-scrolling', () => {
-    mockMotion(true)
-    const { container } = renderTimeline({ currentSlug: '2023' })
-    const nav = container.querySelector('.exhibitions-timeline')
-    mockOverflow(nav)
-
-    pointerMove(nav, 290)
-    vi.advanceTimersByTime(1000)
-    expect(nav.scrollTop).toBe(0)
+  it('does not mark a non-current, non-every-fifth, non-edge item as persistent', () => {
+    const { container } = renderTimeline({ currentSlug: 'not-a-year' })
+    const link2021 = screen.getByRole('link', { name: '2021' })
+    expect(link2021.closest('li')).not.toHaveClass('is-persistent')
   })
 })

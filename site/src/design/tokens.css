@@ -58,8 +58,16 @@
   /* Task 30 (client feedback): the exhibitions timeline's own column width,
      shared with the footer's indent on exhibition pages (base.css's
      .site-footer.is-exhibitions) so the two can never fall out of step --
-     one token, read in both places, rather than the same 14rem retyped. */
-  --exhibitions-timeline-width: 14rem;
+     one token, read in both places, rather than the same value retyped.
+     Task 31, part 4: narrowed from 14rem, sized for a four-digit year, to
+     1.5rem, sized for a dot -- the column no longer holds any text. Every
+     year's label (persistent or hover-revealed) is positioned to pop out of
+     this column to its left, into the page's own margin
+     (--page-gutter), not laid out inside it, so the column itself only ever
+     needs to fit the dot and a comfortable click target around it. Content
+     is already `1fr` (see .exhibitions-layout in base.css), so it widens on
+     its own the moment this narrows -- no second change needed there. */
+  --exhibitions-timeline-width: 1.5rem;
 
   /* Chosen against the real archive: tall enough that the tallest works
      (thermometers, portholes, aspect ~0.86) aren't cramped, short enough
