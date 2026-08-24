@@ -9,9 +9,14 @@ import { staticPageTitle } from '@/lib/pageTitle.js'
 
 // Task 33: the retired site-wide footer's contents, now the contact page's
 // own colophon (see ColophonLinks below) -- moved, not duplicated: this is
-// the one place these three links render now.
+// the one place these links render now.
+//
+// Client feedback: Bibliographie has since left this list for the header's
+// own Bio/Bibliographie nav slot (see Header.jsx). It is a section in its
+// own right, reachable from every page, so listing it here as well would
+// be a second route to it from the one page that already links everything
+// else. Liens and Mentions légales stay: they have no nav slot.
 const COLOPHON_LINKS = [
-  { key: 'bibliography', fr: 'Bibliographie', en: 'Bibliography' },
   { key: 'links', fr: 'Liens', en: 'Links' },
   { key: 'legal', fr: 'Mentions légales', en: 'Terms and Conditions' },
 ]
@@ -62,13 +67,20 @@ export function SimplePage({ pageKey }) {
   const isSingleBlock = page.blocks.length === 1
   const className = `page-main${isSingleBlock ? ' page-main-centered' : ''}`
 
-  // D2: the header already marks Contact as the current section (its nav
-  // link is .active), so a page-level "Contact" heading is redundant --
-  // just the email, centred (page-main-centered above already handles the
-  // centring, keyed to Contact's single mailto block).
+  // D2 dropped the page-level heading on Contact alone: the header already
+  // marks Contact as the current section (its nav link is .active), so
+  // repeating "Contact" as an h1 said nothing the chrome had not. Client
+  // feedback extends that to every simple page -- bio and bibliography have
+  // the same nav marker, and the client made the same call for links and
+  // legal, which do not. So there is no `pageKey` test left here at all:
+  // none of these pages prints its own title, and `page.title` is now used
+  // only for the tab title (usePageTitle above), never in the page body.
+  //
+  // Note this leaves links and legal with no h1 at all, and no active nav
+  // link either -- they are reachable only from the contact colophon. Their
+  // first heading, if any, is whatever their own blocks carry.
   return (
     <Container as="main" className={className}>
-      {pageKey !== 'contact' && <h1>{page.title}</h1>}
       <BlockRenderer blocks={page.blocks} />
       {pageKey === 'contact' && <ColophonLinks />}
     </Container>

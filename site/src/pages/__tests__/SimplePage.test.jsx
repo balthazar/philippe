@@ -60,28 +60,29 @@ describe('SimplePage', () => {
     expect(container.querySelector('main')).toHaveClass('page-main-centered')
   })
 
-  // D2: the header already marks Contact as the current section, so the
-  // page-level heading is redundant -- only the email.
-  it('drops the page title on the Contact page', async () => {
+  // Client feedback: no simple page prints its own title any more. D2 had
+  // already dropped it on Contact, reasoning that the header's active nav
+  // link says where you are; the client extended that to bio and
+  // bibliography (which have the same nav marker) and then to links and
+  // legal, which do not -- their own call, made knowing that. The title is
+  // still fetched and still drives the tab title through usePageTitle; it
+  // just never renders in the page.
+  it.each([
+    ['biography', 'Biographie'],
+    ['bibliography', 'Bibliographie'],
+    ['contact', 'Contact'],
+    ['links', 'Liens'],
+    ['legal', 'Mentions légales'],
+  ])('drops the page title on the %s page', async (pageKey, title) => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({
-      key: 'contact', title: 'Contact',
-      blocks: [{ type: 'text', value: '<p><a href="mailto:info@philippegronon.com">info@philippegronon.com</a></p>' }],
+      key: pageKey, title, blocks: [{ type: 'text', value: '<p>Contenu</p>' }],
     })
     render(
-      <MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>
+      <MemoryRouter><LangProvider><SimplePage pageKey={pageKey} /></LangProvider></MemoryRouter>
     )
-    await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Contenu')).toBeInTheDocument())
     expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
-  })
-
-  it('keeps the page title on every other simple page', async () => {
-    vi.spyOn(api, 'apiGet').mockResolvedValue({
-      key: 'biography', title: 'Biographie', blocks: [{ type: 'text', value: '<p>Né en 1964</p>' }],
-    })
-    render(
-      <MemoryRouter><LangProvider><SimplePage pageKey="biography" /></LangProvider></MemoryRouter>
-    )
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Biographie' })).toBeInTheDocument())
+    expect(screen.queryByText(title)).not.toBeInTheDocument()
   })
 
   it('does not centre a normal, multi-block page', async () => {
@@ -112,12 +113,21 @@ describe('SimplePage', () => {
       })
     })
 
-    it('renders the three former-footer links on /contact', async () => {
+    it('renders the former-footer links on /contact', async () => {
       render(<MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>)
       await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
-      expect(screen.getByRole('link', { name: 'Bibliographie' })).toHaveAttribute('href', '/bibliographie')
       expect(screen.getByRole('link', { name: 'Liens' })).toHaveAttribute('href', '/liens')
       expect(screen.getByRole('link', { name: 'Mentions légales' })).toHaveAttribute('href', '/mentions-legales')
+    })
+
+    // Client feedback: Bibliographie moved out of the colophon and into the
+    // header's Bio/Bibliographie nav slot (see Header.jsx). It is reachable
+    // from every page now, so repeating it here would be a second route to
+    // the same page from the one page that already links everything else.
+    it('no longer links Bibliographie from /contact', async () => {
+      render(<MemoryRouter><LangProvider><SimplePage pageKey="contact" /></LangProvider></MemoryRouter>)
+      await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
+      expect(screen.queryByRole('link', { name: 'Bibliographie' })).not.toBeInTheDocument()
     })
 
     it('renders the copyright line beneath the links on /contact', async () => {
@@ -132,7 +142,7 @@ describe('SimplePage', () => {
         </MemoryRouter>
       )
       await waitFor(() => expect(screen.getByText('info@philippegronon.com')).toBeInTheDocument())
-      expect(screen.getByRole('link', { name: 'Bibliography' })).toHaveAttribute('href', '/en/bibliography')
+      expect(screen.queryByRole('link', { name: 'Bibliography' })).not.toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Links' })).toHaveAttribute('href', '/en/links')
       expect(screen.getByRole('link', { name: 'Terms and Conditions' })).toHaveAttribute('href', '/en/terms')
     })

@@ -56,9 +56,8 @@ export function ArticlePreview({ article, lang }) {
         <div className="article-preview-cover article-preview-cover-empty">Pas d'image de couverture</div>
       )}
       <header className="article-header">
-        <h1>{title || 'Sans titre'}</h1>
+        <h1>{[title || 'Sans titre', yearLabel].filter(Boolean).join(' | ')}</h1>
         {subtitle && <p className="article-subtitle">{subtitle}</p>}
-        {yearLabel && <p className="article-year">{yearLabel}</p>}
       </header>
       <BlockRenderer blocks={blocks} />
     </div>

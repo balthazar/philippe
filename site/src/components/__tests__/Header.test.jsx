@@ -22,9 +22,9 @@ describe('Header', () => {
     document.documentElement.removeAttribute('lang')
   })
 
-  it('shows the four French nav items', () => {
+  it('shows the French nav items', () => {
     renderAt('/')
-    for (const label of ['Œuvres', 'Expositions', 'Biographie', 'Contact']) {
+    for (const label of ['Œuvres', 'Expositions', 'Bio', 'Bibliographie', 'Contact']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
     }
   })
@@ -32,6 +32,34 @@ describe('Header', () => {
   it('shows English nav items under /en', () => {
     renderAt('/en')
     expect(screen.getByRole('link', { name: 'Works' })).toHaveAttribute('href', '/en/works')
+  })
+
+  // Client feedback: Bio and Bibliographie share one nav slot, rendered as
+  // "Bio/Bibliographie", but they are two independent links -- each half
+  // goes to its own page. The separator between them is decorative and must
+  // not be part of either link's accessible name.
+  describe('the Bio/Bibliographie nav slot', () => {
+    it('links each half to its own page in French', () => {
+      renderAt('/')
+      expect(screen.getByRole('link', { name: 'Bio' })).toHaveAttribute('href', '/biographie')
+      expect(screen.getByRole('link', { name: 'Bibliographie' })).toHaveAttribute('href', '/bibliographie')
+    })
+
+    it('links each half to its own page in English', () => {
+      renderAt('/en')
+      expect(screen.getByRole('link', { name: 'Bio' })).toHaveAttribute('href', '/en/biography')
+      expect(screen.getByRole('link', { name: 'Bibliography' })).toHaveAttribute('href', '/en/bibliography')
+    })
+
+    it('marks only the half you are on as the current page', () => {
+      const { container } = renderAt('/bibliographie')
+      expect(screen.getByRole('link', { name: 'Bibliographie' })).toHaveClass('active')
+      expect(screen.getByRole('link', { name: 'Bio' })).not.toHaveClass('active')
+      // The "/" is decorative: not a link, and hidden from assistive tech.
+      const separator = container.querySelector('.nav-split-separator')
+      expect(separator).toHaveAttribute('aria-hidden', 'true')
+      expect(separator.closest('a')).toBeNull()
+    })
   })
 
   it('shows both language codes with the current one marked active', () => {

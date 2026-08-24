@@ -35,7 +35,14 @@ body {
   font-size: var(--text-m);
   font-weight: 400;
   line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
+  /* Deliberately no -webkit-font-smoothing. The original site never sets it
+     (its only occurrence anywhere in philippegronon.com's CSS is on the
+     PhotoSwipe lightbox chrome), so it renders body copy with the platform
+     default. Forcing `antialiased` here dropped macOS Chrome/Safari off
+     gamma-corrected rasterisation onto flat grayscale, which thinned every
+     stem: identical family, size, weight and colour, visibly less ink than
+     the original. Leave this unset; it is the rasteriser, not a type
+     property, so the difference is invisible in the cascade. */
 }
 
 a {
@@ -137,6 +144,28 @@ picture {
 .site-header nav a:hover,
 .site-header nav a.active {
   color: var(--ink);
+}
+
+/* Client feedback: Bio and Bibliographie share one nav slot, set as
+   "Bio/Bibliographie". This wrapper is a single flex child of `nav`, so
+   `nav`'s own var(--space-3) gap separates the slot from Expositions and
+   Contact and never the two halves from each other. Those sit tight
+   against the separator (gap: 0), which is what makes the pair read as one
+   label rather than as two nav items that happen to be adjacent. */
+.site-header .nav-split {
+  display: inline-flex;
+  gap: 0;
+}
+
+/* A literal "/", unlike the border-drawn rule before FR/EN below: this one
+   is punctuation inside a label, not a division between regions, so it has
+   to sit on the text baseline and inherit the header's own type. It is
+   aria-hidden in Header.jsx so it stays out of both links' accessible
+   names. Held at --ink-soft rather than inheriting either half's state: it
+   belongs to neither link, so it must not darken when one of them is
+   hovered or current, which would read as the slash itself being live. */
+.site-header .nav-split-separator {
+  color: var(--ink-soft);
 }
 
 /* The only separator in the header: a single rule between Contact and FR/EN,
@@ -513,7 +542,10 @@ picture {
 
 /* Task 29 (client typography pass): chrome font, uppercase, 700 weight,
    16px (var(--text-l), not a bare 16px so it stays on the shared type
-   scale), literal black (--ink-strong, not --ink -- see tokens.css). */
+   scale), literal black (--ink-strong, not --ink -- see tokens.css).
+   This is the whole heading, year included ("Couvertures | 2025-2026") --
+   see ArticleBody.jsx, which joins the two -- so there is no separate year
+   rule to keep in step with this one. */
 .article-header h1 {
   margin: 0;
   font-family: var(--font-chrome);
@@ -526,22 +558,13 @@ picture {
 /* The technique/materials line (task 26, part A1): structural metadata
    beside the title, not a content block, so it renders here rather than
    as the article's first block. Body font, not chrome: it reads as a
-   descriptive caption, not a UI label like .article-year below it.
+   descriptive caption, not a UI label like the title above it.
    Task 29: size and colour brought up to match the body copy (16px,
    literal black) per client spec -- family stays --font-body, untouched. */
 .article-subtitle {
   margin: var(--space-1) 0 0;
   font-size: var(--text-l);
   color: var(--ink-strong);
-}
-
-.article-year {
-  font-family: var(--font-chrome);
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-s);
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 /* Text left, gallery right, TOP-ALIGNED with the title (task 28, part 2 --

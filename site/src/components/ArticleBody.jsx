@@ -48,11 +48,21 @@ export function ArticleBody({ article }) {
   const isExhibition = article.category === 'exhibitions'
   const { text, media, twoColumn } = splitArticleLayout(article.blocks)
 
-  const hasHeader = Boolean(article.title || article.subtitle || article.yearLabel)
+  // Client feedback: the year reads as part of the title rather than as its
+  // own line -- "Couvertures | 2025-2026". That is the same `title | year`
+  // form ArticleCard.jsx already uses for the works index, and the form the
+  // original site uses for its own work headings (there the whole string is
+  // a single heading element too, not a title with a separate date beside
+  // it). Joined into the heading text rather than kept as a separately
+  // styled element so the two halves cannot drift apart in type or wrap
+  // onto their own lines. Either half may be absent: an article with only a
+  // year still gets a heading, and one with only a title gets no separator.
+  const heading = [article.title, article.yearLabel].filter(Boolean).join(' | ')
+
+  const hasHeader = Boolean(heading || article.subtitle)
   const header = hasHeader && (
     <header className="article-header">
-      {article.title && <h1>{article.title}</h1>}
-      {article.yearLabel && <p className="article-year">{article.yearLabel}</p>}
+      {heading && <h1>{heading}</h1>}
       {article.subtitle && <p className="article-subtitle">{article.subtitle}</p>}
     </header>
   )

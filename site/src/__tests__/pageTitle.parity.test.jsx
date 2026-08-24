@@ -31,7 +31,11 @@ describe('document.title matches the prerender for the same route', () => {
     )
     await waitFor(() => expect(document.title).toBe('Philippe Gronon'))
 
-    await userEvent.click(screen.getByRole('link', { name: 'Biographie' }))
+    // The nav label is 'Bio' (the Bio/Bibliographie slot -- see Header.jsx);
+    // the page's own title, which is what the tab title is built from, is
+    // still 'Biographie'. The two are deliberately different strings, so
+    // this navigates by the nav label and asserts on the page title.
+    await userEvent.click(screen.getByRole('link', { name: 'Bio' }))
     await waitFor(() => expect(screen.getByText('Né en 1964')).toBeInTheDocument())
     expect(document.title).toBe('Biographie | Philippe Gronon')
 

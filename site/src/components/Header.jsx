@@ -1,12 +1,30 @@
+import { Fragment } from 'react'
 import { NavLink, Link, useLocation } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
 import { usePreloaded } from '@/preload.jsx'
 import { routeFor, SEGMENTS } from '@/routes.js'
 
+/*
+ * Client feedback: Bio and Bibliographie share one nav slot, set as
+ * "Bio/Bibliographie", each half linking to its own page. That is one
+ * SLOT, not one link -- so it is modelled as an item with `parts` rather
+ * than as a link with two destinations, which is not a thing. Every other
+ * item stays a plain single link; `parts` is what the render below
+ * branches on, so adding or removing a split slot needs no change there.
+ *
+ * Bibliographie used to be reachable only from the contact page's colophon
+ * (see SimplePage.jsx, which no longer lists it) -- it is a section in its
+ * own right, so it now sits in the header with everything else.
+ */
 const NAV = [
   { key: 'works', fr: 'Œuvres', en: 'Works' },
   { key: 'exhibitions', fr: 'Expositions', en: 'Exhibitions' },
-  { key: 'biography', fr: 'Biographie', en: 'Biography' },
+  {
+    parts: [
+      { key: 'biography', fr: 'Bio', en: 'Bio' },
+      { key: 'bibliography', fr: 'Bibliographie', en: 'Bibliography' },
+    ],
+  },
   { key: 'contact', fr: 'Contact', en: 'Contact' },
 ]
 
@@ -62,9 +80,24 @@ export function Header({ translatedPath }) {
       <div className="site-header-inner">
         <Link to={href('home')} className="wordmark">Philippe Gronon</Link>
         <nav aria-label={lang === 'fr' ? 'Navigation principale' : 'Main navigation'}>
-          {NAV.map((item) => (
-            <NavLink key={item.key} to={href(item.key)}>{item[lang]}</NavLink>
-          ))}
+          {NAV.map((item) =>
+            item.parts ? (
+              // One flex child, so the halves stay welded either side of
+              // the separator instead of being spread by `nav`'s own gap.
+              // The "/" is decorative punctuation, not a third link and not
+              // part of either link's accessible name, hence aria-hidden.
+              <span key={item.parts[0].key} className="nav-split">
+                {item.parts.map((part, i) => (
+                  <Fragment key={part.key}>
+                    {i > 0 && <span className="nav-split-separator" aria-hidden="true">/</span>}
+                    <NavLink to={href(part.key)}>{part[lang]}</NavLink>
+                  </Fragment>
+                ))}
+              </span>
+            ) : (
+              <NavLink key={item.key} to={href(item.key)}>{item[lang]}</NavLink>
+            )
+          )}
         </nav>
         <div className="lang-switch" aria-label={lang === 'fr' ? 'Changer de langue' : 'Change language'}>
           {LANG_CODES.map((code) =>

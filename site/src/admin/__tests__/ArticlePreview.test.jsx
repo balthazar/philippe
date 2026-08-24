@@ -15,9 +15,10 @@ describe('ArticlePreview', () => {
       blocks: [{ type: 'text', value: { fr: '<h2>Section</h2>', en: '' } }],
     }
     render(<ArticlePreview article={article} lang="en" />)
-    expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeInTheDocument()
-    // yearLabel.en is empty, falls back to yearLabel.fr.
-    expect(screen.getByText('2020')).toBeInTheDocument()
+    // Title and year resolve independently, then join into the one heading:
+    // title.en is populated, yearLabel.en is empty so the year falls back
+    // to yearLabel.fr.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Title | 2020')
     // block.value.en is empty, falls back to block.value.fr.
     expect(screen.getByRole('heading', { level: 2, name: 'Section' })).toBeInTheDocument()
   })
@@ -108,9 +109,13 @@ describe('ArticlePreview', () => {
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 
-  // Task 27, Part B2: rendered directly under the title, before the year
-  // label -- the same position the public ArticleDetail page uses.
-  it('renders the subtitle between the title and the year label', () => {
+  // Client feedback: the year is part of the heading itself, joined to the
+  // title by " | " -- the same form ArticleCard.jsx uses on the works index
+  // and the public ArticleBody header uses. It is no longer a line of its
+  // own, so this replaces Task 27, Part B2's title/subtitle/year ordering:
+  // the only thing left to order is the subtitle, which follows the
+  // heading.
+  it('joins the year to the title in the heading, with the subtitle below', () => {
     const article = {
       title: { fr: 'Titre', en: '' },
       subtitle: { fr: 'Numérisation, épreuves numériques pigmentaires', en: '' },
@@ -120,12 +125,26 @@ describe('ArticlePreview', () => {
     }
     const { container } = render(<ArticlePreview article={article} lang="fr" />)
     const header = container.querySelector('.article-header')
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent('Titre | 2020')
+    // The year is heading text, not an element beside it.
+    expect(container.querySelector('.article-year')).not.toBeInTheDocument()
     const subtitle = screen.getByText('Numérisation, épreuves numériques pigmentaires')
     expect(subtitle).toHaveClass('article-subtitle')
     // eslint-disable-next-line no-bitwise
-    expect(header.querySelector('h1').compareDocumentPosition(subtitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // eslint-disable-next-line no-bitwise
-    expect(subtitle.compareDocumentPosition(screen.getByText('2020')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(heading.compareDocumentPosition(subtitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(header).toContainElement(subtitle)
+  })
+
+  it('renders the title alone, with no separator, when there is no year', () => {
+    const article = {
+      title: { fr: 'Titre', en: '' },
+      yearLabel: { fr: '', en: '' },
+      cover: null,
+      blocks: [],
+    }
+    render(<ArticlePreview article={article} lang="fr" />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Titre$/)
   })
 
   it('renders no subtitle line when the article has none', () => {
