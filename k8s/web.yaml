@@ -54,6 +54,22 @@ spec:
 # orders rules by path length, so both reach philippe-api before the catch-all
 # hits philippe-web. The API mounts its routes under /api and /media itself
 # (api/src/app.js), so no prefix stripping is needed.
+#
+# Two hosts, the same three rules. An Ingress rule takes one host, so this is
+# duplicated rather than shared -- the two blocks have to be edited in step.
+#
+# www.philippegronon.com is the real domain and is NOT live here yet: it still
+# resolves to 217.112.80.145, the old WordPress host, so this rule routes
+# nothing until that DNS record is moved to Cloudflare (proxied, ->
+# 135.148.100.142). Having the rule in place first is deliberate: Traefik
+# answers 404 for a host it has no rule for, so applying the ingress after the
+# DNS change would mean a window of 404s on the live domain.
+#
+# The apex (philippegronon.com, no www) is not here on purpose. It is a
+# redirect decision rather than a routing one -- one of the two spellings has
+# to be canonical, or the site answers on both and splits its own search
+# ranking -- and the cheapest place to make it is a Cloudflare redirect rule,
+# before a request ever reaches this cluster.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -63,6 +79,18 @@ spec:
   ingressClassName: traefik
   rules:
     - host: philippe.balthazar.dev
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: philippe-api, port: { number: 80 } } }
+          - path: /media
+            pathType: Prefix
+            backend: { service: { name: philippe-api, port: { number: 80 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: philippe-web, port: { number: 80 } } }
+    - host: www.philippegronon.com
       http:
         paths:
           - path: /api
