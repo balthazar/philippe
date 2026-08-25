@@ -1391,6 +1391,38 @@ picture {
   margin-top: var(--space-1);
 }
 
+/* One book, several texts. Where a volume carries more than one contribution
+   about the work (the Mamco monograph has three, Villa(s) 6 has two), it is
+   ONE entry -- one cover, one publisher, one link -- with its contributions
+   listed inside it, rather than the same book and the same cover repeated
+   once per author. The list is set flush with the citation above it and
+   marked with an en dash: a bullet would read as a UI list, where this is
+   the contents of a book.
+
+   `>` throughout, so nothing here reaches a list the artist writes inside a
+   `text` block elsewhere on the page. */
+.block-references .reference-citation > ul {
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.block-references .reference-citation > ul > li {
+  position: relative;
+  padding-left: 1em;
+  color: var(--ink-muted);
+}
+
+.block-references .reference-citation > ul > li::before {
+  content: "–";
+  position: absolute;
+  left: 0;
+}
+
+.block-references .reference-citation > ul > li + li {
+  margin-top: 0.15em;
+}
+
 /* Only a linked entry responds to the pointer: an unlinked one is not a
    target, and must not pretend to be. Underlining on hover rather than at
    rest keeps forty citations from reading as forty underlined links. */
