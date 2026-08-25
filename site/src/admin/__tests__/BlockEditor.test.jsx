@@ -160,6 +160,32 @@ describe('BlockEditor gallery item icon controls', () => {
     },
   ]
 
+  // Reordering must carry each item's own settings with it. The merge in
+  // BlockEditor matches by image id rather than by position for exactly this
+  // reason: matched by position, moving a tile would leave its span and its
+  // hidden flag behind on whatever slid into its old slot -- so a reorder
+  // would silently reveal a hidden image and resize an unrelated one.
+  it('carries each item’s span and hidden flag along when the gallery is reordered', async () => {
+    const onChange = vi.fn()
+    const blocksWithSpans = [
+      {
+        type: 'gallery',
+        columns: 3,
+        items: [
+          { image: { _id: 'img1' }, caption: { fr: '', en: '' }, span: 2 },
+          { image: { _id: 'img2' }, caption: { fr: '', en: '' }, span: 1, hidden: true },
+        ],
+      },
+    ]
+    render(<BlockEditor blocks={blocksWithSpans} lang="fr" onChange={onChange} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Déplacer l’image 1 vers la droite' }))
+
+    const [next] = onChange.mock.calls[0]
+    expect(next[0].items.map((it) => it.image._id)).toEqual(['img2', 'img1'])
+    expect(next[0].items[0]).toMatchObject({ span: 1, hidden: true })
+    expect(next[0].items[1]).toMatchObject({ span: 2 })
+  })
+
   // Task 30, part 3: the star is a real toggle now -- pressing it on the
   // current cover clears `article.cover` rather than being a dead end once
   // set. The accessible name says what the press WILL do, not only the

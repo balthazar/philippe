@@ -63,6 +63,64 @@ describe('Lightbox', () => {
       expect(container.querySelector('.lightbox-legend')).toBeNull()
     })
 
+    // The legend answers "what am I looking at", which is asked once on
+    // arriving at a photograph and not again while you study it.
+    it('fades out after two seconds of a still pointer', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+        await vi.advanceTimersByTimeAsync(2100)
+        expect(container.querySelector('.lightbox-legend')).toHaveClass('is-idle')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('comes back on the next pointer movement', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+        await vi.advanceTimersByTimeAsync(2100)
+        expect(container.querySelector('.lightbox-legend')).toHaveClass('is-idle')
+        fireEvent.pointerMove(window)
+        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // A touch drag produces pointermove and no mousemove at all: listening
+    // for mouse events alone would let a touch reader lose the legend once
+    // with no way to ask for it again.
+    it('comes back on a tap, which may land without a preceding move', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+        await vi.advanceTimersByTimeAsync(2100)
+        fireEvent.pointerDown(window)
+        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // "What is this one" is a new question on every photograph, so arrowing
+    // on shows the next legend even if the pointer never moved.
+    it('shows the next photograph’s legend on arrowing, with no pointer movement', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+        await vi.advanceTimersByTimeAsync(2100)
+        expect(container.querySelector('.lightbox-legend')).toHaveClass('is-idle')
+        fireEvent.keyDown(window, { key: 'ArrowRight' })
+        expect(container.querySelector('.lightbox-legend')).toHaveTextContent('Deux')
+        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     // The <img> already carries this exact string as its alt text, so a
     // screen reader would otherwise announce the legend twice.
     it('is hidden from assistive technology, which already has it as alt text', () => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiGet, apiUpload } from '@/api.js'
 import { useSessionExpired } from './session.js'
-import { PlusIcon, TrashIcon } from './icons.jsx'
+import { PlusIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon } from './icons.jsx'
 
 const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.variants.thumb.path}` : '')
 
@@ -19,6 +19,19 @@ const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.vari
  * `renderExtra(image, index)`, also grid-only, lets the caller (BlockEditor)
  * inject gallery-specific controls (Cover/Hidden/Width) into each tile,
  * since this component only ever knows about images, never those concepts.
+ *
+ * Grid mode is also reorderable, by drag or by the two arrow buttons on each
+ * tile. Until it was, the only way to place a photograph was to have added it
+ * in the right order in the first place: a photograph added later could only
+ * ever land at the end. That is not a cosmetic limit -- a gallery's order is
+ * what pairs each photograph with its entry in the article's own list of
+ * legends, so an image stuck at the end is an image wearing the wrong
+ * caption. (It happened: the Yves Tanguy verso n°27, added years after the
+ * rest of the series, sat at the end of the Versos gallery.)
+ *
+ * Reordering is safe for those legends, incidentally: a legend lives on the
+ * image itself (its `alt`), not on the position, so moving a tile carries its
+ * caption with it.
  */
 export function ImagePicker({ value, onChange, multiple = false, gridStyle = false, renderExtra }) {
   const onSessionExpired = useSessionExpired()
@@ -27,8 +40,29 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
 
+  // Grid-mode reorder state. Same shape and the same splice-out/splice-in
+  // algorithm as BlockEditor's own block reordering, so the two behave
+  // identically: dragging downward lands the tile after the hovered one,
+  // dragging upward lands it before.
+  const [dragIndex, setDragIndex] = useState(null)
+  const [dragOverIndex, setDragOverIndex] = useState(null)
+
   const selected = multiple ? value || [] : value ? [value] : []
   const selectedIds = new Set(selected.filter(Boolean).map((img) => img._id))
+
+  const reorder = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex == null) return
+    const next = [...selected]
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    onChange(next)
+  }
+
+  // The keyboard-reachable half of the same operation. Native HTML
+  // drag-and-drop has no keyboard path at all, so without these the order of
+  // a gallery would be unreachable to anyone not using a mouse -- the same
+  // reason BlockEditor keeps its up/down buttons beside its drag handle.
+  const nudge = (index, delta) => reorder(index, index + delta)
 
   useEffect(() => {
     if (!open) return
@@ -105,10 +139,68 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
     return (
       <div className="image-picker image-picker-grid-style">
         <ul className="gallery-editor-grid">
-          {selected.map((image, index) => (
-            <li key={image._id} className="gallery-editor-tile">
+          {selected.map((image, index) => {
+            const showIndicator = dragIndex !== null && dragOverIndex === index && dragIndex !== index
+            const indicatorSide = showIndicator ? (dragIndex < index ? 'after' : 'before') : null
+            // The whole tile is draggable, unlike a block, which has a
+            // separate handle: a tile holds no text field for a drag to
+            // interfere with, so a handle would only be a smaller target.
+            return (
+            <li
+              key={image._id}
+              className={[
+                'gallery-editor-tile',
+                dragIndex === index ? 'is-dragging' : '',
+                indicatorSide ? `drop-indicator-${indicatorSide}` : '',
+              ].filter(Boolean).join(' ')}
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
+              onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index) }}
+              onDrop={(e) => {
+                e.preventDefault()
+                reorder(dragIndex, index)
+                setDragIndex(null)
+                setDragOverIndex(null)
+              }}
+            >
               {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
+              {/*
+                The position, shown on the tile. A gallery's order is what
+                pairs each photograph with its entry in the article's list of
+                legends, so "which number is this one" is the question being
+                answered while reordering, and counting tiles across a grid of
+                sixty is not a reasonable way to answer it.
+              */}
+              <span className="gallery-editor-tile-position" aria-hidden="true">{index + 1}</span>
               <div className="gallery-editor-tile-controls">
+                {/*
+                  Named by POSITION, not by the image's alt text: an alt is
+                  optional and, until the legends were stamped, was empty on
+                  every image in the archive, which made every move button on
+                  the page carry the identical accessible name. The position
+                  is unique by construction, and it is also what the tile's
+                  own badge shows, so the spoken name and the visible one are
+                  the same thing.
+                */}
+                <button
+                  type="button"
+                  aria-label={`Déplacer l’image ${index + 1} vers la gauche`}
+                  title="Déplacer vers la gauche"
+                  disabled={index === 0}
+                  onClick={() => nudge(index, -1)}
+                >
+                  <ArrowUpIcon style={{ transform: 'rotate(-90deg)' }} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Déplacer l’image ${index + 1} vers la droite`}
+                  title="Déplacer vers la droite"
+                  disabled={index === selected.length - 1}
+                  onClick={() => nudge(index, 1)}
+                >
+                  <ArrowDownIcon style={{ transform: 'rotate(-90deg)' }} />
+                </button>
                 {renderExtra?.(image, index)}
                 <button
                   type="button"
@@ -121,7 +213,8 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
                 </button>
               </div>
             </li>
-          ))}
+            )
+          })}
           <li className="gallery-editor-tile gallery-editor-add">
             <button
               type="button"

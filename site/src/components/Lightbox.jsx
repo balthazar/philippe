@@ -19,6 +19,16 @@ const src = (v) => (v?.path ? `/media/${v.path}` : '')
  */
 const ZOOM_SCALE = 2.5
 
+/**
+ * How long the pointer has to sit still before the legend fades out. The
+ * legend is a caption, not a control: it answers "what am I looking at",
+ * which is a question you ask once on arriving at a photograph and not again
+ * while you study it. Two seconds is long enough to read a line of it and
+ * short enough that it is gone by the time you have stopped noticing the
+ * chrome and started looking at the picture.
+ */
+const LEGEND_IDLE_MS = 2000
+
 const clamp = (n, min, max) => Math.min(Math.max(n, min), max)
 
 /**
@@ -88,6 +98,50 @@ export function Lightbox({ images = [], index = 0, onClose }) {
   // A zoom belongs to the image it was taken on, not to the lightbox: moving
   // to another image (arrow key, arrow button) starts it fitted again.
   useEffect(() => { setZoom(1) }, [current])
+
+  // The legend shows on arrival and fades once the pointer has been still
+  // for LEGEND_IDLE_MS, leaving the photograph alone on the screen. Any
+  // movement brings it back.
+  //
+  // `pointer` events, not `mouse`: a touch drag produces pointermove and no
+  // mousemove at all, so a touch reader would watch the legend disappear
+  // once and have no way to ask for it again. `pointerdown` is listened for
+  // alongside, since a tap can land without a preceding move.
+  //
+  // Visibility is mirrored in a ref so the listener can decide whether a
+  // state update is needed at all: pointermove fires continuously, and
+  // calling setState on every one of them would re-render the lightbox
+  // dozens of times a second while a reader simply moves the cursor across
+  // the image. There are exactly two renders per cycle, one to hide and one
+  // to come back.
+  //
+  // Keyed to `current` as well, so arrowing to the next photograph shows its
+  // legend even if the pointer never moved -- the question "what is this
+  // one" is new again on every image.
+  const [legendVisible, setLegendVisible] = useState(true)
+  const legendVisibleRef = useRef(true)
+  useEffect(() => {
+    let timer
+    const show = () => {
+      if (!legendVisibleRef.current) {
+        legendVisibleRef.current = true
+        setLegendVisible(true)
+      }
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        legendVisibleRef.current = false
+        setLegendVisible(false)
+      }, LEGEND_IDLE_MS)
+    }
+    show()
+    window.addEventListener('pointermove', show)
+    window.addEventListener('pointerdown', show)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('pointermove', show)
+      window.removeEventListener('pointerdown', show)
+    }
+  }, [current])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -179,13 +233,19 @@ export function Lightbox({ images = [], index = 0, onClose }) {
         no backdrop, no reserved strip -- so the photograph keeps the whole
         stage and this reads as a margin note under it.
 
+        It fades out once the pointer has been still for two seconds (see
+        LEGEND_IDLE_MS above) and returns on the next movement, so the
+        photograph ends up alone on the screen without the legend ever
+        becoming something you have to dismiss.
+
         aria-hidden, deliberately: this is the same string the <img> above
         already carries as its alt text, so without it a screen reader
         announces the legend twice, once as the image and once as the text
-        beneath it.
+        beneath it. It also means the idle fade has no effect on what
+        assistive technology reports -- the alt text is always there.
       */}
       {image?.alt && (
-        <p className="lightbox-legend" aria-hidden="true">{image.alt}</p>
+        <p className={`lightbox-legend${legendVisible ? '' : ' is-idle'}`} aria-hidden="true">{image.alt}</p>
       )}
     </div>
   )

@@ -1005,6 +1005,45 @@
   border: 1px solid var(--line);
 }
 
+/* Same drag feedback as the block list and the article list, turned through
+   ninety degrees: tiles sit in a grid, so "before" and "after" are the left
+   and right edges rather than the top and bottom. */
+.gallery-editor-tile[draggable="true"] {
+  cursor: grab;
+}
+
+.gallery-editor-tile.is-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.gallery-editor-tile.drop-indicator-before {
+  box-shadow: -3px 0 0 0 var(--ink);
+}
+
+.gallery-editor-tile.drop-indicator-after {
+  box-shadow: 3px 0 0 0 var(--ink);
+}
+
+/* The tile's position in the gallery. A gallery's order is what pairs each
+   photograph with its entry in the article's list of legends, so this is the
+   number being reasoned about while reordering; counting tiles across a grid
+   of sixty is not a reasonable way to find it. Top-left, away from the
+   controls along the bottom edge. */
+.gallery-editor-tile-position {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 1.5rem;
+  padding: 0.1rem 0.35rem;
+  background: rgba(59, 62, 53, 0.72);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  border-bottom-right-radius: 4px;
+}
+
 .gallery-editor-tile img {
   width: 100%;
   height: 100%;

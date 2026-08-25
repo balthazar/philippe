@@ -1523,6 +1523,22 @@ picture {
      (click to close). A text node lying across the bottom of the stage would
      otherwise silently swallow the backdrop click along its whole width. */
   pointer-events: none;
+  transition: opacity 240ms ease;
+}
+
+/* Faded out after two seconds of a still pointer (LEGEND_IDLE_MS in
+   Lightbox.jsx), so the photograph is finally alone on the screen. Opacity
+   only: the element keeps its box, so the legend coming back cannot shift
+   anything, and since it is already pointer-events: none there is nothing
+   to disable. */
+.lightbox-legend.is-idle {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox-legend {
+    transition: none;
+  }
 }
 
 /* The zoom wrapper is a button too, but it is the lightbox's CONTENT, laid
