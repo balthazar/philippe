@@ -1425,9 +1425,18 @@ picture {
 
 /* Only a linked entry responds to the pointer: an unlinked one is not a
    target, and must not pretend to be. Underlining on hover rather than at
-   rest keeps forty citations from reading as forty underlined links. */
-.block-references > .reference.is-link a:hover .reference-citation,
-.block-references > .reference.is-link a:focus-visible .reference-citation {
+   rest keeps forty citations from reading as forty underlined links.
+
+   The rule sits on the citation's own paragraphs rather than on the citation
+   itself, because text-decoration propagates to everything inside the
+   element it is set on. On a plain entry the two are identical; on an entry
+   that lists a book's several texts, setting it on the wrapper underlined
+   the whole contents list too -- four or five lines of rule under text that
+   is not the link's subject. The link points at the BOOK, so the book's own
+   line is what should answer to the pointer; the texts inside it are what
+   you get once you follow it. */
+.block-references > .reference.is-link a:hover .reference-citation > p,
+.block-references > .reference.is-link a:focus-visible .reference-citation > p {
   text-decoration: underline;
 }
 
