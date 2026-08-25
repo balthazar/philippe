@@ -167,9 +167,20 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
     return <div aria-busy="true" />
   }
 
+  // Keyed on the slug so the fade runs once per article, when its content
+  // genuinely arrives. The rail and the header beside it are mounted a level
+  // up (ExhibitionsLayout, PublicLayout) and are untouched by this: only what
+  // changed re-announces itself.
+  //
+  // An exhibition gets NO wrapper of its own. Its body renders as a bare
+  // fragment straight into ExhibitionsLayout's content column, which styles
+  // it with direct-child selectors (`.exhibitions-content > .article-header`,
+  // `> .block-text`, `> .gallery-slider`, and the first-child heading rule) --
+  // a div around it would sever every one of them. That column carries the
+  // fade itself instead; see ExhibitionsLayout.jsx.
   return article.category === 'exhibitions' ? (
     <ArticleBody article={article} />
   ) : (
-    <article><ArticleBody article={article} /></article>
+    <article key={slug} className="page-fade-in"><ArticleBody article={article} /></article>
   )
 }

@@ -1165,6 +1165,35 @@ picture {
   text-decoration: underline;
 }
 
+/* Page content fades in as it appears.
+   
+   Most navigations no longer need it: usePageData caches what it has fetched
+   (preload.jsx), so going back to a page paints its content on the first
+   commit with no blank frame in between. This is for the first visit to a
+   page, where the content genuinely does arrive after the shell -- a soft
+   appearance rather than a snap, and short enough not to be a "transition"
+   anyone waits through.
+
+   Animation, not transition: it runs once, when the element that carries it
+   first appears, which is exactly when there is something new to show. It is
+   applied to the CONTENT, never to the chrome around it -- the header and
+   the exhibitions rail stay mounted across a navigation and must not
+   re-announce themselves every time the thing beside them changes. */
+@keyframes page-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.page-fade-in {
+  animation: page-fade-in 260ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-fade-in {
+    animation: none;
+  }
+}
+
 /* Blocks */
 
 /* Task 29 (client typography pass): 16px (var(--text-l), the body default

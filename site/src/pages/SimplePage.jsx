@@ -88,10 +88,17 @@ export function SimplePage({ pageKey }) {
   // Note this leaves links and legal with no h1 at all, and no active nav
   // link either -- they are reachable only from the contact colophon. Their
   // first heading, if any, is whatever their own blocks carry.
+  // Keyed on the page and language so the fade re-runs when the content
+  // genuinely changes, and on nothing else. `.page-main` itself is NOT what
+  // fades: it is the shell that reserves the page's height while loading
+  // (see the early return above), and fading the shell would fade the
+  // reserved space in from nothing, which is the flash this replaces.
   return (
     <Container as="main" className={className}>
-      <BlockRenderer blocks={page.blocks} />
-      {pageKey === 'contact' && <ColophonLinks />}
+      <div key={`${pageKey}:${lang}`} className="page-fade-in">
+        <BlockRenderer blocks={page.blocks} />
+        {pageKey === 'contact' && <ColophonLinks />}
+      </div>
     </Container>
   )
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Outlet, useLocation, useParams } from 'react-router-dom'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
@@ -63,30 +64,53 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
   const { slug } = useParams()
 
   const isIndex = pathname === `/${SEGMENTS.exhibitions.fr}` || pathname === `/en/${SEGMENTS.exhibitions.en}`
-  // `isExhibitionsArticle` is reported up from ArticleDetail (App.jsx thread
-  // this the same way as `translatedPath`) once its own fetch resolves --
-  // it is the only way to know a bare `/:slug` is an exhibition rather than
-  // a work, the URL alone cannot say. ArticleDetail's own effect (see its
-  // file) is written to only ever report a definite answer, never an
-  // intermediate `false` while a new article is loading, so this does not
-  // flicker the rail off between two exhibition years the way a naive
-  // "clear on every unmount" effect would.
-  const showRail = isIndex || isExhibitionsArticle
+  // `isExhibitionsArticle` is reported up from ArticleDetail (App.jsx
+  // threads this the same way as `translatedPath`) once its own fetch
+  // resolves -- it is the only way to know a bare `/:slug` is an exhibition
+  // rather than a work, the URL alone cannot say. ArticleDetail's own effect
+  // (see its file) only ever reports a definite answer, never an
+  // intermediate `false` while a new article is loading, so the rail does
+  // not flicker off between two exhibitions the way a naive "clear on every
+  // unmount" effect would.
+  const wantsRail = isIndex || isExhibitionsArticle
 
-  // The key includes whether the rail is actually wanted so a work article
-  // never triggers this fetch (guarded below by the fetcher itself, and
-  // this project has a test asserting exactly that -- see
-  // ArticleDetail.test.jsx). The moment `showRail` flips from false to true
-  // (landing on the exhibitions section for the first time this session)
-  // the key changes, which is what makes usePageData actually run the real
-  // fetch then, rather than being stuck with whatever the key resolved to
-  // on first mount.
-  const timelineKey = `exhibitionsTimeline:${lang}:${showRail ? 'on' : 'off'}`
+  // Sticky, and that is the point. The fetch below is keyed on/off so that a
+  // works article never triggers it; but `wantsRail` also dips to false for
+  // the few frames between leaving the index and learning the new article's
+  // category, and a key that dipped with it would throw the list away and
+  // refetch it on the far side of every single navigation.
+  //
+  // Set during render rather than in an effect: this is derived state, and
+  // React re-runs the render with the new value before committing anything,
+  // so there is no extra paint and nothing to see.
+  const [railEverWanted, setRailEverWanted] = useState(wantsRail)
+  if (wantsRail && !railEverWanted) setRailEverWanted(true)
+
+  const timelineKey = `exhibitionsTimeline:${lang}:${railEverWanted ? 'on' : 'off'}`
   const { data: items } = usePageData(timelineKey, () =>
-    showRail
+    railEverWanted
       ? apiGet('/articles', { category: 'exhibitions', lang }).then((res) => sortExhibitionsByYear(res.items))
       : Promise.resolve(null)
   )
+
+  // Clicking a dot on the index flips `isIndex` false at once while the new
+  // article's category is still unknown, so `wantsRail` alone leaves a gap:
+  // the rail UNMOUNTS for those frames and comes back -- 39 dots blinking
+  // out and in on the way from one exhibition to the next. Task 32 fixed
+  // this between two articles; this is the index-to-article edge it did not
+  // reach.
+  //
+  // The list already in hand answers the question synchronously, with no
+  // fetch to wait for: if `items` holds this slug, it is an exhibition. A
+  // legacy year URL (/2013) is one by its shape alone and needs no lookup.
+  //
+  // On a cold load straight to an exhibition's URL there is no list yet, so
+  // this falls back to `isExhibitionsArticle` exactly as before and the rail
+  // appears once the article resolves. Nothing regresses; the common path
+  // simply stops flickering.
+  const isKnownExhibitionSlug = Boolean(slug)
+    && (YEAR_SLUG_RE.test(slug) || Boolean(items?.some((item) => item.slug === slug)))
+  const showRail = wantsRail || isKnownExhibitionSlug
 
   // On an article page the URL's own slug is the current dot. On the
   // /expositions index there is no slug at all -- the most recent year
@@ -118,7 +142,21 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
           rail, second in the DOM below, occupies the second (fixed-width)
           track. See .exhibitions-layout in base.css for the grid itself.
         */}
-        <div className={showRail ? 'exhibitions-content' : undefined}>
+        {/*
+          The fade lives here, on the column itself, and is deliberately NOT
+          keyed. It runs once, when this column first mounts -- arriving in
+          the exhibitions section -- which is the only moment its content
+          appears out of nothing. Moving between two exhibitions after that
+          is served from usePageData's cache on the first commit, so there is
+          no blank frame there to fade back in from.
+
+          Keying it per article would look equivalent and would not be: it
+          would remount <Outlet/> on every navigation, and ArticleDetail's
+          unmount cleanup reports `onExhibitionsLayout(false)` -- which would
+          flicker the rail off and on again between every pair of
+          exhibitions, the exact fault task 32 exists to have fixed.
+        */}
+        <div className={showRail ? 'exhibitions-content page-fade-in' : 'page-fade-in'}>
           {/*
             Task 33, section 3: hands the already-fetched exhibitions list
             down to ArticleDetail via route context, so its own legacy-year

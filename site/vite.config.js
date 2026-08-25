@@ -30,11 +30,12 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    // The package ships a ./vitest export (see its package.json "exports"
-    // map) that is the jest-dom matchers with no other setup baggage, so it
-    // can be pointed at directly instead of a one-line src/setupTests.js
-    // that just re-exported it.
-    setupFiles: ['@testing-library/jest-dom/vitest'],
+    // This used to point straight at '@testing-library/jest-dom/vitest',
+    // since a setup file that only re-exported it would be a file for
+    // nothing. usePageData's session cache (preload.jsx) changed that: it is
+    // module state by design, so it also outlives a test, and every suite
+    // needs it cleared between cases. See src/setupTests.js.
+    setupFiles: ['./src/setupTests.js'],
     globals: true,
     // Scoped to this app's own tests: without this, vitest run from the repo
     // root also discovers api/test/** (node-only, needs mongodb-memory-server)
