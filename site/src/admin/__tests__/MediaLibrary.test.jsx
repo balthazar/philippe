@@ -196,3 +196,100 @@ describe('MediaLibrary resolution', () => {
     await waitFor(() => expect(screen.getByText('Aucune image ne correspond à cette recherche.')).toBeInTheDocument())
   })
 })
+
+// An image used by nothing is the one state the library cannot show any
+// other way, and the one that quietly accumulates: leftovers from a merged
+// entry, a scan uploaded twice, a file superseded by a better version.
+describe('MediaLibrary orphans', () => {
+  const img = (id, role) => ({
+    _id: id,
+    filename: id,
+    alt: { fr: id, en: '' },
+    role,
+    variants: { original: { width: 2600, height: 2000, bytes: 1024 * 500 } },
+  })
+
+  const LIBRARY = [img('placee', 'fullscreen'), img('orpheline', 'unused'), img('autre', 'fullscreen')]
+
+  const renderLibrary = async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: LIBRARY, total: 3 })
+    render(<MediaLibrary />)
+    await waitFor(() => expect(screen.getByLabelText('Filtrer par définition')).toBeInTheDocument())
+  }
+
+  const shown = () => screen.getAllByLabelText('Texte alternatif').map((i) => i.value)
+
+  it('says so on the tile', async () => {
+    await renderLibrary()
+    expect(screen.getByText('utilisée nulle part')).toBeInTheDocument()
+  })
+
+  // Burying the one image that needs a decision among five hundred that are
+  // fine is how a library accumulates the ones nobody meant to keep.
+  it('puts orphans first, leaving the rest in the order they arrived', async () => {
+    await renderLibrary()
+    expect(shown()).toEqual(['orpheline', 'placee', 'autre'])
+  })
+
+  it('filters to them, and counts them in the option', async () => {
+    await renderLibrary()
+    expect(screen.getByRole('option', { name: 'Utilisées nulle part (1)' })).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Filtrer par définition'), 'orphan')
+    expect(shown()).toEqual(['orpheline'])
+  })
+})
+
+// Uploading a better scan as a NEW image means hunting down every reference
+// by hand, and some photographs are used in three places at once. Replacing
+// keeps the document, so everything pointing at it follows.
+describe('MediaLibrary replace', () => {
+  const IMAGE = {
+    _id: 'i1',
+    filename: 'i1',
+    alt: { fr: 'Porte', en: '' },
+    role: 'fullscreen',
+    variants: { original: { width: 1000, height: 800, bytes: 1024 * 100 } },
+  }
+  const file = () => new File(['x'], 'better.jpg', { type: 'image/jpeg' })
+
+  const renderLibrary = async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: [IMAGE], total: 1 })
+    render(<MediaLibrary />)
+    await waitFor(() => expect(screen.getByText('Remplacer')).toBeInTheDocument())
+  }
+
+  it('posts the new file to the image’s own replace endpoint', async () => {
+    await renderLibrary()
+    const upload = vi.spyOn(api, 'apiUpload').mockResolvedValue({
+      ...IMAGE,
+      variants: { original: { width: 3000, height: 2400, bytes: 1024 * 900 } },
+    })
+    await userEvent.upload(document.querySelector('.button-quiet input[type="file"]'), file())
+    expect(upload).toHaveBeenCalledWith('/admin/images/i1/replace', expect.any(File))
+  })
+
+  // The point of replacing in place: the tile shows the new file's numbers
+  // without the page being reloaded, and the id never changed.
+  it('shows the new file’s resolution once it lands', async () => {
+    await renderLibrary()
+    expect(screen.getByText('1000 × 800')).toBeInTheDocument()
+    vi.spyOn(api, 'apiUpload').mockResolvedValue({
+      ...IMAGE,
+      variants: { original: { width: 3000, height: 2400, bytes: 1024 * 900 } },
+    })
+    await userEvent.upload(document.querySelector('.button-quiet input[type="file"]'), file())
+    await waitFor(() => expect(screen.getByText('3000 × 2400')).toBeInTheDocument())
+    expect(screen.queryByText('1000 × 800')).not.toBeInTheDocument()
+  })
+
+  // The content hash carries a unique index, so the same file already stored
+  // under another image collides. Say which problem it is.
+  it('explains a duplicate file rather than failing vaguely', async () => {
+    await renderLibrary()
+    vi.spyOn(api, 'apiUpload').mockRejectedValue(Object.assign(new Error('x'), { status: 409 }))
+    await userEvent.upload(document.querySelector('.button-quiet input[type="file"]'), file())
+    await waitFor(() =>
+      expect(screen.getByText('Ce fichier est déjà dans la médiathèque sous une autre image.')).toBeInTheDocument()
+    )
+  })
+})

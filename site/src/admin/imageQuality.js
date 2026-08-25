@@ -68,6 +68,16 @@ export const OVERSIZE_FACTOR = 2
 export const QUALITY = { OK: 'ok', LOW: 'low', OVERSIZED: 'oversized' }
 
 /**
+ * Used by nothing at all: no article's cover, no gallery, no block, no
+ * bibliography entry. Not a fault in itself -- an image can be uploaded now
+ * and placed next week -- but it is the one state the library cannot show
+ * you any other way, and the one that quietly accumulates. Leftovers from a
+ * merged entry, a scan uploaded twice, a file replaced by a better version
+ * of itself: all of it sits here looking exactly like everything else.
+ */
+export const isOrphan = (image) => image?.role === 'unused'
+
+/**
  * Judged on the ORIGINAL, which is what the variants are cut from and what
  * actually sits on disk. The served files are capped by the pipeline, so an
  * oversized original costs storage rather than bandwidth -- worth surfacing,

@@ -1307,6 +1307,21 @@
   flex-basis: 100%;
 }
 
+/* Used by nothing. The strongest of the three, because it is the only one
+   that asks for a decision rather than reporting a measurement -- and the
+   only one that quietly accumulates if nobody ever looks. */
+.media-library-flag.is-orphan {
+  color: #8a4438;
+  font-weight: 500;
+}
+
+/* A left edge on the tile itself, so an orphan is findable while scrolling
+   past five hundred thumbnails, not only once you read its caption. */
+.media-library-item.is-orphan {
+  border-left: 3px solid #8a4438;
+  padding-left: 0.6rem;
+}
+
 /* Amber for soft, not red: a low-resolution image is a thing to look at, not
    a failure -- it may be the only file that exists of a 1991 catalogue. */
 .media-library-flag.is-low {
@@ -1367,9 +1382,77 @@
   border-radius: 4px;
 }
 
+/* Save, Replace and Delete, given three weights rather than three identical
+   grey rectangles. The old row read as a menu of equals; only one of them is
+   the ordinary thing to do, one is occasional, and one is destructive. */
 .media-library-actions {
   display: flex;
-  gap: 0.5rem;
+  align-items: stretch;
+  /* Wraps. A tile is ~220px wide and three controls do not fit on one line
+     at a legible size; squeezing them cropped "Remplacer" to "emplac".
+     Better two lines than a label nobody can read. */
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.media-library-actions > button,
+.media-library-actions > label,
+.media-library-actions .confirm-delete > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+/* The one you came here to press. */
+.media-library-actions .button-primary {
+  background: var(--ink);
+  color: #fff;
+}
+
+.media-library-actions .button-primary:hover {
+  background: #22241d;
+}
+
+/* Occasional: present, legible, not competing. The file input inside is
+   hidden rather than removed -- `display: none` on it would take the label
+   out of the keyboard path along with it, and the label IS the control. */
+.media-library-actions .button-quiet {
+  position: relative;
+  overflow: hidden;
+  background: none;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.media-library-actions .button-quiet:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.media-library-actions .button-quiet.is-busy {
+  color: var(--muted);
+  cursor: progress;
+}
+
+.media-library-actions .button-quiet input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.media-library-actions .button-quiet.is-busy input[type="file"] {
+  cursor: progress;
 }
 
 .button.image-picker-upload {

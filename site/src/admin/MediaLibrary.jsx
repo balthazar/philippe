@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiGet, apiSend, apiUpload } from '@/api.js'
 import { useDebouncedValue } from '@/lib/useDebouncedValue.js'
-import { assessImage, formatBytes, formatDimensions, QUALITY } from './imageQuality.js'
+import { assessImage, formatBytes, formatDimensions, isOrphan, QUALITY } from './imageQuality.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
@@ -28,6 +28,7 @@ export function MediaLibrary() {
   const [uploading, setUploading] = useState(false)
   const [lang, setLang] = useState('fr')
   const [rowErrors, setRowErrors] = useState({})
+  const [replacing, setReplacing] = useState({})
   const [query, setQuery] = useState('')
   const [quality, setQuality] = useState('all')
 
@@ -40,15 +41,22 @@ export function MediaLibrary() {
   // Assessed once per image rather than inside the filter and again inside
   // the render: five hundred images, and the answer does not change between
   // the two.
-  const assessed = useMemo(
-    () => images.map((image) => ({ image, ...assessImage(image) })),
-    [images]
-  )
+  const assessed = useMemo(() => {
+    const rows = images.map((image) => ({ image, orphan: isOrphan(image), ...assessImage(image) }))
+    // Orphans first, and the rest in the order the API sent (newest upload
+    // first). An image used nowhere is the one thing here that needs a
+    // decision -- keep it, place it, or delete it -- and burying it among
+    // five hundred that are all fine is how a library accumulates the ones
+    // nobody meant to keep. A stable sort leaves both groups internally
+    // untouched.
+    return [...rows].sort((a, b) => Number(b.orphan) - Number(a.orphan))
+  }, [images])
 
   const visibleImages = useMemo(() => {
     const needle = normalize(settledQuery).trim()
     return assessed.filter((entry) => {
-      if (quality !== 'all' && entry.quality !== quality) return false
+      if (quality === 'orphan' && !entry.orphan) return false
+      if (quality !== 'all' && quality !== 'orphan' && entry.quality !== quality) return false
       if (!needle) return true
       return normalize(searchableText(entry.image)).includes(needle)
     })
@@ -58,6 +66,7 @@ export function MediaLibrary() {
     () => ({
       low: assessed.filter((e) => e.quality === QUALITY.LOW).length,
       oversized: assessed.filter((e) => e.quality === QUALITY.OVERSIZED).length,
+      orphan: assessed.filter((e) => e.orphan).length,
     }),
     [assessed]
   )
@@ -102,6 +111,29 @@ export function MediaLibrary() {
     } catch (err) {
       if (err?.status === 401) onSessionExpired()
       else setRowErrors((prev) => ({ ...prev, [image._id]: "Impossible d'enregistrer la légende." }))
+    }
+  }
+
+  // Replaces the file behind an image while keeping the document, so every
+  // article and gallery already pointing at it follows without being touched.
+  // Uploading a better scan as a NEW image would mean hunting down each
+  // reference by hand, and some photographs are used in three places.
+  const replace = async (image, file) => {
+    if (!file) return
+    setRowErrors((prev) => ({ ...prev, [image._id]: '' }))
+    setReplacing((prev) => ({ ...prev, [image._id]: true }))
+    try {
+      const updated = await apiUpload(`/admin/images/${image._id}/replace`, file)
+      setImages((prev) => prev.map((img) => (img._id === image._id ? updated : img)))
+    } catch (err) {
+      if (err?.status === 401) onSessionExpired()
+      else if (err?.status === 409) {
+        setRowErrors((prev) => ({ ...prev, [image._id]: 'Ce fichier est déjà dans la médiathèque sous une autre image.' }))
+      } else {
+        setRowErrors((prev) => ({ ...prev, [image._id]: "Impossible de remplacer cette image." }))
+      }
+    } finally {
+      setReplacing((prev) => ({ ...prev, [image._id]: false }))
     }
   }
 
@@ -171,6 +203,7 @@ export function MediaLibrary() {
             <option value="all">Toutes les définitions</option>
             <option value={QUALITY.LOW}>Définition insuffisante ({counts.low})</option>
             <option value={QUALITY.OVERSIZED}>Surdimensionnées ({counts.oversized})</option>
+            <option value="orphan">Utilisées nulle part ({counts.orphan})</option>
           </select>
           <p className="media-library-count" aria-live="polite">
             {/* French pluralises from two, so zero and one both take the singular. */}
@@ -183,8 +216,8 @@ export function MediaLibrary() {
         {error && <p role="alert" className="admin-error">{error}</p>}
 
         <ul className="media-library-grid">
-          {visibleImages.map(({ image, quality: imageQuality, needed }) => (
-            <li key={image._id} className="media-library-item">
+          {visibleImages.map(({ image, quality: imageQuality, needed, orphan }) => (
+            <li key={image._id} className={`media-library-item${orphan ? ' is-orphan' : ''}`}>
               {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
               {/*
                 The original's dimensions and weight -- what the variants are
@@ -196,6 +229,9 @@ export function MediaLibrary() {
               <p className="media-library-meta">
                 <span>{formatDimensions(image)}</span>
                 <span>{formatBytes(image.variants?.original?.bytes ?? image.bytes)}</span>
+                {orphan && (
+                  <span className="media-library-flag is-orphan">utilisée nulle part</span>
+                )}
                 {imageQuality === QUALITY.LOW && (
                   <span className="media-library-flag is-low">il en faudrait {needed} px sur le grand côté</span>
                 )}
@@ -205,7 +241,21 @@ export function MediaLibrary() {
               </p>
               <LocalizedInput label="Texte alternatif" lang={lang} value={image.alt} onChange={(alt) => setAlt(image._id, alt)} />
               <div className="media-library-actions">
-                <button type="button" onClick={() => saveAlt(image)}>Enregistrer</button>
+                <button type="button" className="button-primary" onClick={() => saveAlt(image)}>Enregistrer</button>
+                {/*
+                  A label wrapping a file input, not a button: there is no way
+                  to open a file picker from script without one, and styling
+                  the label is how it comes to look like the control beside it.
+                */}
+                <label className={`button-quiet${replacing[image._id] ? ' is-busy' : ''}`}>
+                  {replacing[image._id] ? 'Envoi…' : 'Remplacer'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/tiff"
+                    disabled={Boolean(replacing[image._id])}
+                    onChange={(e) => { replace(image, e.target.files?.[0]); e.target.value = '' }}
+                  />
+                </label>
                 {/*
                   In-page confirmation, not window.confirm() (task 25, client
                   feedback item 3): one unconfirmed click here used to also

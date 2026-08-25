@@ -211,6 +211,60 @@ adminRouter.post('/images', upload.single('file'), asyncHandler(async (req, res,
   }
 }))
 
+/**
+ * Replaces the file behind an existing image, keeping the document and its
+ * id -- so every article, gallery item and cover already pointing at it
+ * follows automatically. That is the whole point: uploading a better scan as
+ * a NEW image means hunting down every reference by hand, and the archive has
+ * photographs used in three places at once.
+ *
+ * `alt` is deliberately untouched. The legend describes the work, not the
+ * file, and re-scanning a photograph does not change what it is of.
+ *
+ * The old variants are unlinked only AFTER the document is safely updated.
+ * The other order risks a document pointing at files that no longer exist,
+ * which is a broken page; this order risks files nothing points at, which is
+ * a few kilobytes.
+ */
+adminRouter.post('/images/:id/replace', upload.single('file'), asyncHandler(async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'no file' })
+    const image = await Image.findById(req.params.id)
+    if (!image) return res.status(404).json({ error: 'not found' })
+
+    const fields = await processImage(req.file.buffer, {
+      originalName: req.file.originalname,
+      mediaRoot: mediaRoot(),
+    })
+
+    // `filename` is the content hash and carries a unique index. Uploading a
+    // file the library already holds elsewhere would collide on it, so say so
+    // plainly rather than surfacing a raw E11000.
+    if (fields.filename !== image.filename) {
+      const clash = await Image.findOne({ filename: fields.filename, _id: { $ne: image._id } }).lean()
+      if (clash) return res.status(409).json({ error: 'this exact file is already in the library' })
+    }
+
+    const previousVariants = image.variants ? Object.values(image.variants.toObject?.() ?? image.variants) : []
+    const previousFilename = image.filename
+
+    Object.assign(image, fields)
+    await image.save()
+
+    if (previousFilename !== fields.filename) {
+      await Promise.all(
+        previousVariants
+          .filter((v) => v?.path)
+          .map((v) => unlink(join(mediaRoot(), v.path)).catch(() => {}))
+      )
+    }
+    res.json(image.toObject())
+  } catch (err) {
+    if (/unsupported image/i.test(err.message)) err.status = 400
+    next(err)
+  }
+}))
+
 adminRouter.patch('/images/:id', asyncHandler(async (req, res, next) => {
   try {
     const image = await Image.findByIdAndUpdate(req.params.id, { alt: req.body?.alt }, { new: true }).lean()
