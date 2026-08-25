@@ -248,15 +248,23 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
           the brief.
 
           Task 30 (client feedback): hidden for exhibitions, along with
-          Année affichée and the year-sort fields below -- verified against
-          the real archive that all 25 exhibitions leave every one of these
-          empty/null, and lib/exhibitionsOrder.js already documents why
-          (the timeline sorts on the article's own title, not these
-          fields). Hidden, not deleted: the model/API keep the fields, and
+          Année affichée -- verified against the real archive that all 25
+          exhibitions leave both empty, and they still do across all 39.
+          Hidden, not deleted: the model/API keep the fields, and
           `update()`/`save()` below are untouched, so a value that already
           exists here (or is typed while category briefly reads something
           else) is never blanked by hiding its input -- only the JSX is
           conditional.
+
+          The YEAR fields below are no longer hidden with them. That was
+          right when an exhibitions article WAS a year (title "2013", no
+          year fields at all, sorted on the title); after task 33 split each
+          year into one article per exhibition, yearStart is what carries
+          the year -- it orders the section, groups the timeline's dots
+          under their year label, and is what the legacy /YYYY routes are
+          built from (see lib/exhibitionsOrder.js and prerender/index.js).
+          All 39 exhibitions have one, and until now none of them could be
+          corrected, nor could a new exhibition be given one at all.
         */}
         {article.category !== 'exhibitions' && (
           <>
@@ -273,7 +281,30 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
           ))}
         </select>
 
-        {article.category !== 'exhibitions' && (
+        {/*
+          One field for an exhibition, two for everything else, because the
+          data says so: an exhibition happens in a year (all 39 have
+          yearStart === yearEnd), while a work is made over a span and says
+          so in its own title -- "Cuvettes de développement 2001-2022".
+          Offering an exhibition a start and an end would be offering it a
+          distinction it does not have, and inviting the pair to drift apart
+          in ways the timeline has no way to show.
+
+          It writes both fields, so the range stays coherent whichever
+          category the article is in, and nothing downstream has to learn
+          that exhibitions are a special case.
+        */}
+        {article.category === 'exhibitions' ? (
+          <div className="year-sort-fields">
+            <label htmlFor="yearStart">Année</label>
+            <input
+              id="yearStart"
+              type="number"
+              value={article.yearStart}
+              onChange={(e) => update({ yearStart: e.target.value, yearEnd: e.target.value })}
+            />
+          </div>
+        ) : (
           <div className="year-sort-fields">
             <label htmlFor="yearStart">Année de début (tri)</label>
             <input

@@ -127,20 +127,24 @@ describe('ArticleEditor subtitle field', () => {
   })
 })
 
-// Task 30 (client feedback): subtitle, yearLabel, yearStart/yearEnd are
-// genuinely unused by exhibitions (verified against the real archive: all
-// 25 are empty/null), so the editor hides those inputs for that category
-// rather than showing fields that never do anything. Hidden, not deleted:
-// the model and API keep the fields, and a value that somehow exists must
-// survive untouched through a save while its input is hidden.
+// Task 30 (client feedback): subtitle and yearLabel are genuinely unused by
+// exhibitions (verified against the real archive: all 39 are still empty),
+// so the editor hides those inputs for that category rather than showing
+// fields that never do anything. Hidden, not deleted: the model and API keep
+// the fields, and a value that somehow exists must survive untouched through
+// a save while its input is hidden.
+//
+// The YEAR is a different matter and is no longer hidden with them -- see
+// the describe below.
 describe('ArticleEditor hides fields exhibitions do not use', () => {
-  it('hides subtitle, yearLabel and year-sort fields when the category is exhibitions', async () => {
+  it('hides subtitle and yearLabel when the category is exhibitions', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'exhibitions' })
     renderEditor()
     await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
 
     expect(screen.queryByLabelText('Sous-titre')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Année affichée')).not.toBeInTheDocument()
+    // The two-field range belongs to works; an exhibition gets one field.
     expect(screen.queryByLabelText('Année de début (tri)')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Année de fin (tri)')).not.toBeInTheDocument()
   })
@@ -196,6 +200,51 @@ describe('ArticleEditor hides fields exhibitions do not use', () => {
     await userEvent.selectOptions(screen.getByLabelText('Catégorie'), 'works')
     expect(screen.getByLabelText('Sous-titre')).toHaveValue('Numérisation')
     expect(screen.getByLabelText('Année de début (tri)')).toHaveValue(2020)
+  })
+})
+
+// An exhibitions article USED to be a year -- title "2013", no year fields
+// at all, sorted on the title -- which is why its year inputs were hidden
+// along with the rest. Task 33 split each year into one article per
+// exhibition, and yearStart became what carries the year: it orders the
+// section, groups the timeline's dots under their year label, and is what
+// the legacy /YYYY routes are built from. All 39 exhibitions have one and
+// none of them could be corrected, nor could a new exhibition be given one.
+describe('ArticleEditor exhibition year', () => {
+  it('offers one year field for an exhibition, not a start/end range', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'exhibitions', yearStart: 2024, yearEnd: 2024 })
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    expect(screen.getByLabelText('Année')).toHaveValue(2024)
+    expect(screen.queryByLabelText('Année de début (tri)')).not.toBeInTheDocument()
+  })
+
+  // An exhibition happens in a year, so the one field writes both ends of
+  // the range. Letting them drift apart would give an exhibition a span the
+  // timeline has no way to show.
+  it('writes both yearStart and yearEnd from the one field', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'exhibitions', yearStart: 2024, yearEnd: 2024 })
+    const send = vi.spyOn(api, 'apiSend').mockResolvedValue(ARTICLE)
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    const year = screen.getByLabelText('Année')
+    await userEvent.clear(year)
+    await userEvent.type(year, '2026')
+    await userEvent.click(screen.getByRole('button', { name: /enregistrer/i }))
+
+    expect(send.mock.calls[0][2]).toMatchObject({ yearStart: 2026, yearEnd: 2026 })
+  })
+
+  it('still gives a works article its start and end', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'works', yearStart: 2001, yearEnd: 2022 })
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    expect(screen.getByLabelText('Année de début (tri)')).toHaveValue(2001)
+    expect(screen.getByLabelText('Année de fin (tri)')).toHaveValue(2022)
+    expect(screen.queryByLabelText('Année')).not.toBeInTheDocument()
   })
 })
 
