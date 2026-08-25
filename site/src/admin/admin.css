@@ -1224,6 +1224,36 @@
 /* MediaLibrary. Task 27, client feedback item 3: its own max-width/margin/
    padding are gone -- .admin-editor-layout + .admin-index-content now own
    the page container, the same as Articles and Pages. */
+/* Media library search. Filters the already-loaded list by alt text (both
+   languages at once), debounced in MediaLibrary.jsx so a few hundred
+   thumbnails are not re-laid-out between keystrokes. */
+.media-library-search {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.media-library-search input {
+  flex: 1 1 auto;
+  max-width: 28rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: inherit;
+}
+
+.media-library-count,
+.media-library-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.media-library-empty {
+  margin-top: 0.75rem;
+}
+
 .media-library-grid {
   list-style: none;
   padding: 0;

@@ -86,13 +86,31 @@ export function parseNumbered(html) {
 export function parseUnnumbered(html) {
   const paragraphs = String(html || '')
     .split(/<\/p>/i)
-    .map((p) => toLines(p).filter(Boolean))
+    .flatMap((p) => splitOnBlankLines(toLines(p)))
     .filter((lines) => lines.length)
   if (paragraphs.length < 2) return null
   if (paragraphs.some((lines) => lines.some((l) => NUMBERED.test(l)))) return null
   const withDimensions = paragraphs.filter((lines) => lines.some((l) => DIMENSIONS.test(l))).length
   if (withDimensions < paragraphs.length / 2) return null
   return paragraphs.map((lines, i) => ({ n: i + 1, text: joinLines(lines) }))
+}
+
+/**
+ * A blank line ends an entry as surely as a paragraph break does. Châteaux de
+ * sable keeps n°7, n°8 and n°9 in ONE paragraph separated by `<br /><br />`,
+ * where every other entry has a paragraph of its own -- the difference
+ * between pressing Enter and Shift-Enter twice, which looks identical on the
+ * page and is invisible to anyone writing the list. Treating only `</p>` as a
+ * separator silently folded three works into one legend and left two
+ * photographs unaccounted for.
+ */
+function splitOnBlankLines(lines) {
+  const groups = [[]]
+  for (const line of lines) {
+    if (line) groups[groups.length - 1].push(line)
+    else if (groups[groups.length - 1].length) groups.push([])
+  }
+  return groups.filter((g) => g.length)
 }
 
 /**

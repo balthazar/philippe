@@ -1,10 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiGet, apiSend, apiUpload } from '@/api.js'
+import { useDebouncedValue } from '@/lib/useDebouncedValue.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
 
 const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.variants.thumb.path}` : '')
+
+/**
+ * Accent- and case-insensitive, so "developpement" finds "Cuvette de
+ * développement" and "ecritoire" finds "Écritoire". Nearly every legend in
+ * this archive carries an accent, and a search that made the artist reproduce
+ * them exactly would be a search he stops using.
+ */
+const normalize = (text) =>
+  String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+/** Both languages at once: he should not have to know which one holds the word he remembers. */
+const searchableText = (image) => `${image?.alt?.fr || ''} ${image?.alt?.en || ''}`
 
 export function MediaLibrary() {
   const onSessionExpired = useSessionExpired()
@@ -14,6 +27,18 @@ export function MediaLibrary() {
   const [uploading, setUploading] = useState(false)
   const [lang, setLang] = useState('fr')
   const [rowErrors, setRowErrors] = useState({})
+  const [query, setQuery] = useState('')
+
+  // The whole library is already in memory (GET /admin/images returns every
+  // image), so this filters locally and the debounce is not about sparing the
+  // server -- it is about not rebuilding a list of several hundred thumbnails
+  // between one keystroke and the next.
+  const settledQuery = useDebouncedValue(query, 200)
+  const visibleImages = useMemo(() => {
+    const needle = normalize(settledQuery).trim()
+    if (!needle) return images
+    return images.filter((image) => normalize(searchableText(image)).includes(needle))
+  }, [images, settledQuery])
 
   useEffect(() => {
     let cancelled = false
@@ -99,10 +124,32 @@ export function MediaLibrary() {
           <button type="button" className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>English</button>
         </div>
 
+        <div className="media-library-search">
+          <input
+            type="search"
+            value={query}
+            placeholder="Rechercher dans les textes alternatifs"
+            aria-label="Rechercher dans les textes alternatifs"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {/*
+            The count is the only feedback that a search with no matches
+            worked rather than broke -- an empty grid on its own reads as a
+            page that failed to load. aria-live so it is announced when it
+            changes, rather than only being found by someone who goes looking.
+          */}
+          <p className="media-library-count" aria-live="polite">
+            {/* French pluralises from two, so zero and one both take the singular. */}
+            {settledQuery.trim()
+              ? `${visibleImages.length} image${visibleImages.length > 1 ? 's' : ''} sur ${images.length}`
+              : `${images.length} image${images.length > 1 ? 's' : ''}`}
+          </p>
+        </div>
+
         {error && <p role="alert" className="admin-error">{error}</p>}
 
         <ul className="media-library-grid">
-          {images.map((image) => (
+          {visibleImages.map((image) => (
             <li key={image._id} className="media-library-item">
               {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
               <LocalizedInput label="Texte alternatif" lang={lang} value={image.alt} onChange={(alt) => setAlt(image._id, alt)} />
@@ -120,6 +167,10 @@ export function MediaLibrary() {
             </li>
           ))}
         </ul>
+
+        {settledQuery.trim() && !visibleImages.length && (
+          <p className="media-library-empty">Aucune image ne correspond à cette recherche.</p>
+        )}
       </div>
     </div>
   )

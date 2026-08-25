@@ -79,6 +79,21 @@ describe('parseUnnumbered', () => {
     expect(parseUnnumbered('<p>1. Un<br />60 x 60 cm</p><p>2. Deux<br />60 x 60 cm</p>')).toBeNull()
   })
 
+  // Châteaux de sable keeps n°7, n°8 and n°9 in one paragraph separated by
+  // blank lines, where every other entry has its own. Pressing Enter and
+  // pressing Shift-Enter twice look identical on the page, so the list reads
+  // as nine entries however it was typed.
+  it('ends an entry on a blank line as well as on a paragraph break', () => {
+    const html = '<p>Château n°1 - 2002<br />80 x 120 cm</p>'
+      + '<p>Château n°2 - 2002<br />80 x 120 cm<br /><br />Château n°3 - 2017<br />72 x 102 cm</p>'
+    const parsed = parseUnnumbered(html)
+    expect(parsed.map((e) => e.text)).toEqual([
+      'Château n°1 - 2002, 80 x 120 cm',
+      'Château n°2 - 2002, 80 x 120 cm',
+      'Château n°3 - 2017, 72 x 102 cm',
+    ])
+  })
+
   it('recognises a diameter as a dimension', () => {
     const parsed = parseUnnumbered('<p>Antenne n°1 - 1998<br />Ø 120 cm</p><p>Antenne n°2 - 1998<br />Ø 120 cm</p>')
     expect(parsed).toHaveLength(2)
