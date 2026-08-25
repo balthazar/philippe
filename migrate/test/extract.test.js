@@ -3,7 +3,7 @@ import {
   pairByTrid, mapCategory, parseYearLabel, assertRowCount, extractSubtitle, purgeImageBlocks,
   reduceContactPageBlocks, removeEmptyTextBlocks, removeSubtitleDuplicateBlocks, ensureCoverInGallery,
   coverLegacyIdFor, moveCreditsAfterGallery, defaultGalleryMode, splitExhibitionYear,
-  removeExhibitionTitleDuplicateBlocks, removeLoremIpsumBlocks,
+  removeExhibitionTitleDuplicateBlocks, removeLoremIpsumBlocks, decodeEntities,
 } from '../extract.js'
 
 describe('mapCategory', () => {
@@ -553,6 +553,20 @@ describe('splitExhibitionYear', () => {
     expect(result[0].blocks).toEqual(article.blocks)
   })
 
+  // A heading's text becomes `title`, a plain-text field React escapes on
+  // render, so an entity surviving the split prints literally on the page.
+  // Two real exhibitions shipped with "&amp;" showing in their title, their
+  // <h1>, their card and their tab title before this was fixed.
+  it('decodes HTML entities in the heading, since `title` is plain text, not HTML', () => {
+    const article = baseArticle({
+      blocks: [
+        { type: 'text', value: { fr: '<h2>Galerie Dutko &amp; Cie</h2>', en: '<h2>Dutko &amp; Co</h2>' } },
+      ],
+    })
+    const [entry] = splitExhibitionYear(article)
+    expect(entry.title).toEqual({ fr: 'Galerie Dutko & Cie', en: 'Dutko & Co' })
+  })
+
   it('splits a year with multiple entries into that many articles, one per <h2>', () => {
     const article = baseArticle({
       blocks: [
@@ -744,5 +758,31 @@ describe('assertRowCount', () => {
 
   it('does not throw when the joined count matches', () => {
     expect(() => assertRowCount(125, 125, 'published posts')).not.toThrow()
+  })
+})
+
+describe('decodeEntities', () => {
+  it('decodes the named entities WordPress emits', () => {
+    expect(decodeEntities('Dijon &amp; Magnin')).toBe('Dijon & Magnin')
+    expect(decodeEntities('a&nbsp;b')).toBe('a b')
+    expect(decodeEntities('&quot;Retourner voir&quot;')).toBe('"Retourner voir"')
+    expect(decodeEntities('&lt;p&gt;')).toBe('<p>')
+  })
+
+  it('decodes decimal and hexadecimal numeric references', () => {
+    expect(decodeEntities('l&#8217;autre')).toBe('l\u2019autre')
+    expect(decodeEntities('l&#x2019;autre')).toBe('l\u2019autre')
+  })
+
+  // &amp; is decoded last on purpose: decoding it first would turn a
+  // literal, doubly-escaped `&amp;lt;` into `<`, manufacturing markup the
+  // source never contained.
+  it('does not manufacture markup out of a doubly-escaped entity', () => {
+    expect(decodeEntities('&amp;lt;script&amp;gt;')).toBe('&lt;script&gt;')
+  })
+
+  it('leaves a bare ampersand and an unknown entity alone', () => {
+    expect(decodeEntities('R & D')).toBe('R & D')
+    expect(decodeEntities('&fakeentity;')).toBe('&fakeentity;')
   })
 })

@@ -78,10 +78,18 @@ publicRouter.get('/home', asyncHandler(async (req, res) => {
   // (verified against MongoDB). That is deliberate: a slide with no image cannot
   // render, so a work without a cover is omitted rather than emitted as a broken
   // slide.
+  //
+  // Deliberately UNBOUNDED. This query used to end in `.limit(8)`, which
+  // meant the artist could star a ninth work and watch nothing happen: the
+  // toggle saved, the admin showed it starred, and the homepage silently
+  // dropped it. (Thirteen were starred by the time this was noticed, so five
+  // were being discarded.) `featured` is a hand-curated flag on a single
+  // artist's own works -- the list is as long as he decides it is, and a cap
+  // here can only ever contradict a choice he already made in the admin.
+  // The FALLBACK below keeps its limit, for the opposite reason: see there.
   let slideArticles = await Article.find({ status: 'published', category: 'works', featured: true, cover: { $ne: null } })
     .select(LIST_FIELDS)
     .sort({ position: 1 })
-    .limit(8)
     .populate('cover')
     .lean()
 
@@ -89,6 +97,12 @@ publicRouter.get('/home', asyncHandler(async (req, res) => {
   // its cover), so fall back to the most recent published works. Without
   // this the slideshow goes blank the instant this ships and stays blank
   // until someone toggles something.
+  //
+  // This one KEEPS its limit of 8, unlike the curated query above: nobody
+  // chose these slides, a date sort did, and "show every published work with
+  // a cover" (34 today) is a machine's guess about the homepage rather than
+  // the artist's decision about it. Starring anything at all replaces this
+  // list wholesale, cap included.
   if (!slideArticles.length) {
     slideArticles = await Article.find({ status: 'published', category: 'works', cover: { $ne: null } })
       .select(LIST_FIELDS)

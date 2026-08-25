@@ -163,6 +163,38 @@ describe('GET /api/home', () => {
     expect(res.body.slides.map((s) => s.article.slug)).toEqual(['featured-b', 'featured-a'])
   })
 
+  // The curated query used to end in `.limit(8)`: starring a ninth work
+  // saved, showed as starred in the admin, and then did nothing on the
+  // homepage. Twelve here, so a regression to any single-digit cap fails.
+  it('shows every featured work, with no cap on how many can be starred', async () => {
+    const cover2 = await Image.create({
+      filename: 'testcover3',
+      width: 2000,
+      height: 1500,
+      variants: {
+        thumb: { path: 'ef/testcover3-thumb.webp', width: 600, height: 450 },
+        medium: { path: 'ef/testcover3-medium.webp', width: 1400, height: 1050 },
+        large: { path: 'ef/testcover3-large.webp', width: 2000, height: 1500 },
+      },
+    })
+    await Article.create(
+      Array.from({ length: 12 }, (_, i) => ({
+        category: 'works',
+        status: 'published',
+        slug: { fr: `vedette-${i}` },
+        title: { fr: `Vedette ${i}` },
+        yearStart: 2020,
+        cover: cover2._id,
+        featured: true,
+        position: i,
+      }))
+    )
+    const res = await request(createApp()).get('/api/home')
+    expect(res.body.slides.map((s) => s.article.slug)).toEqual(
+      Array.from({ length: 12 }, (_, i) => `vedette-${i}`)
+    )
+  })
+
   // Without this fallback the slideshow goes blank the moment featured ships
   // and stays blank until someone toggles something.
   it('falls back to the most recent works when nothing is featured, so the slideshow is never empty', async () => {

@@ -355,8 +355,29 @@ function countCreditsBeforeGallery(blocks = []) {
   return n
 }
 
+// The named entities WordPress's own editor emits, plus numeric references.
+// `&amp;` must be decoded LAST: doing it first would turn a literal
+// `&amp;lt;` (an escaped entity, not a tag) into `&lt;` and then into `<`,
+// manufacturing markup the source never had.
+const NAMED_ENTITIES = { nbsp: ' ', lt: '<', gt: '>', quot: '"', apos: "'" }
+
+export function decodeEntities(text) {
+  return String(text || '')
+    .replace(/&(nbsp|lt|gt|quot|apos);/gi, (_, name) => NAMED_ENTITIES[name.toLowerCase()])
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/gi, '&')
+}
+
+// A heading becomes an article's `title`, which is a PLAIN TEXT field: every
+// render path (the article's own <h1>, the card, the slideshow caption, the
+// tab title) hands it to React as text, so React escapes it. An entity left
+// undecoded here therefore prints literally -- `&amp;` on the page where the
+// source meant `&`. That is not hypothetical: it is what put "Galerie Dutko
+// &amp; ..." on two live exhibition pages. Decoding belongs here, at the one
+// point where HTML stops being HTML, not at each of the four render sites.
 function stripToHeadingText(html) {
-  return String(html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  return decodeEntities(String(html || '').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
 }
 
 // Task 33, section 3 (client feedback): each exhibitions "year" article is
