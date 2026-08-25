@@ -186,3 +186,18 @@ export function WidthIcon(props) {
     </svg>
   )
 }
+
+/**
+ * Unlike every other icon here, this one is not inside a button with its own
+ * aria-label -- it sits beside a line of warning text that already says what
+ * is wrong, so it stays decorative and the text carries the meaning.
+ */
+export function WarningIcon(props) {
+  return (
+    <svg {...base} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 3.5 1.8 20.2a1 1 0 0 0 .9 1.5h18.6a1 1 0 0 0 .9-1.5Z" />
+      <line x1="12" y1="9" x2="12" y2="14" />
+      <line x1="12" y1="17.5" x2="12" y2="17.5" />
+    </svg>
+  )
+}

@@ -1476,3 +1476,63 @@
   opacity: 0;
   cursor: pointer;
 }
+
+/* Slug warnings. Amber, matching the media library's low-resolution flag,
+   and for the same reason: this is something to look at, not a failure --
+   nothing here blocks a save, and a long slug on a 2009 work may well be
+   the address the old site already published. */
+.slug-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.slug-warning {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.1rem 0.4rem;
+  font-size: 0.8rem;
+  color: #9a6114;
+}
+
+.slug-warning-icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 0.1rem;
+}
+
+.slug-warning p {
+  margin: 0;
+  grid-column: 2;
+}
+
+.slug-warning strong {
+  font-weight: 500;
+}
+
+.slug-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+}
+
+/* A proposal is a thing you click to take, so it looks like a control and
+   shows the exact string it would write -- monospace, because the point of
+   reading it is spotting a character. */
+.slug-suggestion {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.slug-suggestion:hover {
+  background: #9a6114;
+  color: #fff;
+}

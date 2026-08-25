@@ -447,3 +447,91 @@ describe('ArticleEditor unsaved changes', () => {
     expect(onUnsavedCountChange).toHaveBeenLastCalledWith(0)
   })
 })
+
+describe('ArticleEditor slug derivation and warnings', () => {
+  function renderNew() {
+    return render(
+      <MemoryRouter initialEntries={['/admin/articles/new']}>
+        <Routes>
+          <Route path="/admin/articles/new" element={<ArticleEditor />} />
+          <Route path="/admin/articles/:id" element={<ArticleEditor />} />
+        </Routes>
+      </MemoryRouter>
+    )
+  }
+
+  const slugField = () => screen.getByLabelText('Slug')
+
+  it('derives the slug from the title of a new article, as it is typed', async () => {
+    const user = userEvent.setup()
+    renderNew()
+    await user.type(screen.getByLabelText('Titre'), 'Porte, Abri')
+    expect(slugField()).toHaveValue('porte-abri')
+  })
+
+  // The whole point of the lock. A slug is the article's public address --
+  // the one the old WordPress site's inbound links point at -- so renaming a
+  // work must never silently move its page.
+  it('leaves an existing slug alone when the title changes', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
+    renderEditor()
+    await waitFor(() => expect(slugField()).toHaveValue('titre'))
+    await user.type(screen.getByLabelText('Titre'), ' remanié')
+    expect(slugField()).toHaveValue('titre')
+  })
+
+  it('stops following the title once the slug is typed in by hand', async () => {
+    const user = userEvent.setup()
+    renderNew()
+    await user.type(screen.getByLabelText('Titre'), 'Versos')
+    await user.clear(slugField())
+    await user.type(slugField(), 'versos-2005-2016')
+    await user.type(screen.getByLabelText('Titre'), ' II')
+    expect(slugField()).toHaveValue('versos-2005-2016')
+  })
+
+  // Clearing the field is the only way back to the automatic behaviour, and
+  // it has to work or a mistyped slug is permanent.
+  it('follows the title again once the slug field is emptied', async () => {
+    const user = userEvent.setup()
+    renderNew()
+    await user.type(screen.getByLabelText('Titre'), 'Versos')
+    await user.type(slugField(), '-1')
+    await user.clear(slugField())
+    await user.type(screen.getByLabelText('Titre'), ' II')
+    expect(slugField()).toHaveValue('versos-ii')
+  })
+
+  it('warns about a malformed slug and applies the proposal when it is clicked', async () => {
+    const user = userEvent.setup()
+    renderNew()
+    await user.type(slugField(), 'Galerie-Aveline-Paris')
+    expect(screen.getByText(/Minuscules/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'galerie-aveline-paris' }))
+    expect(slugField()).toHaveValue('galerie-aveline-paris')
+    expect(screen.queryByText(/Minuscules/)).not.toBeInTheDocument()
+  })
+
+  // The language switch hides the other slug entirely, so an English slug
+  // with a problem would otherwise sit there unseen.
+  it('warns about the English slug while the French tab is showing', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, slug: { fr: 'titre', en: 'contact' } })
+    renderEditor()
+    await waitFor(() => expect(screen.getByText(/section du site/)).toBeInTheDocument())
+    expect(screen.getByText('Slug anglais')).toBeInTheDocument()
+  })
+
+  // A slug used to leave this editor empty, letting the API invent a unique
+  // one; now that it always arrives filled in, a collision comes back as a
+  // 409 that the artist has to be able to act on.
+  it('names the slug as the culprit when a save collides', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
+    vi.spyOn(api, 'apiSend').mockRejectedValue(Object.assign(new Error('x'), { status: 409 }))
+    renderEditor()
+    await waitFor(() => expect(slugField()).toHaveValue('titre'))
+    await user.click(screen.getByRole('button', { name: /Enregistrer/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/slug est déjà utilisé/)
+  })
+})

@@ -5,9 +5,10 @@ import { routeFor } from '@/routes.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { deriveSortYears } from './yearRange.js'
+import { slugify, slugWarning } from './slug.js'
 import { BlockEditor } from './BlockEditor.jsx'
 import { ArticlePreview } from './ArticlePreview.jsx'
-import { ExternalLinkIcon } from './icons.jsx'
+import { ExternalLinkIcon, WarningIcon } from './icons.jsx'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
 import { countUnsavedChanges } from './unsavedChanges.js'
 
@@ -36,6 +37,53 @@ const EMPTY_ARTICLE = {
   status: 'draft',
 }
 
+const SLUG_LANG_LABELS = { fr: 'Slug français', en: 'Slug anglais' }
+
+/**
+ * Both slugs at once, never only the tab being shown. The language switch
+ * hides the other slug completely, so an English slug with a problem would
+ * sit there unseen -- and it is a real public URL (/en/<slug>), not a
+ * translation nicety.
+ *
+ * Suggestions are buttons rather than prose: the fix for a slug is always a
+ * specific string, and asking someone to retype it by hand from a sentence
+ * is how a second typo gets in.
+ */
+function SlugWarnings({ slug, onApply }) {
+  const issues = ['fr', 'en']
+    .map((lang) => ({ lang, issue: slugWarning(slug?.[lang]) }))
+    .filter(({ issue }) => issue)
+
+  if (!issues.length) return null
+
+  return (
+    <div className="slug-warnings">
+      {issues.map(({ lang, issue }) => (
+        <div key={lang} className="slug-warning">
+          <WarningIcon className="slug-warning-icon" />
+          <p>
+            <strong>{SLUG_LANG_LABELS[lang]}</strong> : {issue.message}
+          </p>
+          {issue.suggestions.length > 0 && (
+            <p className="slug-suggestions">
+              {issue.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="slug-suggestion"
+                  onClick={() => onApply(lang, suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ArticleEditor({ onUnsavedCountChange } = {}) {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -50,6 +98,10 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
   // countUnsavedChanges' own `!saved` guard).
   const [lastSaved, setLastSaved] = useState(id ? null : EMPTY_ARTICLE)
   const [lang, setLang] = useState('fr')
+  // Whether the French slug is the artist's to keep or the title's to
+  // follow. An article that already has one has claimed it -- see
+  // updateTitle below for why that matters more than the convenience does.
+  const [slugLocked, setSlugLocked] = useState(false)
   const [loading, setLoading] = useState(Boolean(id))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -89,6 +141,7 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
         if (cancelled) return
         setArticle(data)
         setLastSaved(data)
+        setSlugLocked(Boolean(data.slug?.fr))
         setLoading(false)
       })
       .catch((err) => {
@@ -103,6 +156,32 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
   const update = (patch) => {
     setArticle((prev) => ({ ...prev, ...patch }))
     setSaved(false)
+  }
+
+  /**
+   * The slug follows the title only while nobody has claimed it. A brand-new
+   * article gets one as it is typed (the API would otherwise derive the same
+   * string on save, out of sight); an article that already has a slug keeps
+   * it, whatever its title becomes later.
+   *
+   * That second half is the important one. A slug is the article's public
+   * address, the one the old WordPress site's inbound links and search
+   * ranking point at, so renaming a work must never quietly move its page.
+   *
+   * French only, matching the API's own ensureSlug: an empty `slug.en` means
+   * "use the French one", so filling it in would invent a separate English
+   * URL for an article that never asked for one.
+   */
+  const updateTitle = (title) => {
+    if (slugLocked) return update({ title })
+    return update({ title, slug: { ...article.slug, fr: slugify(title.fr) } })
+  }
+
+  // Typing a slug claims it; emptying the field hands it back, so the field
+  // starts following the title again instead of staying stuck blank.
+  const updateSlug = (slug) => {
+    setSlugLocked(Boolean(slug.fr))
+    update({ slug })
   }
 
   const save = async (e) => {
@@ -140,6 +219,13 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
       setSaved(true)
     } catch (err) {
       if (err?.status === 401) onSessionExpired()
+      // A slug now always leaves this editor filled in (updateTitle derives
+      // one), where it used to arrive empty and let the API invent a unique
+      // one. So a collision with another article's slug reaches the client
+      // as a 409 instead of being silently resolved into "titre-2", and
+      // saying which field is at fault beats a generic failure the artist
+      // can only respond to by trying again.
+      else if (err?.status === 409) setError('Ce slug est déjà utilisé par un autre article.')
       else setError("Impossible d'enregistrer cet article.")
     } finally {
       setSaving(false)
@@ -240,7 +326,7 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
 
         {error && <p role="alert" className="admin-error">{error}</p>}
 
-        <LocalizedInput label="Titre" lang={lang} value={article.title} onChange={(title) => update({ title })} />
+        <LocalizedInput label="Titre" lang={lang} value={article.title} onChange={updateTitle} />
         {/*
           Task 27, Part B1: the migration added `subtitle` and it renders on
           the public page, but the editor never got an input for it. Plain
@@ -297,7 +383,18 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
           />
         )}
 
-        <LocalizedInput label="Slug" lang={lang} value={article.slug} onChange={(slug) => update({ slug })} />
+        <LocalizedInput
+          label="Slug"
+          lang={lang}
+          value={article.slug}
+          onChange={updateSlug}
+          warning={
+            <SlugWarnings
+              slug={article.slug}
+              onApply={(target, value) => updateSlug({ ...article.slug, [target]: value })}
+            />
+          }
+        />
 
         <label htmlFor="category">Catégorie</label>
         <select id="category" value={article.category} onChange={(e) => update({ category: e.target.value })}>
