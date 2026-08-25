@@ -3,10 +3,16 @@ kind: ConfigMap
 metadata:
   name: philippe-api-config
   namespace: apps
+# No ALLOWED_ORIGINS here, and none is wanted: the site and its API share an
+# origin (Traefik routes /api and /media of the same host to philippe-api, see
+# k8s/web.yaml), so the browser never makes a cross-origin request and there is
+# nothing for a CORS allowlist to allow. The key used to sit here naming a
+# single host, read by nothing in api/src -- which made it worse than useless
+# once www.philippegronon.com was added, since it looked like a list that
+# needed the new domain adding to it.
 data:
   MONGO_DB: "philippe"
   MEDIA_ROOT: "/data/media"
-  ALLOWED_ORIGINS: "https://philippe.balthazar.dev"
   PORT: "8080"
 ---
 # Media lives on a node-local ReadWriteOnce volume, so this deployment must
