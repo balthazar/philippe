@@ -9,6 +9,7 @@ import { ArticleDetail } from '@/pages/ArticleDetail.jsx'
 import { SimplePage } from '@/pages/SimplePage.jsx'
 import { NotFound } from '@/pages/NotFound.jsx'
 import { ExhibitionsLayout } from '@/components/ExhibitionsLayout.jsx'
+import { useAnalytics } from '@/lib/analytics.js'
 
 // Lazy: the admin editor's own code (and admin.css) must never ship in the
 // public bundle. Only loaded when a visitor actually requests /admin.
@@ -80,6 +81,11 @@ function PublicLayout({ translatedPath }) {
 export default function App() {
   const [translatedPath, setTranslatedPath] = useState(null)
   const [isExhibitionsArticle, setIsExhibitionsArticle] = useState(false)
+
+  // One GA4 page view per route. Mounted here rather than in PublicLayout so
+  // /404 and any future route outside the public chrome is still counted;
+  // /admin is excluded inside the hook itself, not by where it is called.
+  useAnalytics()
 
   return (
     <Routes>
