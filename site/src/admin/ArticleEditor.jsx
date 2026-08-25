@@ -4,6 +4,7 @@ import { apiGet, apiSend } from '@/api.js'
 import { routeFor } from '@/routes.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
+import { deriveSortYears } from './yearRange.js'
 import { BlockEditor } from './BlockEditor.jsx'
 import { ArticlePreview } from './ArticlePreview.jsx'
 import { ExternalLinkIcon } from './icons.jsx'
@@ -247,31 +248,55 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
           server-side, same rule as Titre and Slug. Placed beside them, per
           the brief.
 
-          Task 30 (client feedback): hidden for exhibitions, along with
-          Année affichée -- verified against the real archive that all 25
-          exhibitions leave both empty, and they still do across all 39.
-          Hidden, not deleted: the model/API keep the fields, and
+          Task 30 (client feedback): hidden for exhibitions -- verified
+          against the real archive that all 25 left it empty, and all 39
+          still do. Hidden, not deleted: the model/API keep the field, and
           `update()`/`save()` below are untouched, so a value that already
           exists here (or is typed while category briefly reads something
           else) is never blanked by hiding its input -- only the JSX is
-          conditional.
-
-          The YEAR fields below are no longer hidden with them. That was
-          right when an exhibitions article WAS a year (title "2013", no
-          year fields at all, sorted on the title); after task 33 split each
-          year into one article per exhibition, yearStart is what carries
-          the year -- it orders the section, groups the timeline's dots
-          under their year label, and is what the legacy /YYYY routes are
-          built from (see lib/exhibitionsOrder.js and prerender/index.js).
-          All 39 exhibitions have one, and until now none of them could be
-          corrected, nor could a new exhibition be given one at all.
+          conditional. The year is a separate matter; see just below.
         */}
         {article.category !== 'exhibitions' && (
-          <>
-            <LocalizedInput label="Sous-titre" lang={lang} value={article.subtitle} onChange={(subtitle) => update({ subtitle })} />
-            <LocalizedInput label="Année affichée" lang={lang} value={article.yearLabel} onChange={(yearLabel) => update({ yearLabel })} />
-          </>
+          <LocalizedInput label="Sous-titre" lang={lang} value={article.subtitle} onChange={(subtitle) => update({ subtitle })} />
         )}
+
+        {/*
+          ONE year field, whatever the category.
+          
+          A work used to be asked for its year three times over: "Année
+          affichée" (the text printed beside the title, "2013-2014") and then
+          the same year again as two numbers for sorting. They were never
+          independent -- the migration derived the numbers from the label,
+          and all 37 labelled articles still agree with theirs exactly -- so
+          the second and third fields could only ever restate the first or
+          contradict it. The label is asked for, the numbers are derived
+          (yearRange.js).
+
+          An exhibition has no printed year at all: its year is structural,
+          the thing that orders the section and groups its dot under a label
+          on the timeline. So it gets the number directly, and writes both
+          ends of the range, since an exhibition happens in a year rather
+          than over a span.
+        */}
+        {article.category === 'exhibitions' ? (
+          <div className="year-field">
+            <label htmlFor="yearStart">Année</label>
+            <input
+              id="yearStart"
+              type="number"
+              value={article.yearStart}
+              onChange={(e) => update({ yearStart: e.target.value, yearEnd: e.target.value })}
+            />
+          </div>
+        ) : (
+          <LocalizedInput
+            label="Année"
+            lang={lang}
+            value={article.yearLabel}
+            onChange={(yearLabel) => update({ yearLabel, ...deriveSortYears(yearLabel) })}
+          />
+        )}
+
         <LocalizedInput label="Slug" lang={lang} value={article.slug} onChange={(slug) => update({ slug })} />
 
         <label htmlFor="category">Catégorie</label>
@@ -282,51 +307,9 @@ export function ArticleEditor({ onUnsavedCountChange } = {}) {
         </select>
 
         {/*
-          One field for an exhibition, two for everything else, because the
-          data says so: an exhibition happens in a year (all 39 have
-          yearStart === yearEnd), while a work is made over a span and says
-          so in its own title -- "Cuvettes de développement 2001-2022".
-          Offering an exhibition a start and an end would be offering it a
-          distinction it does not have, and inviting the pair to drift apart
-          in ways the timeline has no way to show.
-
-          It writes both fields, so the range stays coherent whichever
-          category the article is in, and nothing downstream has to learn
-          that exhibitions are a special case.
-        */}
-        {article.category === 'exhibitions' ? (
-          <div className="year-sort-fields">
-            <label htmlFor="yearStart">Année</label>
-            <input
-              id="yearStart"
-              type="number"
-              value={article.yearStart}
-              onChange={(e) => update({ yearStart: e.target.value, yearEnd: e.target.value })}
-            />
-          </div>
-        ) : (
-          <div className="year-sort-fields">
-            <label htmlFor="yearStart">Année de début (tri)</label>
-            <input
-              id="yearStart"
-              type="number"
-              value={article.yearStart}
-              onChange={(e) => update({ yearStart: e.target.value })}
-            />
-            <label htmlFor="yearEnd">Année de fin (tri)</label>
-            <input
-              id="yearEnd"
-              type="number"
-              value={article.yearEnd}
-              onChange={(e) => update({ yearEnd: e.target.value })}
-            />
-          </div>
-        )}
-
-        {/*
           Task 27, Part B3: the gallery (inside Contenu) is the substance of
-          a work, so it sits directly after "Année de début (tri)" rather
-          than further down the form. The separate cover picker is gone: a
+          a work, so it sits directly after the header fields rather than
+          further down the form. The separate cover picker is gone: a
           post-migration archive check (37 of 63 articles had a cover not
           among their gallery images, one had no gallery at all) showed the
           picker couldn't safely be dropped without it -- the client's

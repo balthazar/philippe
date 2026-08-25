@@ -149,15 +149,13 @@ describe('ArticleEditor hides fields exhibitions do not use', () => {
     expect(screen.queryByLabelText('Année de fin (tri)')).not.toBeInTheDocument()
   })
 
-  it('shows those same fields for a works article', async () => {
+  it('shows the subtitle for a works article', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'works' })
     renderEditor()
     await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
 
     expect(screen.getByLabelText('Sous-titre')).toBeInTheDocument()
-    expect(screen.getByLabelText('Année affichée')).toBeInTheDocument()
-    expect(screen.getByLabelText('Année de début (tri)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Année de fin (tri)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Année')).toBeInTheDocument()
   })
 
   it('does not blank an already-populated subtitle/year on save while its field is hidden for exhibitions', async () => {
@@ -187,8 +185,9 @@ describe('ArticleEditor hides fields exhibitions do not use', () => {
       ...ARTICLE,
       category: 'works',
       subtitle: { fr: 'Numérisation', en: '' },
-      yearStart: 2020,
-      yearEnd: 2020,
+      yearLabel: { fr: '2013-2014', en: '' },
+      yearStart: 2013,
+      yearEnd: 2014,
     })
     renderEditor()
     await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
@@ -199,7 +198,7 @@ describe('ArticleEditor hides fields exhibitions do not use', () => {
 
     await userEvent.selectOptions(screen.getByLabelText('Catégorie'), 'works')
     expect(screen.getByLabelText('Sous-titre')).toHaveValue('Numérisation')
-    expect(screen.getByLabelText('Année de début (tri)')).toHaveValue(2020)
+    expect(screen.getByLabelText('Année')).toHaveValue('2013-2014')
   })
 })
 
@@ -237,14 +236,40 @@ describe('ArticleEditor exhibition year', () => {
     expect(send.mock.calls[0][2]).toMatchObject({ yearStart: 2026, yearEnd: 2026 })
   })
 
-  it('still gives a works article its start and end', async () => {
-    vi.spyOn(api, 'apiGet').mockResolvedValue({ ...ARTICLE, category: 'works', yearStart: 2001, yearEnd: 2022 })
+  // A work is asked for its year ONCE, as the text that is printed beside
+  // its title. The numbers the API sorts on are derived from it, so there is
+  // nothing left to keep in agreement by hand.
+  it('asks a works article for its printed year, not for sort numbers', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      ...ARTICLE, category: 'works', yearLabel: { fr: '2001-2022', en: '' }, yearStart: 2001, yearEnd: 2022,
+    })
     renderEditor()
     await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
 
-    expect(screen.getByLabelText('Année de début (tri)')).toHaveValue(2001)
-    expect(screen.getByLabelText('Année de fin (tri)')).toHaveValue(2022)
-    expect(screen.queryByLabelText('Année')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Année')).toHaveValue('2001-2022')
+    expect(screen.queryByLabelText('Année affichée')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Année de début (tri)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Année de fin (tri)')).not.toBeInTheDocument()
+  })
+
+  it('derives the sort years from the printed year on save', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      ...ARTICLE, category: 'works', yearLabel: { fr: '2001', en: '' }, yearStart: 2001, yearEnd: 2001,
+    })
+    const send = vi.spyOn(api, 'apiSend').mockResolvedValue(ARTICLE)
+    renderEditor()
+    await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
+
+    const year = screen.getByLabelText('Année')
+    await userEvent.clear(year)
+    await userEvent.type(year, '2007-2010')
+    await userEvent.click(screen.getByRole('button', { name: /enregistrer/i }))
+
+    expect(send.mock.calls[0][2]).toMatchObject({
+      yearLabel: { fr: '2007-2010', en: '' },
+      yearStart: 2007,
+      yearEnd: 2010,
+    })
   })
 })
 
@@ -289,11 +314,11 @@ describe('ArticleEditor toolbar', () => {
 })
 
 describe('ArticleEditor field order', () => {
-  it('places the content/gallery section directly after the sort-year fields', async () => {
+  it('places the content/gallery section after the header fields', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue(ARTICLE)
     renderEditor()
     await waitFor(() => expect(screen.getByDisplayValue('Titre')).toBeInTheDocument())
-    const yearEnd = screen.getByLabelText('Année de fin (tri)')
+    const yearEnd = screen.getByLabelText('Année')
     const contentLegend = screen.getByText('Contenu')
     // eslint-disable-next-line no-bitwise
     expect(yearEnd.compareDocumentPosition(contentLegend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

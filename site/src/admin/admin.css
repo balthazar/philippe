@@ -457,10 +457,17 @@
   color: var(--ink);
 }
 
-.year-sort-fields {
+/* The exhibitions year: a bare number, so its label sits on the same line
+   rather than above it the way LocalizedInput's own do -- there is nothing
+   to stack. */
+.year-field {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+}
+
+.year-field input {
+  width: 7rem;
 }
 
 /* Flatter content sections (client feedback item 7): no boxed border or grey
