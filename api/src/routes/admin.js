@@ -39,7 +39,11 @@ function cleanBlocks(blocks = []) {
     if (b.type === 'text') {
       return { ...b, value: { fr: sanitize(b.value?.fr), en: sanitize(b.value?.en) } }
     }
-    if (b.type === 'references') {
+    // Same item shape, so the same cleaning: sanitized HTML for the label
+    // (a museum name can carry an accent or an italic), and safeUrl for the
+    // link, which reaches the DOM as an href without passing through
+    // sanitize-html at all.
+    if (b.type === 'references' || b.type === 'collections') {
       return {
         ...b,
         items: (b.items || []).map((item) => ({

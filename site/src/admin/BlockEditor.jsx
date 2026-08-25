@@ -17,6 +17,9 @@ const EMPTY = {
   // Task 39: bibliography entries and links. Each item is an optional
   // image, a citation, and an optional URL -- see the editor further down.
   references: { type: 'references', items: [] },
+  // Same shape as `references`; only the public rendering differs, so the
+  // editor below handles both with one branch.
+  collections: { type: 'collections', items: [] },
 }
 
 const LABELS = {
@@ -25,6 +28,7 @@ const LABELS = {
   gallery: 'Galerie',
   specs: 'Caractéristiques',
   references: 'Références',
+  collections: 'Collections',
 }
 
 // Specs terms/values are NEVER rich text (controller correction 3): unlike
@@ -349,7 +353,7 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
               catalogue with no web presence anywhere is still a real
               bibliography entry.
             */}
-            {block.type === 'references' && (
+            {(block.type === 'references' || block.type === 'collections') && (
               <div className="references-editor">
                 {block.items.map((item, j) => {
                   const setItem = (patch) =>
@@ -379,7 +383,7 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
                           type="button"
                           onClick={() => replace(i, { ...block, items: block.items.filter((_, k) => k !== j) })}
                         >
-                          Supprimer la référence
+                          {block.type === 'collections' ? 'Supprimer l’entrée' : 'Supprimer la référence'}
                         </button>
                       </div>
                     </div>
@@ -391,7 +395,7 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
                     replace(i, { ...block, items: [...block.items, { image: null, value: { fr: '', en: '' }, url: '' }] })
                   }
                 >
-                  Ajouter une référence
+                  {block.type === 'collections' ? 'Ajouter une entrée' : 'Ajouter une référence'}
                 </button>
               </div>
             )}

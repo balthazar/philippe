@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SEGMENTS, RESERVED_SLUGS } from '../../src/lib/constants.js'
+import { SEGMENTS, RESERVED_SLUGS, BLOCK_TYPES } from '../../src/lib/constants.js'
 
 // Task 27, Part A: RESERVED_SLUGS must be derived from SEGMENTS, not a
 // hand-retyped copy that can drift from the real URL scheme.
@@ -33,5 +33,14 @@ describe('RESERVED_SLUGS', () => {
     for (const slug of RESERVED_SLUGS) {
       expect(fromSegments.includes(slug) || structural.includes(slug)).toBe(true)
     }
+  })
+})
+
+// `collections` shares the `references` item shape (image, value, url) and
+// differs only in how the site lays it out, so it must be cleaned the same
+// way on write: sanitized HTML for the label, safeUrl for the link.
+describe('collections block type', () => {
+  it('is an accepted block type', () => {
+    expect(BLOCK_TYPES).toContain('collections')
   })
 })

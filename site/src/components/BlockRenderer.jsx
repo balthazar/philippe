@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Lightbox } from './Lightbox.jsx'
 import { GallerySlider } from './GallerySlider.jsx'
 import { ReferenceGrid } from './ReferenceGrid.jsx'
+import { CollectionsGrid } from './CollectionsGrid.jsx'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
 
@@ -55,6 +56,10 @@ export function BlockRenderer({ blocks = [] }) {
           // branching than belongs inline in this switch.
           case 'references':
             return <ReferenceGrid key={i} items={block.items} />
+          // Same item shape as `references`, laid out as a roll call of marks
+          // rather than a stack of cards. See CollectionsGrid.jsx.
+          case 'collections':
+            return <CollectionsGrid key={i} items={block.items} />
           case 'image':
             return (
               <figure key={i} className={`block-image size-${block.size || 'wide'}`}>

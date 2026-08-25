@@ -1423,6 +1423,93 @@ picture {
   margin-top: 0.15em;
 }
 
+/* A `collections` block: the institutions holding the work, as a roll call of
+   their marks (CollectionsGrid.jsx).
+
+   Monochrome, which is a finding rather than a preference: seventeen of the
+   twenty-one logos in the real archive contain no coloured pixel at all.
+   Tinting the cells would have meant inventing colours for institutions that
+   chose not to have one; colouring only the four that do leaves the eye
+   asking why those four.
+
+   Centred, unlike the bibliography's cards. A card is read left to right --
+   cover, then citation. A mark is looked at, and its name belongs under it on
+   the same axis. */
+.block-collections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-3) var(--space-2);
+  margin: var(--space-3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collection,
+.block-collections > .collection > a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  text-decoration: none;
+  color: inherit;
+}
+
+.block-collections > .collection > a { height: 100%; }
+
+/* A common stage for every mark, so they sit on one baseline instead of each
+   finding its own.
+
+   The files keep their natural proportions on purpose -- squaring them was
+   tried and was wrong. A 4:1 wordmark padded into a square canvas occupies a
+   strip a fraction of that canvas high, so in a fixed-height stage it renders
+   a few pixels tall while a square mark beside it renders sixty: uniform
+   FILES, wildly unequal MARKS. Each file is now the mark plus a thin margin,
+   and the stage below is what makes them comparable.
+
+   Both bounds are set, and the height is the smaller of the two on purpose:
+   a wordmark is allowed to run to the full width of its cell, where a square
+   symbol is held to the stage height, which is roughly how the eye weighs
+   them against each other. */
+.collection-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 3.5rem;
+}
+
+.collection-mark img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.collection-name {
+  font-family: var(--font-chrome);
+  font-size: var(--text-s);
+  line-height: 1.35;
+  text-align: center;
+  color: var(--ink-muted);
+  text-wrap: balance;
+}
+
+/* Only a linked entry answers the pointer; three of the twenty-one have no
+   site that responds and must not pretend to be a target. Underlining the
+   name on hover rather than at rest keeps twenty-one names from reading as
+   twenty-one links. */
+.block-collections > .collection.is-link a:hover .collection-name,
+.block-collections > .collection.is-link a:focus-visible .collection-name {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.block-collections > .collection.is-link a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+
 /* Only a linked entry responds to the pointer: an unlinked one is not a
    target, and must not pretend to be. Underlining on hover rather than at
    rest keeps forty citations from reading as forty underlined links.

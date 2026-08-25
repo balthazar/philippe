@@ -11,7 +11,13 @@ export const PAGE_KEYS = ['home', 'works', 'exhibitions', 'biography', 'contact'
 // rather than a model of its own: an entry is page content, ordered and
 // edited exactly like every other block, and it inherits the block editor's
 // existing image picker, drag-ordering and localization for free.
-export const BLOCK_TYPES = ['text', 'image', 'gallery', 'specs', 'references']
+// `collections` is `references` with a different rendering, not a different
+// shape: both are a list of {image, value, url}. It exists as its own type so
+// the biography's twenty-one museum logos can be laid out as a monochrome
+// grid of marks, where the bibliography's entries are cards of book covers
+// and citations -- same data, two jobs, and no `variant` flag on a block to
+// remember the meaning of.
+export const BLOCK_TYPES = ['text', 'image', 'gallery', 'specs', 'references', 'collections']
 
 // Mirrors site/src/routes.js's SEGMENTS: the api and site are separate
 // deployables (see api/Dockerfile, k8s/*.yaml -- neither container has the
