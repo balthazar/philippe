@@ -20,14 +20,18 @@ const src = (v) => (v?.path ? `/media/${v.path}` : '')
 const ZOOM_SCALE = 2.5
 
 /**
- * How long the pointer has to sit still before the legend fades out. The
- * legend is a caption, not a control: it answers "what am I looking at",
- * which is a question you ask once on arriving at a photograph and not again
- * while you study it. Two seconds is long enough to read a line of it and
- * short enough that it is gone by the time you have stopped noticing the
- * chrome and started looking at the picture.
+ * How long the pointer has to sit still before every piece of chrome fades:
+ * the legend, both arrows, the close button. What is left is the photograph
+ * on white, which is what a fullscreen view is for.
+ *
+ * The legend answers "what am I looking at", a question asked once on
+ * arriving at a photograph and not again while you study it; the controls
+ * answer "how do I leave", which you only ask when you have already reached
+ * for the mouse -- and reaching for the mouse is exactly what brings them
+ * back. Two seconds is long enough to read a line and short enough to be
+ * gone by the time you have stopped noticing the chrome at all.
  */
-const LEGEND_IDLE_MS = 2000
+const IDLE_MS = 2000
 
 const clamp = (n, min, max) => Math.min(Math.max(n, min), max)
 
@@ -99,9 +103,10 @@ export function Lightbox({ images = [], index = 0, onClose }) {
   // to another image (arrow key, arrow button) starts it fitted again.
   useEffect(() => { setZoom(1) }, [current])
 
-  // The legend shows on arrival and fades once the pointer has been still
-  // for LEGEND_IDLE_MS, leaving the photograph alone on the screen. Any
-  // movement brings it back.
+  // The chrome shows on arrival and fades once the pointer has been still
+  // for IDLE_MS, leaving the photograph alone on the screen. Any movement
+  // brings it back. Which elements this hides is CSS's business (see
+  // .lightbox.is-idle in base.css); this only decides when.
   //
   // `pointer` events, not `mouse`: a touch drag produces pointermove and no
   // mousemove at all, so a touch reader would watch the legend disappear
@@ -118,20 +123,20 @@ export function Lightbox({ images = [], index = 0, onClose }) {
   // Keyed to `current` as well, so arrowing to the next photograph shows its
   // legend even if the pointer never moved -- the question "what is this
   // one" is new again on every image.
-  const [legendVisible, setLegendVisible] = useState(true)
-  const legendVisibleRef = useRef(true)
+  const [chromeVisible, setChromeVisible] = useState(true)
+  const chromeVisibleRef = useRef(true)
   useEffect(() => {
     let timer
     const show = () => {
-      if (!legendVisibleRef.current) {
-        legendVisibleRef.current = true
-        setLegendVisible(true)
+      if (!chromeVisibleRef.current) {
+        chromeVisibleRef.current = true
+        setChromeVisible(true)
       }
       clearTimeout(timer)
       timer = setTimeout(() => {
-        legendVisibleRef.current = false
-        setLegendVisible(false)
-      }, LEGEND_IDLE_MS)
+        chromeVisibleRef.current = false
+        setChromeVisible(false)
+      }, IDLE_MS)
     }
     show()
     window.addEventListener('pointermove', show)
@@ -182,7 +187,7 @@ export function Lightbox({ images = [], index = 0, onClose }) {
 
   return (
     <div
-      className="lightbox"
+      className={`lightbox${chromeVisible ? '' : ' is-idle'}`}
       ref={containerRef}
       role="dialog"
       aria-modal="true"
@@ -233,10 +238,12 @@ export function Lightbox({ images = [], index = 0, onClose }) {
         no backdrop, no reserved strip -- so the photograph keeps the whole
         stage and this reads as a margin note under it.
 
-        It fades out once the pointer has been still for two seconds (see
-        LEGEND_IDLE_MS above) and returns on the next movement, so the
-        photograph ends up alone on the screen without the legend ever
-        becoming something you have to dismiss.
+        It fades out with the rest of the chrome once the pointer has been
+        still for two seconds (see IDLE_MS above) and returns on the next
+        movement, so the photograph ends up alone on the screen without the
+        legend ever becoming something you have to dismiss. It is also
+        selectable, so the title and dimensions can be copied -- see
+        .lightbox-legend in base.css for why that took more than saying so.
 
         aria-hidden, deliberately: this is the same string the <img> above
         already carries as its alt text, so without it a screen reader
@@ -245,7 +252,7 @@ export function Lightbox({ images = [], index = 0, onClose }) {
         assistive technology reports -- the alt text is always there.
       */}
       {image?.alt && (
-        <p className={`lightbox-legend${legendVisible ? '' : ' is-idle'}`} aria-hidden="true">{image.alt}</p>
+        <p className="lightbox-legend" aria-hidden="true">{image.alt}</p>
       )}
     </div>
   )

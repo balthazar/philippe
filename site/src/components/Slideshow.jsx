@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
 import { usePrefersReducedMotion } from '@/lib/usePrefersReducedMotion.js'
 import { useCrossfade } from '@/lib/useCrossfade.js'
+import { Chevron } from './Chevron.jsx'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
 const largeVariant = (slide) => slide?.image?.variants?.large
@@ -114,13 +115,48 @@ export function Slideshow({ slides = [], interval = 5000 }) {
       onBlurCapture={() => setPaused(false)}
     >
       <div className="slideshow-stage">
-        <img
-          className={`slideshow-image${visible ? '' : ' is-hidden'}`}
-          src={src(large)}
-          alt={shown.image?.alt || ''}
-          width={large?.width}
-          height={large?.height}
-        />
+        {/*
+          The photograph itself links to its work, not only the caption
+          beneath it (client request). The image is the largest and most
+          obvious thing on the homepage and it was the one part of the slide
+          that did nothing when clicked, which reads as a dead page rather
+          than as a deliberate choice.
+
+          Wrapped around the <img> rather than around the stage: the stage is
+          a full-height flex box, so a link spanning it would make the empty
+          white either side of a portrait photograph clickable too, and
+          swallow the whole viewport into one link.
+
+          tabIndex -1, but NOT aria-hidden: the caption immediately below is
+          already a link to this same work, so a second tab stop leads
+          nowhere new -- but hiding the link outright would take the <img>
+          inside it out of the accessibility tree with it, and that image now
+          carries the photograph's own legend as its alt text. The extra tab
+          stop is worth removing; the alt text is not.
+        */}
+        {shown.article?.slug ? (
+          <Link
+            to={href('works', shown.article.slug)}
+            className="slideshow-image-link"
+            tabIndex={-1}
+          >
+            <img
+              className={`slideshow-image${visible ? '' : ' is-hidden'}`}
+              src={src(large)}
+              alt={shown.image?.alt || ''}
+              width={large?.width}
+              height={large?.height}
+            />
+          </Link>
+        ) : (
+          <img
+            className={`slideshow-image${visible ? '' : ' is-hidden'}`}
+            src={src(large)}
+            alt={shown.image?.alt || ''}
+            width={large?.width}
+            height={large?.height}
+          />
+        )}
       </div>
       {/* Hover-pause lives on this strip, NOT on the <section>. The section
           is full-bleed and 100dvh tall, so a pointer anywhere on the page
@@ -141,9 +177,26 @@ export function Slideshow({ slides = [], interval = 5000 }) {
           </Link>
         )}
         <div className="slideshow-controls">
-          <button type="button" onClick={() => move(-1)} aria-label={lang === 'fr' ? 'Précédent' : 'Previous'}>‹</button>
-          <span aria-live="polite">{safeIndex + 1} / {count}</span>
-          <button type="button" onClick={() => move(1)} aria-label={lang === 'fr' ? 'Suivant' : 'Next'}>›</button>
+          {/*
+            The same drawn chevrons an exhibition's gallery slider uses, at
+            the same size (--slider-arrow-size), rather than the ‹ and ›
+            characters this control used to be set in -- see Chevron.jsx for
+            why a quotation mark makes a poor arrow. One control, one
+            appearance, wherever it turns up on the site.
+          */}
+          <button type="button" onClick={() => move(-1)} aria-label={lang === 'fr' ? 'Précédent' : 'Previous'}>
+            <Chevron direction="left" />
+          </button>
+          {/*
+            Heard, not seen (client request: arrows alone). The counter is
+            still announced, because a carousel that never says where you are
+            in it is disorienting to anyone who cannot watch the slide
+            change, and keeping it for them costs nothing on screen.
+          */}
+          <span className="sr-only" aria-live="polite">{safeIndex + 1} / {count}</span>
+          <button type="button" onClick={() => move(1)} aria-label={lang === 'fr' ? 'Suivant' : 'Next'}>
+            <Chevron direction="right" />
+          </button>
         </div>
       </div>
     </section>

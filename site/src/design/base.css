@@ -49,6 +49,23 @@ a {
   color: inherit;
 }
 
+/* Visually hidden, still announced. The homepage slideshow's position
+   counter uses this: the client asked for arrows alone, but a carousel that
+   never says where you are is disorienting to anyone who cannot see the
+   slide change, and the cost of keeping it for them is zero pixels. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 img,
 picture {
   display: block;
@@ -440,6 +457,29 @@ picture {
   min-height: 0;
 }
 
+/* The photograph is a link to its work (client request). Laid over the
+   stage exactly, so the <img> inside keeps positioning against the same box
+   it always did and the crossfade above is untouched -- an anchor left in
+   normal flow would have collapsed to nothing, since its only child is
+   absolutely positioned and out of flow.
+
+   pointer-events is the whole trick: OFF on the link, ON on the image
+   inside it. A click on the photograph bubbles to the anchor and follows it;
+   a click on the white either side of a portrait work reaches the page, not
+   the link. Without this the link would quietly swallow the full width of a
+   100dvh section. */
+.slideshow-image-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.slideshow-image-link .slideshow-image {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 /* Natural aspect, no background panel behind the image: the client
    explicitly rejected a tinted/grey letterbox on the works page, and the
    same rule applies here. object-fit: contain plus the max-width/max-height
@@ -524,14 +564,42 @@ picture {
   letter-spacing: 0.06em;
 }
 
-.slideshow-controls button {
+/* The homepage slideshow and an exhibition's gallery slider are the same
+   control and now look it: one shared rule, one shared size
+   (--slider-arrow-size). The homepage's arrows used to be the ‹ and ›
+   characters at 16px -- see Chevron.jsx for why a quotation mark makes a
+   poor arrow -- while the gallery's were drawn geometry at 24px. */
+.slideshow-controls button,
+.gallery-slider-controls button {
+  /* Centres the chevron's own box in the button, so the arrows and the
+     counter beside them share one centre line -- see .chevron for why the
+     character-based arrows never could. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: none;
   padding: var(--space-1);
-  color: var(--ink);
-  font-size: var(--text-l);
+  /* The same grey as the caption above them and the counter between them,
+     so the strip under a photograph reads as one quiet line rather than as
+     two pale labels flanking a pair of dark controls. The arrows are the
+     only thing here that ever needed to be found rather than read, and at
+     this size the drawn stroke carries perfectly well without the extra
+     weight. */
+  color: var(--ink-soft);
+  font-size: var(--slider-arrow-size);
   line-height: 1;
   cursor: pointer;
+  transition: color 150ms ease-in;
+}
+
+/* Darkening on hover is what replaces the weight they used to carry at
+   rest: quiet until reached for, unmistakable once. */
+.slideshow-controls button:hover,
+.gallery-slider-controls button:hover,
+.slideshow-controls button:focus-visible,
+.gallery-slider-controls button:focus-visible {
+  color: var(--ink);
 }
 
 /* Article page */
@@ -1198,6 +1266,14 @@ picture {
   margin: var(--space-3) 0;
   padding: 0;
   list-style: none;
+  /* Each cell centred in its row rather than stretched to the top of it.
+     These are photographs of objects of very different proportions -- a tall
+     stretcher beside a wide one beside a near-square -- and a grid row is as
+     tall as the tallest of them. Aligned to the top, the shorter works hang
+     from a line they have nothing to do with and the row reads as a set of
+     things that failed to fill their space. Centred, they read as what they
+     are: works of different sizes, hung level. */
+  align-items: center;
 }
 
 .block-gallery li {
@@ -1409,36 +1485,20 @@ picture {
   gap: var(--space-2);
   margin-top: var(--space-1);
   font-family: var(--font-chrome);
-  /* Task 38, parts 6-7 (client feedback, in two passes): up from
-     var(--text-s) (11px), where the counter read as a caption's
-     afterthought rather than as a control, then back down a step from
-     var(--text-l) (16px), which overshot next to the redrawn arrows. A
-     literal value rather than a token: nothing else on the site is set at
-     this size, and naming it would be a name for a value used once (the
-     same call as .site-header .wordmark's own 1.125rem). */
-  font-size: 0.875rem;
+  /* Task 38, parts 6-7 walked this from 11px up to 16px and back to 14px.
+     Down one more step, with the arrows: the client's reading is that the
+     whole strip sat too loud beside the photograph it belongs to. It is a
+     position indicator, not a label -- it should be findable when looked
+     for and invisible when not. */
+  font-size: 0.75rem;
   color: var(--ink-soft);
   letter-spacing: 0.06em;
 }
 
-.gallery-slider-controls button {
-  /* Centres the chevron's own box in the button, so the arrows and the
-     counter beside them share one centre line -- see .chevron above for
-     why the character-based arrows never could. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: none;
-  padding: var(--space-1);
-  color: var(--ink);
-  /* Task 38, part 7: this is now the chevron's actual drawn size, not the
-     em box around a small quotation mark, so 1.5rem here is visibly larger
-     than the var(--text-xl) (22px) the characters were set at. */
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-}
+/* Its arrows are styled with the homepage's, above -- the two are one
+   control now. Only the counter is particular to this one: the homepage
+   shows no counter at all (client call), an exhibition's gallery keeps
+   its. */
 
 /* Lightbox */
 
@@ -1519,24 +1579,61 @@ picture {
   font-size: var(--text-s);
   line-height: 1.4;
   color: var(--ink-muted);
-  /* The pointer belongs to the image (click to zoom) and to the backdrop
-     (click to close). A text node lying across the bottom of the stage would
-     otherwise silently swallow the backdrop click along its whole width. */
-  pointer-events: none;
+  /* Selectable, so the legend can be copied -- a title, a collection and a
+     set of dimensions is exactly the kind of thing a reader wants to paste
+     somewhere. It could not be, before: the legend was pointer-events: none,
+     so a mousedown on it passed through to the container, which reads a
+     mousedown on itself as "clicked outside the content" and closes. The
+     selection ended the moment it began, by shutting the lightbox.
+
+     `width: max-content` is what keeps that fix from costing anything: the
+     box now hugs its own text instead of spanning 60rem of empty space
+     either side, so click-outside-to-close still works everywhere the legend
+     is not actually written. */
+  width: max-content;
+  pointer-events: auto;
+  user-select: text;
+  cursor: text;
   transition: opacity 240ms ease;
 }
 
-/* Faded out after two seconds of a still pointer (LEGEND_IDLE_MS in
-   Lightbox.jsx), so the photograph is finally alone on the screen. Opacity
-   only: the element keeps its box, so the legend coming back cannot shift
-   anything, and since it is already pointer-events: none there is nothing
-   to disable. */
-.lightbox-legend.is-idle {
+/* Two seconds of a still pointer and every piece of chrome goes: the
+   legend, both arrows, the close button. What is left is the photograph on
+   white, which is the whole point of a fullscreen view. Any movement brings
+   it all back (see IDLE_MS in Lightbox.jsx), and Escape still closes whether
+   the close button is visible or not.
+
+   Opacity only, and pointer-events are deliberately LEFT ON for the buttons:
+   a control you cannot see but can still press is fine here, because you
+   cannot press it without first moving the pointer, and moving the pointer
+   is what brings it back. Turning them off instead would mean the first
+   click after a pause lands on nothing. The legend is the exception -- it is
+   text, not a control, and an invisible selectable box lying across the
+   bottom of the stage would swallow clicks meant for the backdrop. */
+.lightbox.is-idle .lightbox-legend,
+.lightbox.is-idle .lightbox-close,
+.lightbox.is-idle .lightbox-prev,
+.lightbox.is-idle .lightbox-next {
   opacity: 0;
 }
 
+.lightbox.is-idle .lightbox-legend {
+  pointer-events: none;
+}
+
+/* Keyboard focus always wins over the idle fade: someone tabbing to the
+   close button must be able to see where they are. */
+.lightbox.is-idle .lightbox-close:focus-visible,
+.lightbox.is-idle .lightbox-prev:focus-visible,
+.lightbox.is-idle .lightbox-next:focus-visible {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .lightbox-legend {
+  .lightbox-legend,
+  .lightbox-close,
+  .lightbox-prev,
+  .lightbox-next {
     transition: none;
   }
 }
@@ -1545,14 +1642,23 @@ picture {
    out by the flex centring above -- not one of the three absolutely
    positioned controls this rule is for. */
 .lightbox button:not(.lightbox-image-button) {
+  transition: opacity 240ms ease, color 150ms ease-in;
   position: absolute;
   border: 0;
   background: none;
-  color: var(--ink);
+  /* The same grey as this view's own legend (--ink-muted below), so the
+     three things that are not the photograph read as one quiet register.
+     They darken on hover, like the slider arrows elsewhere on the site. */
+  color: var(--ink-muted);
   cursor: pointer;
   font-size: var(--text-xl);
   line-height: 1;
   padding: var(--space-2);
+}
+
+.lightbox button:not(.lightbox-image-button):hover,
+.lightbox button:not(.lightbox-image-button):focus-visible {
+  color: var(--ink);
 }
 
 .lightbox-close {

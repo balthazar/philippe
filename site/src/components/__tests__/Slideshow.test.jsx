@@ -55,6 +55,29 @@ describe('Slideshow', () => {
     expect(image()).not.toHaveClass('is-hidden')
   })
 
+  // Client request: arrows alone. The counter stays in the DOM for anyone
+  // who cannot watch the slide change -- a carousel that never says where
+  // you are is disorienting -- but it is visually hidden.
+  it('announces the position without showing it', () => {
+    const { container } = renderShow()
+    const counter = container.querySelector('.slideshow-controls .sr-only')
+    expect(counter).toHaveTextContent('1 / 2')
+    expect(counter).toHaveAttribute('aria-live', 'polite')
+  })
+
+  // One control, one appearance: the homepage and an exhibition's gallery
+  // slider both draw their arrows with Chevron.jsx now, at the shared
+  // --slider-arrow-size, instead of the ‹ and › characters this one used.
+  it('draws its arrows with the shared chevron, not a quotation mark', () => {
+    const { container } = renderShow()
+    const buttons = container.querySelectorAll('.slideshow-controls button')
+    expect(buttons).toHaveLength(2)
+    for (const button of buttons) {
+      expect(button.querySelector('svg.chevron')).toBeInTheDocument()
+      expect(button.textContent).toBe('')
+    }
+  })
+
   it('is always exactly one image element, at rest or mid-fade', () => {
     renderShow()
     expect(screen.getAllByRole('img')).toHaveLength(1)
@@ -101,9 +124,32 @@ describe('Slideshow', () => {
   })
 
   // Task 27, Part A: articles live at the root now, no /oeuvres/ segment.
-  it('links the current slide to its article', () => {
+  // Client request: the photograph itself links to its work, not only the
+  // caption. Both point at the same place -- the conventional
+  // image-plus-headline pattern -- so this asserts on both rather than
+  // picking one.
+  it('links both the photograph and the caption to the article', () => {
     renderShow()
-    expect(screen.getByRole('link', { name: /porte/i })).toHaveAttribute('href', '/porte')
+    const links = screen.getAllByRole('link', { name: /porte/i })
+    expect(links).toHaveLength(2)
+    for (const link of links) expect(link).toHaveAttribute('href', '/porte')
+  })
+
+  // The caption below is already a tab stop to this same work, so the
+  // photograph must not be a second one leading nowhere new.
+  it('keeps the photograph’s link out of the tab order', () => {
+    const { container } = renderShow()
+    expect(container.querySelector('.slideshow-image-link')).toHaveAttribute('tabindex', '-1')
+    expect(container.querySelector('.slide-caption')).not.toHaveAttribute('tabindex')
+  })
+
+  // The white either side of a portrait work must stay un-clickable: the
+  // section is 100dvh, and a link spanning it would swallow the viewport.
+  it('confines the photograph’s link to the photograph', () => {
+    const { container } = renderShow()
+    const link = container.querySelector('.slideshow-image-link')
+    expect(link).toContainElement(container.querySelector('.slideshow-image'))
+    expect(link.className).toBe('slideshow-image-link')
   })
 
   it('updates the caption link to the new target immediately, ahead of the image fade', () => {
@@ -189,8 +235,8 @@ describe('Slideshow', () => {
   })
 
   it('pauses autoplay on focus and resumes on blur', () => {
-    renderShow()
-    const link = screen.getByRole('link', { name: /porte/i })
+    const { container } = renderShow()
+    const link = container.querySelector('.slide-caption')
     fireEvent.focus(link)
     act(() => { vi.advanceTimersByTime(5000) })
     act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })

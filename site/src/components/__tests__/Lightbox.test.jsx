@@ -65,13 +65,16 @@ describe('Lightbox', () => {
 
     // The legend answers "what am I looking at", which is asked once on
     // arriving at a photograph and not again while you study it.
-    it('fades out after two seconds of a still pointer', async () => {
+    it('fades the whole chrome out after two seconds of a still pointer', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true })
       try {
         const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
-        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+        expect(container.querySelector('.lightbox')).not.toHaveClass('is-idle')
         await vi.advanceTimersByTimeAsync(2100)
-        expect(container.querySelector('.lightbox-legend')).toHaveClass('is-idle')
+        // One class on the container: the legend, both arrows and the close
+        // button all hang off it (see .lightbox.is-idle in base.css), so
+        // what goes quiet is the whole chrome, not the caption alone.
+        expect(container.querySelector('.lightbox')).toHaveClass('is-idle')
       } finally {
         vi.useRealTimers()
       }
@@ -82,9 +85,9 @@ describe('Lightbox', () => {
       try {
         const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
         await vi.advanceTimersByTimeAsync(2100)
-        expect(container.querySelector('.lightbox-legend')).toHaveClass('is-idle')
+        expect(container.querySelector('.lightbox')).toHaveClass('is-idle')
         fireEvent.pointerMove(window)
-        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+        expect(container.querySelector('.lightbox')).not.toHaveClass('is-idle')
       } finally {
         vi.useRealTimers()
       }
@@ -99,7 +102,7 @@ describe('Lightbox', () => {
         const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
         await vi.advanceTimersByTimeAsync(2100)
         fireEvent.pointerDown(window)
-        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+        expect(container.querySelector('.lightbox')).not.toHaveClass('is-idle')
       } finally {
         vi.useRealTimers()
       }
@@ -112,13 +115,26 @@ describe('Lightbox', () => {
       try {
         const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
         await vi.advanceTimersByTimeAsync(2100)
-        expect(container.querySelector('.lightbox-legend')).toHaveClass('is-idle')
+        expect(container.querySelector('.lightbox')).toHaveClass('is-idle')
         fireEvent.keyDown(window, { key: 'ArrowRight' })
         expect(container.querySelector('.lightbox-legend')).toHaveTextContent('Deux')
-        expect(container.querySelector('.lightbox-legend')).not.toHaveClass('is-idle')
+        expect(container.querySelector('.lightbox')).not.toHaveClass('is-idle')
       } finally {
         vi.useRealTimers()
       }
+    })
+
+    // Selecting the legend must not shut the lightbox. The container closes
+    // on a mousedown whose target is the container itself, so this asserts
+    // the legend is genuinely the target and not a pass-through. (The other
+    // half of the fix is CSS -- pointer-events on the legend, and a box that
+    // hugs its own text -- which jsdom cannot hit-test; see
+    // .lightbox-legend in base.css.)
+    it('does not close when the legend itself is pressed, so it can be selected', () => {
+      const onClose = vi.fn()
+      const { container } = render(<Lightbox images={images} index={0} onClose={onClose} />)
+      fireEvent.mouseDown(container.querySelector('.lightbox-legend'))
+      expect(onClose).not.toHaveBeenCalled()
     })
 
     // The <img> already carries this exact string as its alt text, so a

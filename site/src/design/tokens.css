@@ -59,6 +59,15 @@
      outgoing image. */
   --fade-out-ms: 300ms;
   --fade-in-ms: 300ms;
+  /* One size for every slider arrow on the site (Chevron.jsx's drawn
+     geometry, sized in em off the button's font-size). The homepage and an
+     exhibition's gallery used to disagree -- 16px of quotation-mark em box
+     on one, 24px of drawn stroke on the other -- so the same control read as
+     two different controls depending on the page. Client call, in two
+     passes: one size, settled a step above what the homepage had (16px) and
+     well below the gallery's (24px). */
+  --slider-arrow-size: 1.125rem;
+
   --page-gutter: 3.75rem;
 
   /* Task 30 (client feedback): the exhibitions timeline's own column width.
