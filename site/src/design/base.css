@@ -1263,12 +1263,50 @@ picture {
    heading would ride up beside the emblem. */
 .block-image.size-mark {
   float: left;
-  width: 3rem;
-  margin: 0.15rem var(--space-2) var(--space-1) 0;
+  /* `clear: left` so two marks in a row each begin their own band: the
+     bourses list has one beside each entry, and without it the second would
+     tuck into whatever space was left beside the first. */
+  clear: left;
+  /* Bounded on BOTH axes, and fixed on neither. A fixed width was the first
+     attempt and collapsed the wordmarks: the medal is portrait, so 3rem wide
+     is 3.25rem tall and right, while ISCP is 4:1 and came out twelve pixels
+     high -- unreadable. Height is what the eye compares here, so the cap that
+     usually binds is max-height; max-width stops a long wordmark from pushing
+     its own text half way across the column. */
+  width: auto;
+  max-width: 7rem;
+  /* The text beside a mark is a two-line entry (a year, then the line
+     itself), and `.block-text p` carries a bottom margin that the mark does
+     not. Matching that margin here is what puts the two blocks on a shared
+     baseline instead of leaving the mark hanging below its text -- the
+     paragraph's own spacing was the misalignment, not the mark's. */
+  margin: 0 var(--space-2) var(--space-2) 0;
+  /* Held to the height of the entry it sits beside, so a tall emblem cannot
+     push the next section down on its own. */
+  max-height: 3.25rem;
+  display: flex;
+  align-items: center;
+}
+
+.block-image.size-mark img {
+  max-width: 100%;
+  max-height: 3.25rem;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .block-image.size-mark figcaption {
   display: none;
+}
+
+/* The entry beside a mark becomes its own formatting context, so it sits
+   ALONGSIDE the float as a column instead of flowing around it. Without this
+   a third line drops back to the left margin and runs under the emblem --
+   which is exactly what the ISCP entry did, its "& Culturesfrance" tucked
+   beneath the logo while the two lines above it were indented. */
+.block-image.size-mark + .block-text {
+  display: flow-root;
 }
 
 /* A section heading always begins a new band, never beside a floated mark. */
