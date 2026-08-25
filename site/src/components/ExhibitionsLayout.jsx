@@ -3,6 +3,7 @@ import { Outlet, useLocation, useParams } from 'react-router-dom'
 import { apiGet } from '@/api.js'
 import { useLang } from '@/lang.jsx'
 import { usePageData } from '@/preload.jsx'
+import { useContentFade } from '@/lib/useContentFade.js'
 import { SEGMENTS } from '@/routes.js'
 import { Container } from './Container.jsx'
 import { ExhibitionsTimeline } from './ExhibitionsTimeline.jsx'
@@ -112,6 +113,11 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
     && (YEAR_SLUG_RE.test(slug) || Boolean(items?.some((item) => item.slug === slug)))
   const showRail = wantsRail || isKnownExhibitionSlug
 
+  // Keyed on the path, so the fade runs on every navigation through this
+  // layout -- index to exhibition, exhibition to exhibition, and on to a
+  // work -- and on nothing else.
+  const contentFadeRef = useContentFade(pathname)
+
   // On an article page the URL's own slug is the current dot. On the
   // /expositions index there is no slug at all -- the most recent year
   // (items are sorted newest-first, lib/exhibitionsOrder.js) is "current",
@@ -143,20 +149,18 @@ export function ExhibitionsLayout({ isExhibitionsArticle }) {
           track. See .exhibitions-layout in base.css for the grid itself.
         */}
         {/*
-          The fade lives here, on the column itself, and is deliberately NOT
-          keyed. It runs once, when this column first mounts -- arriving in
-          the exhibitions section -- which is the only moment its content
-          appears out of nothing. Moving between two exhibitions after that
-          is served from usePageData's cache on the first commit, so there is
-          no blank frame there to fade back in from.
+          The fade lives here, on the column itself, and covers every route
+          that renders through this layout: the exhibitions index, every
+          exhibition, and every work article too.
 
-          Keying it per article would look equivalent and would not be: it
-          would remount <Outlet/> on every navigation, and ArticleDetail's
+          Driven by a ref rather than a key (see useContentFade). Keying this
+          div would remount <Outlet/> on each navigation, and ArticleDetail's
           unmount cleanup reports `onExhibitionsLayout(false)` -- which would
-          flicker the rail off and on again between every pair of
-          exhibitions, the exact fault task 32 exists to have fixed.
+          flicker the rail off and on between every pair of exhibitions, the
+          exact fault task 32 exists to have fixed. The node stays; only its
+          opacity is animated.
         */}
-        <div className={showRail ? 'exhibitions-content page-fade-in' : 'page-fade-in'}>
+        <div ref={contentFadeRef} className={showRail ? 'exhibitions-content' : undefined}>
           {/*
             Task 33, section 3: hands the already-fetched exhibitions list
             down to ArticleDetail via route context, so its own legacy-year

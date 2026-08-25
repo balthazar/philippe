@@ -1289,6 +1289,47 @@
   font: inherit;
 }
 
+/* The original's dimensions and weight, under each thumbnail, with a warning
+   appended only when there is one. Quiet by default: on a healthy library
+   this line is five hundred pieces of reference information nobody is
+   looking for, and it should read as a caption until something is wrong. */
+.media-library-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.media-library-flag {
+  flex-basis: 100%;
+}
+
+/* Amber for soft, not red: a low-resolution image is a thing to look at, not
+   a failure -- it may be the only file that exists of a 1991 catalogue. */
+.media-library-flag.is-low {
+  color: #9a6114;
+}
+
+/* Quieter still. An oversized original costs disk and nothing else: the
+   served variants are capped by the pipeline whatever the master weighs. */
+.media-library-flag.is-oversized {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.media-library-search select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .media-library-count,
 .media-library-empty {
   margin: 0;

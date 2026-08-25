@@ -13,6 +13,7 @@ import { asyncHandler } from '#middleware/asyncHandler.js'
 import { upload } from '#middleware/upload.js'
 import { processImage } from '#lib/imagePipeline.js'
 import { sanitize, safeUrl } from '#lib/sanitize.js'
+import { buildUsageMap, roleOf } from '#lib/imageUsage.js'
 import { uniqueSlug } from '#lib/slug.js'
 import { localize } from '#lib/localize.js'
 import { PAGE_KEYS, RESERVED_SLUGS } from '#lib/constants.js'
@@ -173,7 +174,24 @@ adminRouter.patch('/pages/:key', asyncHandler(async (req, res, next) => {
 
 adminRouter.get('/images', asyncHandler(async (req, res) => {
   const items = await Image.find().sort({ createdAt: -1 }).lean()
-  res.json({ items, total: items.length })
+
+  // Each image is tagged with the most demanding place it is used, so the
+  // media library can say whether its resolution is actually enough --
+  // "enough" being a different number for a photograph a reader can open
+  // fullscreen than for a bibliography cover set at 30vw. See lib/imageUsage.js.
+  //
+  // Two queries for the whole library, not two per image: `blocks` is the
+  // only field either side needs, plus the article's own cover.
+  const [articles, pages] = await Promise.all([
+    Article.find().select('cover blocks').lean(),
+    Page.find().select('blocks').lean(),
+  ])
+  const usage = buildUsageMap({ articles, pages })
+
+  res.json({
+    items: items.map((image) => ({ ...image, role: roleOf(usage, image._id) })),
+    total: items.length,
+  })
 }))
 
 adminRouter.post('/images', upload.single('file'), asyncHandler(async (req, res, next) => {

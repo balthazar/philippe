@@ -121,3 +121,78 @@ describe('MediaLibrary search', () => {
     }
   })
 })
+
+// "Is 1200px enough?" has no answer on its own: ample for a bibliography
+// cover set at 30vw, visibly soft for a photograph a reader can open
+// fullscreen and zoom into. The API tags each image with the most demanding
+// place it is used (api/src/lib/imageUsage.js) and the library judges it
+// against that.
+describe('MediaLibrary resolution', () => {
+  const withOriginal = (id, width, role, bytes) => ({
+    _id: id,
+    filename: id,
+    alt: { fr: id, en: '' },
+    role,
+    variants: { original: { width, height: Math.round(width * 0.75), bytes } },
+  })
+
+  const LIBRARY = [
+    withOriginal('grand', 3000, 'fullscreen', 1024 * 1024 * 2),
+    withOriginal('doux', 1000, 'fullscreen', 1024 * 200),
+    withOriginal('enorme', 9000, 'reference', 1024 * 1024 * 30),
+  ]
+
+  const renderLibrary = async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({ items: LIBRARY, total: 3 })
+    render(<MediaLibrary />)
+    await waitFor(() => expect(screen.getByLabelText('Filtrer par définition')).toBeInTheDocument())
+  }
+
+  const shown = () => screen.getAllByLabelText('Texte alternatif').map((i) => i.value)
+
+  it('shows each image’s own dimensions and weight', async () => {
+    await renderLibrary()
+    expect(screen.getByText('3000 × 2250')).toBeInTheDocument()
+    expect(screen.getByText('2,0 Mo')).toBeInTheDocument()
+    expect(screen.getByText('200 Ko')).toBeInTheDocument()
+  })
+
+  // A bare "trop petite" is not actionable; the number it is measured against is.
+  it('names the width a soft image would need', async () => {
+    await renderLibrary()
+    expect(screen.getByText('il en faudrait 2400 px sur le grand côté')).toBeInTheDocument()
+  })
+
+  it('flags an original far past anything the site can serve', async () => {
+    await renderLibrary()
+    expect(screen.getByText('bien au-delà des 1000 px affichables')).toBeInTheDocument()
+  })
+
+  it('says nothing about an image that is the right size', async () => {
+    await renderLibrary()
+    // Three images, two warnings: the 3000px fullscreen one is simply fine.
+    expect(document.querySelectorAll('.media-library-flag')).toHaveLength(2)
+  })
+
+  it('filters to the soft ones, and counts them in the option', async () => {
+    await renderLibrary()
+    expect(screen.getByRole('option', { name: 'Définition insuffisante (1)' })).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Filtrer par définition'), 'low')
+    expect(shown()).toEqual(['doux'])
+    expect(screen.getByText('1 image sur 3')).toBeInTheDocument()
+  })
+
+  it('filters to the oversized ones', async () => {
+    await renderLibrary()
+    expect(screen.getByRole('option', { name: 'Surdimensionnées (1)' })).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Filtrer par définition'), 'oversized')
+    expect(shown()).toEqual(['enorme'])
+  })
+
+  it('combines the filter with the text search', async () => {
+    await renderLibrary()
+    await userEvent.selectOptions(screen.getByLabelText('Filtrer par définition'), 'low')
+    await userEvent.type(screen.getByLabelText('Rechercher dans les textes alternatifs'), 'enorme')
+    await waitFor(() => expect(screen.getByText('Aucune image ne correspond à cette recherche.')).toBeInTheDocument())
+  })
+})

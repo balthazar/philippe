@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiGet, apiSend, apiUpload } from '@/api.js'
 import { useDebouncedValue } from '@/lib/useDebouncedValue.js'
+import { assessImage, formatBytes, formatDimensions, QUALITY } from './imageQuality.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
@@ -28,17 +29,38 @@ export function MediaLibrary() {
   const [lang, setLang] = useState('fr')
   const [rowErrors, setRowErrors] = useState({})
   const [query, setQuery] = useState('')
+  const [quality, setQuality] = useState('all')
 
   // The whole library is already in memory (GET /admin/images returns every
   // image), so this filters locally and the debounce is not about sparing the
   // server -- it is about not rebuilding a list of several hundred thumbnails
   // between one keystroke and the next.
   const settledQuery = useDebouncedValue(query, 200)
+
+  // Assessed once per image rather than inside the filter and again inside
+  // the render: five hundred images, and the answer does not change between
+  // the two.
+  const assessed = useMemo(
+    () => images.map((image) => ({ image, ...assessImage(image) })),
+    [images]
+  )
+
   const visibleImages = useMemo(() => {
     const needle = normalize(settledQuery).trim()
-    if (!needle) return images
-    return images.filter((image) => normalize(searchableText(image)).includes(needle))
-  }, [images, settledQuery])
+    return assessed.filter((entry) => {
+      if (quality !== 'all' && entry.quality !== quality) return false
+      if (!needle) return true
+      return normalize(searchableText(entry.image)).includes(needle)
+    })
+  }, [assessed, settledQuery, quality])
+
+  const counts = useMemo(
+    () => ({
+      low: assessed.filter((e) => e.quality === QUALITY.LOW).length,
+      oversized: assessed.filter((e) => e.quality === QUALITY.OVERSIZED).length,
+    }),
+    [assessed]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -138,9 +160,21 @@ export function MediaLibrary() {
             page that failed to load. aria-live so it is announced when it
             changes, rather than only being found by someone who goes looking.
           */}
+          {/*
+            The counts live in the option labels, so the artist can see
+            whether a filter is worth applying before applying it -- "0 image"
+            after switching is a worse way to learn there is nothing wrong
+            than never being tempted to switch.
+          */}
+          <label htmlFor="quality" className="sr-only">Filtrer par définition</label>
+          <select id="quality" value={quality} onChange={(e) => setQuality(e.target.value)}>
+            <option value="all">Toutes les définitions</option>
+            <option value={QUALITY.LOW}>Définition insuffisante ({counts.low})</option>
+            <option value={QUALITY.OVERSIZED}>Surdimensionnées ({counts.oversized})</option>
+          </select>
           <p className="media-library-count" aria-live="polite">
             {/* French pluralises from two, so zero and one both take the singular. */}
-            {settledQuery.trim()
+            {settledQuery.trim() || quality !== 'all'
               ? `${visibleImages.length} image${visibleImages.length > 1 ? 's' : ''} sur ${images.length}`
               : `${images.length} image${images.length > 1 ? 's' : ''}`}
           </p>
@@ -149,9 +183,26 @@ export function MediaLibrary() {
         {error && <p role="alert" className="admin-error">{error}</p>}
 
         <ul className="media-library-grid">
-          {visibleImages.map((image) => (
+          {visibleImages.map(({ image, quality: imageQuality, needed }) => (
             <li key={image._id} className="media-library-item">
               {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
+              {/*
+                The original's dimensions and weight -- what the variants are
+                cut from, and what actually sits on disk. A warning is
+                attached only when there is something to say, and it names the
+                number the image is measured against: "il en faudrait 2400 px"
+                is actionable where a bare "trop petite" is not.
+              */}
+              <p className="media-library-meta">
+                <span>{formatDimensions(image)}</span>
+                <span>{formatBytes(image.variants?.original?.bytes ?? image.bytes)}</span>
+                {imageQuality === QUALITY.LOW && (
+                  <span className="media-library-flag is-low">il en faudrait {needed} px sur le grand côté</span>
+                )}
+                {imageQuality === QUALITY.OVERSIZED && (
+                  <span className="media-library-flag is-oversized">bien au-delà des {needed} px affichables</span>
+                )}
+              </p>
               <LocalizedInput label="Texte alternatif" lang={lang} value={image.alt} onChange={(alt) => setAlt(image._id, alt)} />
               <div className="media-library-actions">
                 <button type="button" onClick={() => saveAlt(image)}>Enregistrer</button>
@@ -168,7 +219,7 @@ export function MediaLibrary() {
           ))}
         </ul>
 
-        {settledQuery.trim() && !visibleImages.length && (
+        {(settledQuery.trim() || quality !== 'all') && !visibleImages.length && (
           <p className="media-library-empty">Aucune image ne correspond à cette recherche.</p>
         )}
       </div>

@@ -5,6 +5,7 @@ import { usePageData } from '@/preload.jsx'
 import { Container } from '@/components/Container.jsx'
 import { BlockRenderer } from '@/components/BlockRenderer.jsx'
 import { usePageTitle } from '@/lib/usePageTitle.js'
+import { useContentFade } from '@/lib/useContentFade.js'
 import { staticPageTitle } from '@/lib/pageTitle.js'
 
 // Task 33: the retired site-wide footer's contents, now the contact page's
@@ -64,6 +65,19 @@ export function SimplePage({ pageKey }) {
   // loaded yet, which usePageTitle treats as "leave the previous title".
   usePageTitle(page && staticPageTitle(page.title))
 
+  // Called before the early return below (Rules of Hooks). Keyed on the page
+  // and language, so switching from Contact to Bibliographie fades, and so
+  // does the FR/EN toggle, which genuinely replaces every word on screen.
+  //
+  // `null` while loading, deliberately: this component returns a placeholder
+  // with no ref attached until `page` resolves, so a key that changed at
+  // navigation time would be seen by the effect while the element does not
+  // exist -- and nothing would re-run it once the content appeared. Passing
+  // null until there is something to show makes the change the effect sees
+  // the one where the element is really there. (ExhibitionsLayout needs no
+  // such care: its content column is rendered unconditionally.)
+  const contentFadeRef = useContentFade(page ? `${pageKey}:${lang}` : null)
+
   // Task 26, correction to B4: reserve the page's minimum height while
   // loading instead of rendering nothing, so the footer never rides up.
   // Every public page shares .page-main; see base.css.
@@ -88,14 +102,13 @@ export function SimplePage({ pageKey }) {
   // Note this leaves links and legal with no h1 at all, and no active nav
   // link either -- they are reachable only from the contact colophon. Their
   // first heading, if any, is whatever their own blocks carry.
-  // Keyed on the page and language so the fade re-runs when the content
-  // genuinely changes, and on nothing else. `.page-main` itself is NOT what
-  // fades: it is the shell that reserves the page's height while loading
-  // (see the early return above), and fading the shell would fade the
-  // reserved space in from nothing, which is the flash this replaces.
+  // `.page-main` itself is NOT what fades: it is the shell that reserves the
+  // page's height while loading (see the early return above), and fading the
+  // shell would fade the reserved space in from nothing -- the very flash
+  // this replaces.
   return (
     <Container as="main" className={className}>
-      <div key={`${pageKey}:${lang}`} className="page-fade-in">
+      <div ref={contentFadeRef}>
         <BlockRenderer blocks={page.blocks} />
         {pageKey === 'contact' && <ColophonLinks />}
       </div>
