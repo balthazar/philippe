@@ -17,9 +17,7 @@
  *     display: `medium` covers it with room to spare and `large` is never
  *     the sensible source.
  *
- * Hence one threshold per role rather than one for everything. Judging every
- * image against 2400 would flag every bibliography cover in the archive as
- * too small when each is comfortably sharp where it actually appears.
+ * Hence one rule per role rather than one for everything.
  *
  * Measured on the LONG EDGE, not the width, and that is not a detail. The
  * pipeline resizes by width, so a portrait scan of 2242 x 2560 yields a
@@ -29,13 +27,32 @@
  * the real archive that single choice is the difference between flagging 164
  * images and flagging 54: the same 500 photographs, most of them 2560 on
  * their long edge and simply not all in landscape.
- *
- * 1000 for a reference is twice the ~480 CSS px a bibliography entry occupies
- * at 30vw on a wide screen -- the ordinary retina rule. Not 1400: that is
- * merely the width of the `medium` variant, which is generous for the slot
- * and would condemn nearly every cover in the bibliography.
  */
-export const NEEDED_LONG_EDGE = { fullscreen: 2400, reference: 1000, unused: 2400 }
+export const DISPLAY = {
+  // Reachable fullscreen: an article cover in the slideshow, a gallery item
+  // in the lightbox (which zooms 2.5x into it), a standalone image block at
+  // 100vw. These want every pixel the pipeline is willing to make.
+  fullscreen: { needed: 2400, flagsLow: true },
+
+  // A bibliography or links entry, and nothing else. It is a thumbnail in a
+  // grid, at 30vw, with no lightbox behind it -- there is nothing to open, so
+  // a bigger file would improve nothing anyone can ever see. These are also
+  // publishers' own cover scans, which are the size they are: flagging 18 of
+  // the archive's 20 would be 18 warnings with no action behind any of them.
+  //
+  // Still checked for the OPPOSITE fault. A 10000px master behind a 400px
+  // thumbnail is real waste, and it is the case that prompted this whole
+  // feature.
+  reference: { needed: 1400, flagsLow: false },
+
+  // Placed nowhere. The low-resolution flag answers "is this too small for
+  // what it is shown at", and an image shown nowhere has no answer -- it
+  // would be a warning about a hypothetical. It gets one the day it is
+  // placed, judged against wherever it lands. The oversize check still
+  // applies: an orphan carrying 10000px is taking up room whether or not
+  // anyone can see it.
+  unused: { needed: 2400, flagsLow: false },
+}
 
 /**
  * Past this multiple of what a role needs, an original is carrying pixels the
@@ -59,9 +76,9 @@ export const QUALITY = { OK: 'ok', LOW: 'low', OVERSIZED: 'oversized' }
 export function assessImage(image) {
   const source = image?.variants?.original || image
   const longEdge = Math.max(source?.width || 0, source?.height || 0)
-  const needed = NEEDED_LONG_EDGE[image?.role] ?? NEEDED_LONG_EDGE.fullscreen
+  const { needed, flagsLow } = DISPLAY[image?.role] ?? DISPLAY.fullscreen
   if (!longEdge) return { quality: QUALITY.OK, longEdge, needed }
-  if (longEdge < needed) return { quality: QUALITY.LOW, longEdge, needed }
+  if (flagsLow && longEdge < needed) return { quality: QUALITY.LOW, longEdge, needed }
   if (longEdge > needed * OVERSIZE_FACTOR) return { quality: QUALITY.OVERSIZED, longEdge, needed }
   return { quality: QUALITY.OK, longEdge, needed }
 }

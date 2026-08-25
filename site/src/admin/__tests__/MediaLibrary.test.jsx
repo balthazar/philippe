@@ -165,7 +165,7 @@ describe('MediaLibrary resolution', () => {
 
   it('flags an original far past anything the site can serve', async () => {
     await renderLibrary()
-    expect(screen.getByText('bien au-delà des 1000 px affichables')).toBeInTheDocument()
+    expect(screen.getByText('bien au-delà des 1400 px affichables')).toBeInTheDocument()
   })
 
   it('says nothing about an image that is the right size', async () => {

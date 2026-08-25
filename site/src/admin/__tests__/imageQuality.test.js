@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assessImage, formatBytes, formatDimensions, QUALITY, NEEDED_LONG_EDGE } from '../imageQuality.js'
+import { assessImage, formatBytes, formatDimensions, QUALITY, DISPLAY } from '../imageQuality.js'
 
 const image = (width, role, bytes = 1000) => ({
   role,
@@ -14,19 +14,27 @@ describe('assessImage', () => {
     expect(assessImage(image(2399, 'fullscreen')).quality).toBe(QUALITY.LOW)
   })
 
-  // A bibliography entry is set at 30vw. Judging it against 2400 would flag
-  // every cover in the archive as too small when each is comfortably sharp
-  // where it actually appears.
-  it('holds a reference-only image to a lower bar', () => {
-    expect(assessImage(image(1000, 'reference')).quality).toBe(QUALITY.OK)
-    expect(assessImage(image(999, 'reference')).quality).toBe(QUALITY.LOW)
-    // The same file would be soft if it were ever opened fullscreen.
-    expect(assessImage(image(1000, 'fullscreen')).quality).toBe(QUALITY.LOW)
+  // A bibliography entry is a thumbnail in a grid with no lightbox behind
+  // it. There is nothing to open, so a bigger file would improve nothing
+  // anyone can see -- and these are publishers' own cover scans, the size
+  // they are. Flagging 18 of the archive's 20 would be 18 warnings with no
+  // action behind any of them.
+  it('never calls a reference-only image too small, however small it is', () => {
+    expect(assessImage(image(600, 'reference')).quality).toBe(QUALITY.OK)
+    expect(assessImage(image(141, 'reference')).quality).toBe(QUALITY.OK)
+    // The same file WOULD be flagged if anything could open it fullscreen.
+    expect(assessImage(image(600, 'fullscreen')).quality).toBe(QUALITY.LOW)
   })
 
-  it('reports the width it is measuring against, so the warning is actionable', () => {
+  // It is still checked for the opposite fault: a 10000px master behind a
+  // 400px thumbnail is real waste, and is what prompted the feature.
+  it('still calls out a reference master far past the thumbnail it feeds', () => {
+    expect(assessImage(image(2800, 'reference')).quality).toBe(QUALITY.OK)
+    expect(assessImage(image(10000, 'reference')).quality).toBe(QUALITY.OVERSIZED)
+  })
+
+  it('reports the size it is measuring against, so the warning is actionable', () => {
     expect(assessImage(image(900, 'fullscreen'))).toMatchObject({ longEdge: 900, needed: 2400 })
-    expect(assessImage(image(900, 'reference'))).toMatchObject({ longEdge: 900, needed: 1000 })
   })
 
   // An archival master is meant to have headroom over the largest served
@@ -34,12 +42,16 @@ describe('assessImage', () => {
   it('calls an original oversized only past twice what can be shown', () => {
     expect(assessImage(image(4800, 'fullscreen')).quality).toBe(QUALITY.OK)
     expect(assessImage(image(4801, 'fullscreen')).quality).toBe(QUALITY.OVERSIZED)
-    expect(assessImage(image(2001, 'reference')).quality).toBe(QUALITY.OVERSIZED)
+    expect(assessImage(image(4801, 'unused')).quality).toBe(QUALITY.OVERSIZED)
   })
 
-  it('judges an unplaced image by the demanding bar, since it could go anywhere', () => {
-    expect(NEEDED_LONG_EDGE.unused).toBe(NEEDED_LONG_EDGE.fullscreen)
-    expect(assessImage(image(1500, 'unused')).quality).toBe(QUALITY.LOW)
+  // The flag answers "too small for what it is shown at". An image shown
+  // nowhere has no answer, and would only produce a warning about a
+  // hypothetical. It gets judged the day it is placed.
+  it('says nothing about the resolution of an image that is used nowhere', () => {
+    expect(assessImage(image(300, 'unused')).quality).toBe(QUALITY.OK)
+    // But an orphan carrying 10000px is taking up room either way.
+    expect(assessImage(image(10000, 'unused')).quality).toBe(QUALITY.OVERSIZED)
   })
 
   // The pipeline resizes by width, so a portrait scan keeps its full height:
