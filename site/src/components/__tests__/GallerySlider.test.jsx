@@ -124,14 +124,62 @@ describe('GallerySlider', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
-  it('pauses autoplay while the pointer is over the slider', () => {
+  it('pauses autoplay while the pointer is over the controls, and resumes on leave', () => {
     const { container } = render(<GallerySlider items={items} interval={5000} />)
-    fireEvent.mouseEnter(container.querySelector('.gallery-slider'))
+    const controls = container.querySelector('.gallery-slider-controls')
+    fireEvent.mouseEnter(controls)
     act(() => { vi.advanceTimersByTime(5000) })
     act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('porte')).toBeInTheDocument()
 
-    fireEvent.mouseLeave(container.querySelector('.gallery-slider'))
+    fireEvent.mouseLeave(controls)
+    act(() => { vi.advanceTimersByTime(5000) })
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  /*
+    The bug this component shipped with. Hover-pause covered the whole
+    slider, and on an exhibition page that container is `flex: 1 1 auto`
+    inside a full-height column -- a measured 53% of the viewport. A pointer
+    resting on the photograph, which is where a pointer rests while looking
+    at one, stopped autoplay for as long as it stayed there. Measured in a
+    browser before the fix: 12s idle advanced two slides, 13s hovering the
+    image advanced none.
+
+    Slideshow.jsx had already learned this and scoped its own hover to a
+    small chrome strip; this is the same correction.
+  */
+  it('keeps advancing while the pointer rests on the photograph itself', () => {
+    const { container } = render(<GallerySlider items={items} interval={5000} />)
+    fireEvent.mouseEnter(container.querySelector('.gallery-slider'))
+    fireEvent.mouseEnter(container.querySelector('.gallery-slider-image'))
+    act(() => { vi.advanceTimersByTime(5000) })
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  // Keyboard focus still pauses: someone tabbing to an arrow should not have
+  // the slide change under them.
+  it('pauses autoplay while a control holds keyboard focus', () => {
+    render(<GallerySlider items={items} interval={5000} />)
+    // act(), because a raw .focus() is not wrapped the way fireEvent is, and
+    // the pause would not have flushed before the timers advance.
+    act(() => { screen.getByRole('button', { name: 'Suivant' }).focus() })
+    act(() => { vi.advanceTimersByTime(5000) })
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
+    expect(screen.getByAltText('porte')).toBeInTheDocument()
+  })
+
+  // ...but a mouse click must not latch it off. Chrome focuses the button it
+  // clicked and that focus outlives the click, so one click on an arrow used
+  // to stop autoplay for good. :focus-visible is the distinction; here the
+  // pointer case is simulated by reporting it false, as a browser does.
+  it('does not latch autoplay off when a click focuses an arrow', () => {
+    render(<GallerySlider items={items} interval={5000} />)
+    const next = screen.getByRole('button', { name: 'Suivant' })
+    next.matches = () => false
+    fireEvent.focus(next)
     act(() => { vi.advanceTimersByTime(5000) })
     act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()

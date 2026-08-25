@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePrefersReducedMotion } from '@/lib/usePrefersReducedMotion.js'
 import { useCrossfade } from '@/lib/useCrossfade.js'
+import { usePreloadImage } from '@/lib/usePreloadImage.js'
+import { isKeyboardFocus } from '@/lib/keyboardFocus.js'
 import { Chevron } from './Chevron.jsx'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
@@ -70,16 +72,35 @@ export function GallerySlider({ items = [], onActivate, interval = 5000 }) {
 
   const { displayed, visible } = useCrossfade(current, { reduced, fadeOutMs: FADE_OUT_MS })
 
+  // The same preload the homepage slideshow has always had, shared now
+  // rather than copied (usePreloadImage.js). Without it this slider fetched
+  // each 2400px image only once it became the displayed one, so every
+  // transition on a cold cache faded in an empty rectangle and popped the
+  // photograph in late.
+  usePreloadImage(count > 1 ? src(largeVariant(items[(safeIndex + 1) % count])) : '')
+
   if (!count || !displayed) return null
   const large = largeVariant(displayed)
 
   return (
+    /*
+      Hover-pause lives on the controls strip below, NOT here -- the same
+      correction Slideshow.jsx already carries, for the same reason. On an
+      exhibition page this container is `flex: 1 1 auto` inside a full-height
+      column (base.css), so it covers a measured 53% of the viewport against
+      the homepage strip's 4%: a pointer resting anywhere on the photograph,
+      which is where a pointer naturally rests while looking at one, paused
+      autoplay for as long as it stayed there. Measured before the fix: 12s
+      idle advanced two slides, 13s hovering the image advanced none.
+
+      Focus-pause stays at this level, since focus can land on either the
+      image button or an arrow, but only counts keyboard focus now -- see
+      keyboardFocus.js for why a mouse click used to latch it forever.
+    */
     <div
       className="gallery-slider"
       ref={containerRef}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
+      onFocus={(e) => { if (isKeyboardFocus(e.target)) setPaused(true) }}
       onBlur={() => setPaused(false)}
     >
       <div className="gallery-slider-stage">
@@ -99,7 +120,11 @@ export function GallerySlider({ items = [], onActivate, interval = 5000 }) {
         </button>
       </div>
       {count > 1 && (
-        <div className="gallery-slider-controls">
+        <div
+          className="gallery-slider-controls"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
           <button type="button" onClick={() => move(-1)} aria-label="Précédent">
             <Chevron direction="left" />
           </button>

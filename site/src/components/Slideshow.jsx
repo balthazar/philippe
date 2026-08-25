@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
 import { usePrefersReducedMotion } from '@/lib/usePrefersReducedMotion.js'
 import { useCrossfade } from '@/lib/useCrossfade.js'
+import { usePreloadImage } from '@/lib/usePreloadImage.js'
+import { isKeyboardFocus } from '@/lib/keyboardFocus.js'
 import { Chevron } from './Chevron.jsx'
 
 const src = (v) => (v?.path ? `/media/${v.path}` : '')
@@ -89,16 +91,13 @@ export function Slideshow({ slides = [], interval = 5000 }) {
   // time it becomes the displayed image and starts fading in. Without this,
   // a cold cache reveals a blank rectangle mid-fade, which looks worse than
   // the hard cut it replaces.
-  useEffect(() => {
-    if (count < 2) return undefined
-    const upcoming = playable[(safeIndex + 1) % count]
-    const url = src(largeVariant(upcoming))
-    if (!url) return undefined
-    const preload = new Image()
-    preload.src = url
-    return () => { preload.src = '' }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [safeIndex, count, slides])
+  //
+  // Now usePreloadImage.js, shared with GallerySlider, which had never had
+  // this and showed that exact symptom on every transition. Keying the hook
+  // on the URL also retires the exhaustive-deps suppression this used to
+  // need: `slides` was in the dep list as a proxy for "the list changed",
+  // which re-ran the effect on every new array identity from the parent.
+  usePreloadImage(count > 1 ? src(largeVariant(playable[(safeIndex + 1) % count])) : '')
 
   if (!count || !currentSlide) return null
   const caption = currentSlide.caption || currentSlide.article?.title
@@ -111,7 +110,11 @@ export function Slideshow({ slides = [], interval = 5000 }) {
       className="slideshow"
       aria-roledescription="carousel"
       aria-label={lang === 'fr' ? 'Diaporama des œuvres récentes' : 'Recent works slideshow'}
-      onFocusCapture={() => setPaused(true)}
+      /* Keyboard focus only. A mouse click in Chrome focuses the arrow it
+         clicked and that focus outlives the click, so clicking next once
+         paused autoplay permanently -- measured at 13s with no advance.
+         See keyboardFocus.js. */
+      onFocusCapture={(e) => { if (isKeyboardFocus(e.target)) setPaused(true) }}
       onBlurCapture={() => setPaused(false)}
     >
       <div className="slideshow-stage">

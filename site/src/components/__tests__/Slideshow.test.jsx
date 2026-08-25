@@ -234,15 +234,37 @@ describe('Slideshow', () => {
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
   })
 
-  it('pauses autoplay on focus and resumes on blur', () => {
+  it('pauses autoplay on keyboard focus and resumes on blur', () => {
     const { container } = renderShow()
     const link = container.querySelector('.slide-caption')
-    fireEvent.focus(link)
+    // A real .focus(), not a synthetic focus event: :focus-visible is only
+    // true of an element that is actually focused, which is the whole point
+    // of the check this now goes through. act(), because a raw .focus() is
+    // not wrapped the way fireEvent is.
+    act(() => { link.focus() })
     act(() => { vi.advanceTimersByTime(5000) })
     act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('porte')).toBeInTheDocument()
 
-    fireEvent.blur(link)
+    act(() => { link.blur() })
+    act(() => { vi.advanceTimersByTime(5000) })
+    act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
+    expect(screen.getByAltText('chassis')).toBeInTheDocument()
+  })
+
+  /*
+    Clicking an arrow used to stop the homepage slideshow permanently. In
+    Chrome a click focuses the button, that focus outlives the click, and the
+    focus-pause had no way to tell it from a keyboard tab -- measured in a
+    browser at 13s with the arrow focused and no advance, on this component
+    and on GallerySlider alike. :focus-visible is the distinction; the
+    pointer case is simulated here by reporting it false, as a browser does.
+  */
+  it('does not latch autoplay off when a click focuses an arrow', () => {
+    renderShow()
+    const next = screen.getByRole('button', { name: 'Suivant' })
+    next.matches = () => false
+    fireEvent.focus(next)
     act(() => { vi.advanceTimersByTime(5000) })
     act(() => { vi.advanceTimersByTime(FADE_OUT_MS) })
     expect(screen.getByAltText('chassis')).toBeInTheDocument()
