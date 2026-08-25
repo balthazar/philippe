@@ -1,7 +1,7 @@
 # Running the site locally
 
 Local development runs against the **production** database. There is one
-`philippe` database and both this machine and philippe.balthazar.dev read and
+`philippe` database and both this machine and www.philippegronon.com read and
 write it, so an edit saved in the local admin is live on the public site
 immediately, and content changed on the public site shows up here on the next
 request. That is deliberate: the alternative is two copies of the artist's
@@ -47,8 +47,8 @@ it perfectly the whole time, which makes this look like a failed copy when it
 is not. Check the origin past the cache before re-copying anything:
 
 ```sh
-curl -sI https://philippe.balthazar.dev/media/<path>          # cf-cache-status: HIT, 404
-curl -sI "https://philippe.balthazar.dev/media/<path>?v=$(date +%s)"   # 200 -- the file is there
+curl -sI https://www.philippegronon.com/media/<path>          # cf-cache-status: HIT, 404
+curl -sI "https://www.philippegronon.com/media/<path>?v=$(date +%s)"   # 200 -- the file is there
 ```
 
 Purge the URLs in the Cloudflare dashboard to clear it early. Note it hits

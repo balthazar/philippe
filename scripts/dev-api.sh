@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the API locally against the PRODUCTION database.
 #
-# One state, not two: local dev and philippe.balthazar.dev read and write the
+# One state, not two: local dev and www.philippegronon.com read and write the
 # same `philippe` database, so an edit made in the local admin is live on the
 # public site the moment it saves, and vice versa. There is no separate local
 # Mongo any more -- docker-compose.dev.yml's `mongo` service is now only the

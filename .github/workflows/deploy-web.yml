@@ -87,8 +87,8 @@ jobs:
           file: Dockerfile
           push: true
           build-args: |
-            PRERENDER_API_URL=https://philippe.balthazar.dev/api
-            SITE_URL=https://philippe.balthazar.dev
+            PRERENDER_API_URL=https://www.philippegronon.com/api
+            SITE_URL=https://www.philippegronon.com
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
           tags: |

@@ -3,7 +3,7 @@
 For running the site on your own machine, see [development.md](development.md)
 -- note that local development uses this same production database.
 
-Production is `philippe.balthazar.dev`, served from the single-node k3s cluster
+Production is `www.philippegronon.com`, served from the single-node k3s cluster
 at `135.148.100.142` (kubeconfig context `dadonew`), namespace `apps`. The API
 lives on `/api` of the same origin, so the browser never makes a cross-origin
 request and no CORS config is in play.
@@ -11,7 +11,7 @@ request and no CORS config is in play.
 ## How a request reaches a pod
 
 ```
-philippe.balthazar.dev  (Cloudflare, proxied -- TLS terminates here)
+www.philippegronon.com  (Cloudflare, proxied -- TLS terminates here)
         |  plain HTTP
         v
 Traefik (k3s built-in, ingressClassName: traefik)
@@ -69,15 +69,26 @@ nothing strips them on the way in.
    Note `seedAdmin` only seeds on first run -- changing `ADMIN_PASSWORD` in the
    secret does not reset an admin user that already exists in Mongo.
 
-3. **DNS** -- done. `philippe.balthazar.dev` resolves to Cloudflare
-   (`104.21.54.130` / `172.67.138.182`), i.e. the record is proxied, and HTTPS
-   already terminates there. It returns 404 until the Ingress is applied,
-   because Traefik has no rule for the host yet.
+3. **DNS** -- done. `www.philippegronon.com` is proxied through Cloudflare, so
+   HTTPS terminates there and the origin only ever sees plain HTTP. The apex
+   (`philippegronon.com`) is a Cloudflare redirect rule to the `www` form, not
+   an Ingress rule: Traefik answers 404 for a host it holds no rule for, and
+   the redirect is settled at the edge before a request reaches the cluster.
+
+   The zone's encryption mode is **Flexible**, matching what the origin can
+   actually do: Traefik listens on 443 but presents only `CN=TRAEFIK DEFAULT
+   CERT`, self-signed, because no Ingress here carries a `tls:` block. Full
+   would work (it does not validate the origin certificate); Full (strict)
+   would break every request. Closing that properly means a Cloudflare Origin
+   CA certificate in a Secret and a `tls:` block, at which point strict is
+   available.
+
+   `philippe.balthazar.dev` was the staging domain and no longer routes here.
 
 ## First deploy: order matters
 
 The web image is prerendered at build time against a **live** API
-(`PRERENDER_API_URL=https://philippe.balthazar.dev/api` in
+(`PRERENDER_API_URL=https://www.philippegronon.com/api` in
 `.github/workflows/deploy-web.yml`), and `site/prerender/index.js` fails the
 build rather than shipping an empty SPA shell when that API is unreachable or
 returns implausibly little content. So the API has to be up and publicly
@@ -138,9 +149,9 @@ anonymous pulls, flip each package to public under
 ## Verifying
 
 ```sh
-curl -s -o /dev/null -w '%{http_code}\n' https://philippe.balthazar.dev/
-curl -s https://philippe.balthazar.dev/api/articles?category=works | head -c 400
-curl -s https://philippe.balthazar.dev/sitemap.xml | head -5   # <loc> hosts should be philippe.balthazar.dev
+curl -s -o /dev/null -w '%{http_code}\n' https://www.philippegronon.com/
+curl -s https://www.philippegronon.com/api/articles?category=works | head -c 400
+curl -s https://www.philippegronon.com/sitemap.xml | head -5   # <loc> hosts should be www.philippegronon.com
 ```
 
 The sitemap, `robots.txt`, canonical links and OG tags are all baked into the

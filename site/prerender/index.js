@@ -8,7 +8,7 @@ import { SITE_NAME, HOME_TITLE, articlePageTitle, staticPageTitle } from '../src
 // comment explains why 8080 is taken on this machine): set
 // PRERENDER_API_URL=http://localhost:8090/api when running this locally.
 const API = process.env.PRERENDER_API_URL || 'http://localhost:8080/api'
-const SITE = process.env.SITE_URL || 'https://philippe.balthazar.dev'
+const SITE = process.env.SITE_URL || 'https://www.philippegronon.com'
 const DIST = 'dist'
 
 const CATEGORIES = ['works', 'exhibitions', 'editions', 'public-orders']
