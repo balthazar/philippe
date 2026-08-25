@@ -121,4 +121,31 @@ describe('RichText', () => {
     await userEvent.click(button)
     expect(onChange).toHaveBeenLastCalledWith('<h2>Un titre</h2>')
   })
+
+  // The colour control. Its whole reason for existing is that a colour
+  // written into stored HTML must survive being opened in this editor -- a
+  // script stamps the biography's dates, and the artist edits that same block
+  // by hand afterwards. If the mark did not round-trip, the first edit to a
+  // coloured block would silently strip every colour in it.
+  it('reads a colour class back off stored HTML and renders it unchanged', () => {
+    render(<RichText value='<p><span class="text-muted">2024</span></p>' onChange={() => {}} />)
+    expect(document.querySelector('.rich-text-content span.text-muted')).toHaveTextContent('2024')
+  })
+
+  it('offers exactly the colours the server will keep, plus black for none', () => {
+    render(<RichText value="" onChange={() => {}} />)
+    const select = screen.getByLabelText('Couleur du texte')
+    expect([...select.options].map((o) => o.value)).toEqual(['', 'text-ink', 'text-muted', 'text-soft'])
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Noir', 'Encre', 'Gris', 'Gris clair'])
+  })
+
+  // The class list is closed on the server (TEXT_COLOR_CLASSES in
+  // api/src/lib/sanitize.js). The editor must not be able to represent
+  // anything outside it either, or pasted markup would look accepted here and
+  // be stripped on save.
+  it('drops a span whose class is not one of the offered colours', () => {
+    render(<RichText value='<p><span class="site-header">x</span></p>' onChange={() => {}} />)
+    expect(document.querySelector('.rich-text-content span')).toBeNull()
+    expect(document.querySelector('.rich-text-content p')).toHaveTextContent('x')
+  })
 })

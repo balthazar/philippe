@@ -1,5 +1,21 @@
 import sanitizeHtml from 'sanitize-html'
 
+/**
+ * The only colours stored content may name, and the ONLY reason `class` is
+ * allowed on anything at all. Each is a point on the palette in
+ * site/src/design/tokens.css, not a colour of its own: the artist picks
+ * "quieter", never "#6C6F68", so a later change to the palette moves every
+ * page that used it and nothing is left stranded on a hex value nobody
+ * remembers choosing. site/src/design/base.css defines what they render as,
+ * and site/src/admin/RichText.jsx offers exactly these in its toolbar.
+ *
+ * Kept as a closed list on purpose. `class` is the attribute that lets
+ * stored content reach into the stylesheet, and an open one would let a
+ * paste from anywhere pick up (or spoof) any class the site's own chrome
+ * uses. Anything not named here is dropped, leaving the text itself intact.
+ */
+export const TEXT_COLOR_CLASSES = ['text-ink', 'text-muted', 'text-soft']
+
 // The whitelist is deliberately narrow: everything the source content uses and
 // nothing else. `dl`/`dt`/`dd` carry provenance data and must survive.
 // Task 30, part 5: h2/h3 added -- `heading` is retired as its own block
@@ -8,9 +24,13 @@ import sanitizeHtml from 'sanitize-html'
 // article title owns the page's only h1. Kept identical to migrate/
 // elementor.js's own copy of this whitelist (duplicated there on purpose,
 // migrate/ being a separate package).
+// `span` is here only to carry a colour class (see TEXT_COLOR_CLASSES
+// above); it is inert otherwise, and `allowedClasses` is what keeps it that
+// way -- a span bearing any other class keeps its text and loses the class.
 const OPTIONS = {
-  allowedTags: ['p', 'br', 'em', 'strong', 'a', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'blockquote', 'h2', 'h3'],
-  allowedAttributes: { a: ['href'] },
+  allowedTags: ['p', 'br', 'em', 'strong', 'a', 'span', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'blockquote', 'h2', 'h3'],
+  allowedAttributes: { a: ['href'], span: ['class'] },
+  allowedClasses: { span: TEXT_COLOR_CLASSES },
   allowedSchemes: ['http', 'https', 'mailto'],
 }
 

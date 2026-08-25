@@ -1128,6 +1128,24 @@
   color: #fff;
 }
 
+/* The colour control. Set apart from the icon buttons by an auto margin
+   rather than a separator: it is the one control in this toolbar that is a
+   choice rather than a toggle, and the gap says so without adding a rule to
+   a toolbar this small. Height matched to the buttons so the row keeps one
+   baseline. */
+.rich-text-color {
+  margin-left: auto;
+  height: 1.9rem;
+  padding: 0 0.3rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 .rich-text-content .ProseMirror {
   min-height: 6rem;
   padding: 0.6rem;

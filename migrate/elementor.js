@@ -4,10 +4,16 @@ import sanitizeHtml from 'sanitize-html'
 // package from api/. Keep these two whitelists identical. Task 30, part 5:
 // h2/h3 added (never h1 -- the article title owns the page's only h1) so a
 // migrated heading (see headingToText, below) survives this sanitizer the
-// same way the live admin's would.
+// same way the live admin's would. `span` + its colour classes are carried
+// across for the same reason, even though no WordPress source content has
+// one: the two lists being identical is the invariant, and a list that
+// diverges "because this side doesn't need it yet" is how they stop being
+// comparable at all.
+const TEXT_COLOR_CLASSES = ['text-ink', 'text-muted', 'text-soft']
 const OPTIONS = {
-  allowedTags: ['p', 'br', 'em', 'strong', 'a', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'blockquote', 'h2', 'h3'],
-  allowedAttributes: { a: ['href'] },
+  allowedTags: ['p', 'br', 'em', 'strong', 'a', 'span', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'blockquote', 'h2', 'h3'],
+  allowedAttributes: { a: ['href'], span: ['class'] },
+  allowedClasses: { span: TEXT_COLOR_CLASSES },
   allowedSchemes: ['http', 'https', 'mailto'],
 }
 const clean = (html) => (html ? sanitizeHtml(html, OPTIONS) : '')

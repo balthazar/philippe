@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sanitize, safeUrl } from '../../src/lib/sanitize.js'
+import { sanitize, safeUrl, TEXT_COLOR_CLASSES } from '../../src/lib/sanitize.js'
 
 describe('sanitize', () => {
   it('keeps the whitelisted structural tags', () => {
@@ -10,6 +10,27 @@ describe('sanitize', () => {
   it('strips scripts, theme classes and inline styles', () => {
     expect(sanitize('<p class="elementor-x" style="color:red">Hi</p>')).toBe('<p>Hi</p>')
     expect(sanitize('<script>alert(1)</script><p>Hi</p>')).toBe('<p>Hi</p>')
+  })
+
+  // The one reason `class` is allowed anywhere: a closed list of palette
+  // steps, so the artist can make a date read quieter than its entry without
+  // a code change. See TEXT_COLOR_CLASSES.
+  it('keeps a span carrying one of the colour classes', () => {
+    for (const cls of TEXT_COLOR_CLASSES) {
+      expect(sanitize(`<p><span class="${cls}">2024</span></p>`)).toBe(`<p><span class="${cls}">2024</span></p>`)
+    }
+  })
+
+  // The text survives, the class does not: an editor pasting from elsewhere
+  // loses the styling, never the words.
+  it('drops a class outside the list, keeping the text', () => {
+    expect(sanitize('<p><span class="site-header">x</span></p>')).toBe('<p><span>x</span></p>')
+    expect(sanitize('<p><span class="text-muted evil">x</span></p>')).toBe('<p><span class="text-muted">x</span></p>')
+  })
+
+  it('allows class on span only, never on the block elements', () => {
+    expect(sanitize('<h3 class="text-muted">Titre</h3>')).toBe('<h3>Titre</h3>')
+    expect(sanitize('<p class="text-muted">x</p>')).toBe('<p>x</p>')
   })
 
   it('keeps link hrefs but drops javascript: URLs', () => {

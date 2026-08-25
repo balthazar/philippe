@@ -163,6 +163,30 @@ export function Lightbox({ images = [], index = 0, onClose }) {
           <Chevron direction="right" />
         </button>
       )}
+      {/*
+        The photograph's own legend -- its title, year and dimensions --
+        which on the article page is a numbered list further down the page,
+        matched to the pictures by counting. In here that list is off screen,
+        so a reader in fullscreen had no way to know what they were looking
+        at. `alt` is where that text lives per-image (the media library's
+        "Texte alternatif"; see migrate/stampLegends.js, which derived it from
+        each article's own list), so it is what is shown.
+
+        Rendered only when there IS one: most exhibition photographs are
+        installation views with no legend to give, and an empty bar under
+        every one of those would be a permanent piece of furniture standing
+        in for nothing. It also stays out of the way of the image itself --
+        no backdrop, no reserved strip -- so the photograph keeps the whole
+        stage and this reads as a margin note under it.
+
+        aria-hidden, deliberately: this is the same string the <img> above
+        already carries as its alt text, so without it a screen reader
+        announces the legend twice, once as the image and once as the text
+        beneath it.
+      */}
+      {image?.alt && (
+        <p className="lightbox-legend" aria-hidden="true">{image.alt}</p>
+      )}
     </div>
   )
 }

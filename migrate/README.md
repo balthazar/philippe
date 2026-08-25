@@ -38,6 +38,26 @@ container):
 - `npm run verify` - post-load verification (later task).
 - `npm test` - runs the unit tests (`vitest run`).
 
+### Content scripts (not part of the WordPress migration)
+
+Both run against the live database, both default to a DRY RUN that writes
+nothing, and both are idempotent, so a second run after the artist has edited
+something by hand leaves that edit alone.
+
+- `npm run legends [-- --write]` - derives each photograph's legend from the
+  numbered (or unnumbered, dimensions-bearing) list in the article that shows
+  it, and writes it to that image's `alt` -- the media library's "Texte
+  alternatif" -- which is what the lightbox displays in fullscreen. Matches
+  list to gallery BY COUNT and skips any article where the two disagree,
+  reporting it instead: mis-stamping a legend is worse than leaving one
+  blank, since a blank is visibly missing and a wrong one reads as fact. See
+  `legends.js` for the two list formats it recognises.
+- `npm run colour-biography [-- --write]` - wraps the biography page's
+  section headings and the year that opens each entry in the colour classes
+  the admin's own editor can read back (`site/src/admin/textColor.js`). A
+  year is a bare text node in a run of `<br>`s, so nothing in CSS can reach
+  it; this puts real markup there, once.
+
 `data/*.json` is gitignored: it holds the site's full content and should
 never be committed.
 

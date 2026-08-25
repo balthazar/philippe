@@ -3,10 +3,12 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import { BoldIcon, ItalicIcon, BulletListIcon, OrderedListIcon, BlockquoteIcon, HeadingIcon, LinkIcon } from './icons.jsx'
+import { TextColor, TEXT_COLORS } from './textColor.js'
 
 /**
  * Stored HTML from a `text` block is sanitized server-side on write against
- * a narrow whitelist: p, br, em, strong, a[href], ul, ol, li, dl, dt, dd,
+ * a narrow whitelist: p, br, em, strong, a[href], span[class] (limited to
+ * the colour classes in TEXT_COLOR_CLASSES), ul, ol, li, dl, dt, dd,
  * blockquote, h2, h3 (api/src/lib/sanitize.js). StarterKit ships several
  * extensions that produce markup outside that list -- codeBlock (pre/code),
  * code, horizontalRule (hr), strike (s), and heading at levels the server
@@ -52,6 +54,11 @@ const extensions = [
     openOnClick: false,
     HTMLAttributes: { target: null, rel: null, class: null },
   }),
+  // Renders `<span class="text-muted">` and nothing else: its own attribute
+  // parser rejects any class outside the list, so this extension cannot
+  // widen what the editor is able to produce beyond the server's whitelist
+  // either -- the same guarantee the configuration above exists to keep.
+  TextColor,
 ]
 
 export function RichText({ value, onChange }) {
@@ -121,6 +128,18 @@ export function RichText({ value, onChange }) {
     },
   ]
 
+  // A <select>, not one button per colour: the toolbar is already seven
+  // controls wide inside a block editor that can show several at once, and
+  // a colour is a choice among alternatives (including "none") rather than
+  // a state to toggle. Its value is read from the selection, so it shows
+  // what the cursor is actually sitting in.
+  const activeColor = TEXT_COLORS.find((c) => editor.isActive('textColor', { className: c.className }))
+  const onColorChange = (e) => {
+    const { value } = e.target
+    if (value) editor.chain().focus().setTextColor(value).run()
+    else editor.chain().focus().unsetTextColor().run()
+  }
+
   return (
     <div className="rich-text">
       <div className="rich-text-toolbar" role="toolbar">
@@ -139,6 +158,18 @@ export function RichText({ value, onChange }) {
         <button type="button" className={editor.isActive('link') ? 'active' : ''} aria-label="Lien" title="Lien" onClick={setLink}>
           <LinkIcon />
         </button>
+        <select
+          className="rich-text-color"
+          aria-label="Couleur du texte"
+          title="Couleur du texte"
+          value={activeColor?.className || ''}
+          onChange={onColorChange}
+        >
+          <option value="">Noir</option>
+          {TEXT_COLORS.map((c) => (
+            <option key={c.className} value={c.className}>{c.label}</option>
+          ))}
+        </select>
       </div>
       <EditorContent editor={editor} className="rich-text-content" />
     </div>

@@ -38,6 +38,40 @@ describe('Lightbox', () => {
   // Task 38, part 6 (client feedback: "we shouldnt have arrows if theres a
   // single iamge"). `move` wraps modulo images.length, so on a one-image
   // gallery the arrows were live controls that did nothing observable.
+  // The photograph's legend. On the article page this text is a numbered
+  // list further down; in fullscreen that list is off screen, so without
+  // this a reader has no way to know what they are looking at.
+  describe('legend', () => {
+    it('shows the current photograph\'s legend', () => {
+      const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+      expect(container.querySelector('.lightbox-legend')).toHaveTextContent('Un')
+    })
+
+    it('follows the arrows to the next photograph\'s own legend', async () => {
+      const user = userEvent.setup()
+      const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+      await user.click(screen.getByRole('button', { name: 'Suivant' }))
+      expect(container.querySelector('.lightbox-legend')).toHaveTextContent('Deux')
+    })
+
+    // Most exhibition photographs are installation views with no legend to
+    // give. An empty bar under every one of those is furniture standing in
+    // for nothing, so there is no element at all rather than a blank one.
+    it('renders nothing at all when the photograph has no legend', () => {
+      const bare = [{ variants: { large: { path: 'a.webp', width: 10, height: 10 } } }]
+      const { container } = render(<Lightbox images={bare} index={0} onClose={vi.fn()} />)
+      expect(container.querySelector('.lightbox-legend')).toBeNull()
+    })
+
+    // The <img> already carries this exact string as its alt text, so a
+    // screen reader would otherwise announce the legend twice.
+    it('is hidden from assistive technology, which already has it as alt text', () => {
+      const { container } = render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
+      expect(container.querySelector('.lightbox-legend')).toHaveAttribute('aria-hidden', 'true')
+      expect(container.querySelector('img')).toHaveAttribute('alt', 'Un')
+    })
+  })
+
   it('renders both arrows for a multi-image gallery', () => {
     render(<Lightbox images={images} index={0} onClose={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Précédent' })).toBeInTheDocument()

@@ -1129,6 +1129,25 @@ picture {
   letter-spacing: 0.06em;
 }
 
+/* Content colours. The only classes stored content may carry (the server
+   drops every other one -- see TEXT_COLOR_CLASSES in api/src/lib/sanitize.js),
+   and the only way to recolour text from the admin without a code change.
+   Each maps to a point on the palette in tokens.css rather than to a hex
+   value, so recolouring the palette moves every page that used one.
+
+   Only ever produced as a <span>, never as a class on the block element
+   itself: that is what lets the admin's editor read the colour back off
+   stored HTML and re-apply it (a heading node has nowhere to keep a class,
+   so one written there would be silently lost the first time the artist
+   opened that block). Scoped to rendered content, so a class name colliding
+   with one of the site's own chrome classes still cannot reach it. */
+.block-text .text-ink,
+.reference-citation .text-ink { color: var(--ink); }
+.block-text .text-muted,
+.reference-citation .text-muted { color: var(--ink-muted); }
+.block-text .text-soft,
+.reference-citation .text-soft { color: var(--ink-soft); }
+
 .block-specs {
   max-width: 42rem;
   margin: 0 0 var(--space-3);
@@ -1472,6 +1491,38 @@ picture {
   .lightbox-image-button img {
     transition: none;
   }
+}
+
+/* The photograph's legend, under the image in fullscreen (Lightbox.jsx).
+   Absolutely positioned rather than laid out as a flex sibling: the lightbox
+   centres its one child, and adding a second would push the photograph off
+   centre by half the legend's height on every image, including the ones that
+   have no legend at all. This way the image is centred by the same rule as
+   before and the legend sits in the margin `max-height: 90vh` already leaves
+   beneath it.
+
+   Chrome type, --text-s, --ink-muted: the same quiet grey the exhibition
+   titles and the biography's own dates use (tokens.css), so a caption reads
+   as a caption everywhere on the site. It is centred on the viewport, not on
+   the image: the image's width varies with its aspect ratio, and a legend
+   that shifted sideways from photograph to photograph as you arrow through a
+   series would be the most distracting thing on the screen. */
+.lightbox-legend {
+  position: absolute;
+  bottom: var(--space-1);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(60rem, 90vw);
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-chrome);
+  font-size: var(--text-s);
+  line-height: 1.4;
+  color: var(--ink-muted);
+  /* The pointer belongs to the image (click to zoom) and to the backdrop
+     (click to close). A text node lying across the bottom of the stage would
+     otherwise silently swallow the backdrop click along its whole width. */
+  pointer-events: none;
 }
 
 /* The zoom wrapper is a button too, but it is the lightbox's CONTENT, laid

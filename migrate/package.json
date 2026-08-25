@@ -6,7 +6,9 @@
     "extract": "node extract.js",
     "load": "node load.js",
     "verify": "node verify.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "legends": "node stampLegends.js",
+    "colour-biography": "node colourBiography.js"
   },
   "dependencies": {
     "mysql2": "^3.11.0",
@@ -14,5 +16,8 @@
     "sharp": "^0.33.4",
     "sanitize-html": "^2.13.0"
   },
-  "devDependencies": { "vitest": "^2.0.5", "mongodb-memory-server": "^10.0.0" }
+  "devDependencies": {
+    "vitest": "^2.0.5",
+    "mongodb-memory-server": "^10.0.0"
+  }
 }
