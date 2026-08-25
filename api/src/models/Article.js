@@ -14,7 +14,11 @@ const blockSchema = new mongoose.Schema(
     level: { type: Number, enum: [2, 3], default: 2 },         // (vestigial, formerly heading)
     image: { type: mongoose.Schema.Types.ObjectId, ref: 'Image' }, // image
     caption: localizedField(),                                 // image
-    size: { type: String, enum: ['full', 'wide', 'inset'], default: 'wide' },
+    // `mark` is the odd one out and deliberately so: the other three say how
+    // WIDE a photograph runs, while a mark is a small emblem set beside the
+    // text that follows it rather than above it -- a medal next to the
+    // distinction it certifies. See .block-image.size-mark in base.css.
+    size: { type: String, enum: ['full', 'wide', 'inset', 'mark'], default: 'wide' },
     items: [
       new mongoose.Schema(
         {

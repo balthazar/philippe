@@ -1252,6 +1252,31 @@ picture {
   max-width: 42rem;
 }
 
+/* A small emblem set BESIDE the text that follows, not above it: a medal
+   belongs next to the distinction it certifies, not stacked over it. The
+   other three sizes say how wide a photograph runs; this one changes what
+   kind of thing the image is.
+
+   Floated, which is the only way one block can sit alongside the next when
+   blocks are siblings in a flat list. That makes the clear rule below part
+   of the feature rather than a tidy-up: without it the following section's
+   heading would ride up beside the emblem. */
+.block-image.size-mark {
+  float: left;
+  width: 3rem;
+  margin: 0.15rem var(--space-2) var(--space-1) 0;
+}
+
+.block-image.size-mark figcaption {
+  display: none;
+}
+
+/* A section heading always begins a new band, never beside a floated mark. */
+.block-text h2,
+.block-text h3 {
+  clear: both;
+}
+
 .block-image figcaption {
   font-family: var(--font-chrome);
   margin-top: var(--space-1);

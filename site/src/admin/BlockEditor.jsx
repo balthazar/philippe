@@ -229,6 +229,7 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
                 <LocalizedInput label="Légende" lang={lang} value={block.caption} onChange={(caption) => replace(i, { ...block, caption })} />
                 <label htmlFor={`size-${i}`}>Taille</label>
                 <select id={`size-${i}`} value={block.size || 'wide'} onChange={(e) => replace(i, { ...block, size: e.target.value })}>
+                  <option value="mark">Vignette (à côté du texte)</option>
                   <option value="inset">Encart</option>
                   <option value="wide">Large</option>
                   <option value="full">Pleine largeur</option>
