@@ -26,7 +26,7 @@ import { useLocation } from 'react-router-dom'
  * identifier -- it ships in the page source of every site that uses one --
  * so it lives here as a constant rather than as a build-time secret.
  */
-export const GA_MEASUREMENT_ID = 'G-FQ6T71HRZ1'
+export const GA_MEASUREMENT_ID = 'G-Y52N6532C7'
 
 const SRC = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`
 
