@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { LangProvider } from '@/lang.jsx'
 import * as api from '@/api.js'
@@ -58,17 +58,23 @@ beforeEach(() => {
   })
 })
 
+// The rail and the mobile year strip are both in the DOM (see
+// ExhibitionsTimeline.jsx); CSS decides which one is laid out, and jsdom
+// applies none, so a link named "2024" now matches twice. These tests are
+// about the rail's own current-dot marking, so they ask the rail.
+const railLink = () => within(document.querySelector('.exhibitions-timeline-rail'))
+
 describe('ExhibitionsLayout', () => {
   it('renders the rail on the /expositions index, current year marked', async () => {
     render(<TestSection initialPath="/expositions" />)
-    await waitFor(() => expect(screen.getByRole('link', { name: '2024' })).toHaveAttribute('aria-current', 'true'))
-    expect(screen.getByRole('link', { name: '2023' })).not.toHaveAttribute('aria-current')
+    await waitFor(() => expect(railLink().getByRole('link', { name: '2024' })).toHaveAttribute('aria-current', 'true'))
+    expect(railLink().getByRole('link', { name: '2023' })).not.toHaveAttribute('aria-current')
   })
 
   it('renders the rail on an individual exhibition article page, its own year marked current', async () => {
     render(<TestSection initialPath="/2023" />)
-    await waitFor(() => expect(screen.getByRole('link', { name: '2023' })).toHaveAttribute('aria-current', 'true'))
-    expect(screen.getByRole('link', { name: '2024' })).not.toHaveAttribute('aria-current')
+    await waitFor(() => expect(railLink().getByRole('link', { name: '2023' })).toHaveAttribute('aria-current', 'true'))
+    expect(railLink().getByRole('link', { name: '2024' })).not.toHaveAttribute('aria-current')
     // The current dot comes from the URL param directly (useParams(), read
     // by the layout itself), not from ArticleDetail's own fetch resolving
     // -- see the file comment -- so it is correct immediately, before
@@ -103,7 +109,7 @@ describe('ExhibitionsLayout', () => {
     // second request would arrive inside the window below and be counted as
     // a runaway loop. Waiting for the rail to render is what says both
     // fetches have settled, the same way the next test does it.
-    await waitFor(() => expect(screen.getByRole('link', { name: '2024' })).toBeInTheDocument())
+    await waitFor(() => expect(railLink().getByRole('link', { name: '2024' })).toBeInTheDocument())
     const callsAfterSettling = api.apiGet.mock.calls.length
     // Give any runaway effect loop a further tick to reveal itself.
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -116,12 +122,12 @@ describe('ExhibitionsLayout', () => {
     // The timeline's own item list is a separate fetch from the article
     // itself (see ExhibitionsLayout.jsx) -- wait for it to actually land
     // before trying to click one of its links.
-    await waitFor(() => expect(screen.getByRole('link', { name: '2024' })).toBeInTheDocument())
+    await waitFor(() => expect(railLink().getByRole('link', { name: '2024' })).toBeInTheDocument())
 
     const timelineBefore = container.querySelector('.exhibitions-timeline')
     expect(timelineBefore).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('link', { name: '2024' }))
+    fireEvent.click(railLink().getByRole('link', { name: '2024' }))
     await waitFor(() => expect(screen.getByText('2024 content')).toBeInTheDocument())
 
     const timelineAfter = container.querySelector('.exhibitions-timeline')

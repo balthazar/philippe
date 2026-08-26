@@ -281,6 +281,8 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   const navigate = useNavigate()
   const railRef = useRef(null)
   const scrubRef = useRef(null)
+  // The mobile year strip (see the `.exhibitions-timeline-years` list below).
+  const yearsRef = useRef(null)
   // Task 38, part 1: attached to the FIRST year label only -- they are all
   // the same height (see FALLBACK_LABEL_HEIGHT), and one label mounts for
   // as long as any does, so a single observer answers for the whole set.
@@ -384,6 +386,35 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
   // stuck over the newly loaded page).
   const pointerNavRef = useRef(false)
 
+  // Brings the current year into view within the mobile strip. Roughly thirty
+  // years scroll sideways in a box a few chips wide, and they run newest
+  // first -- so an exhibition from 1998 is most of the archive off the left
+  // edge, and without this the strip would open on 2024 with nothing to say
+  // that the year you are actually looking at exists at all.
+  //
+  // The list's own `scrollLeft` is set directly rather than calling
+  // `scrollIntoView`, which walks up the ancestor chain and scrolls whatever
+  // else it finds on the way -- here that is the document, on a section built
+  // never to scroll. This can only ever move the strip.
+  //
+  // Costs nothing on desktop, where the strip is `display: none`: every
+  // measurement below reads 0 and the assignment is a no-op.
+  useEffect(() => {
+    const list = yearsRef.current
+    const current = list?.querySelector('[aria-current="true"]')
+    if (!list || !current) return
+    const centred = current.offsetLeft - (list.clientWidth - current.offsetWidth) / 2
+    list.scrollLeft = Math.max(0, centred)
+    // `groups.length` belongs here as much as the year does. On a cold load
+    // straight to an exhibition's URL the year is known from the URL itself
+    // and is right on the very first render, while `items` is still being
+    // fetched -- so this effect runs against an empty strip, finds no chip to
+    // centre, and would never run again, because the year it is keyed on never
+    // changes afterwards. Landing on /2013 left the strip showing the newest
+    // years with the current one somewhere off the right-hand edge, which is
+    // the exact failure it exists to prevent.
+  }, [currentYear, groups.length])
+
   const handleMove = (e) => {
     if (!total) return
     const rect = railRef.current.getBoundingClientRect()
@@ -461,6 +492,58 @@ export function ExhibitionsTimeline({ items, currentSlug, currentYear }) {
                 }}
               >
                 <span className="exhibitions-timeline-dot" aria-hidden="true" />
+              </Link>
+            </li>
+          )
+        })}
+      </ol>
+
+      {/*
+        The mobile timeline: one tappable chip per YEAR, scrolling sideways
+        under the header, instead of the dot rail above.
+
+        A second list rather than a restyling of the first, because the two
+        are not the same control wearing different clothes. The rail is 39
+        dots placed by measured pixel offsets, carrying no text, spaced as
+        little as 10px apart and read by pointing at a continuous axis; that
+        is a fine thing to hover with a mouse and an impossible thing to hit
+        with a thumb, and it has no meaning at all laid out horizontally --
+        its labels are already switched off below 768px (see base.css) for
+        exactly that reason, which left the mobile rail as 39 unlabelled,
+        near-touching dots that said nothing about where they led. Chips say
+        their year, are as wide as their own text, and there are fewer of them
+        (roughly 30 years against 39 exhibitions). Exactly one of the two lists
+        is ever displayed -- `display: none` removes the other from the
+        accessibility tree along with the layout, so a screen reader is never
+        offered both.
+
+        Where a chip leads depends on how full its year is. Most years hold a
+        single exhibition and go straight to it, which is what a viewer means
+        by tapping a year. A year holding several (2013 holds five) goes to
+        that year's own index instead -- `/2013`, an existing route that lists
+        them (see ArticleDetail.jsx's YEAR_SLUG_RE fallback) -- rather than
+        silently picking one of the five and leaving the other four with no
+        way in. That is the whole reason this is grouped by year rather than
+        being one chip per exhibition: five chips reading "2013" would say
+        nothing about which was which.
+      */}
+      <ol className="exhibitions-timeline-years" ref={yearsRef}>
+        {groups.map((group) => {
+          const multi = group.items.length > 1
+          const target = multi ? String(group.year) : group.items[0].slug
+          const isCurrentGroup = group.year === currentYear
+          return (
+            <li key={group.year}>
+              <Link
+                to={href('article', target)}
+                aria-current={isCurrentGroup ? 'true' : undefined}
+                aria-label={
+                  multi
+                    ? `${group.year} \u2013 ${group.items.length} ${lang === 'fr' ? 'expositions' : 'exhibitions'}`
+                    : undefined
+                }
+              >
+                {group.year}
               </Link>
             </li>
           )

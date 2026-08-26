@@ -53,6 +53,27 @@
      page share the same 60px left/right edge. */
   --header-height: 5rem;
 
+  /* What the header actually OCCUPIES, as opposed to --header-height above,
+     which is the design token that SETS the desktop bar's height. The two are
+     the same number on desktop and deliberately are not on mobile, where the
+     nav wraps onto its own row (or two) beneath the wordmark and the header's
+     height stops being a value anyone can write down: it depends on the
+     viewport width, on which language is showing (BIO / BIBLIOGRAPHIE and BIO
+     / BIBLIOGRAPHY do not wrap at the same width), and on the visitor's own
+     root font size.
+
+     Every rule that means "the viewport minus the header" reads this, not
+     --header-height: the homepage slideshow, the exhibitions column, and the
+     sticky category headings. Header.jsx measures its own rendered box and
+     publishes the real number here as an inline custom property on <html>,
+     which outranks this declaration (see lib/useHeaderSpace.js). This value
+     is therefore only ever the fallback -- the one used by the prerendered
+     HTML before any JS runs, and in any environment with no ResizeObserver.
+     On desktop that fallback is already exact, which is why nothing changed
+     there; the mobile default below is a close estimate that the measurement
+     corrects on the first frame. */
+  --header-space: var(--header-height);
+
   /* Slide change, in two halves rather than a crossfade. Together they total
      the 600ms the client specified. Mirrored by FADE_OUT_MS / FADE_IN_MS in
      Slideshow.jsx, which needs the total to know when to unmount the

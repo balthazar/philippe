@@ -1,6 +1,7 @@
-import { Fragment } from 'react'
+import { Fragment, useRef } from 'react'
 import { NavLink, Link, useLocation } from 'react-router-dom'
 import { useLang } from '@/lang.jsx'
+import { useHeaderSpace } from '@/lib/useHeaderSpace.js'
 import { usePreloaded } from '@/preload.jsx'
 import { routeFor, SEGMENTS } from '@/routes.js'
 
@@ -68,8 +69,15 @@ export function Header({ translatedPath }) {
   const preloaded = usePreloaded()
   const toggleHref = translatedPath || counterpartPath(pathname, lang, otherLang, preloaded)
 
+  // The header is a fixed 5rem bar on desktop and a wrapping, content-sized
+  // one on mobile, so its height stops being a number any stylesheet can
+  // state. Measured and published as --header-space for the rules that need
+  // "the viewport minus the header" -- see lib/useHeaderSpace.js.
+  const headerRef = useRef(null)
+  useHeaderSpace(headerRef)
+
   return (
-    <header className="site-header">
+    <header className="site-header" ref={headerRef}>
       {/*
         D1: .site-header itself stays full-bleed (its background must span
         the viewport at any width), but its content is capped and centred

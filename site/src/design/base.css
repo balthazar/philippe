@@ -172,6 +172,16 @@ picture {
 .site-header .nav-split {
   display: inline-flex;
   gap: 0;
+  /* The two halves and the "/" between them sit on ONE baseline, whatever
+     boxes they end up in. A flex container's default `align-items: stretch`
+     ties them to each other's heights instead, so the moment the links get
+     padding the separator does not have (they do below 1000px, for a touch
+     target -- see the mobile header rules above), the "/" is stretched to the
+     links' height and its glyph rides at the top of that taller box: a
+     superscript slash floating above BIO / BIBLIOGRAPHIE. Aligning the type
+     rather than the boxes is what makes the pair read as one label, which is
+     this element's whole reason for existing. */
+  align-items: baseline;
 }
 
 /* A literal "/", unlike the border-drawn rule before FR/EN below: this one
@@ -214,6 +224,111 @@ picture {
 
 .site-header .lang-code.active {
   color: var(--ink);
+}
+
+/* Mobile header: the nav wraps onto its own row (or two) beneath the
+   wordmark, instead of running off the side of the screen.
+
+   Everything above lays the header out as one row -- wordmark, then nav and
+   FR/EN pushed right by `margin-left: auto` -- inside a fixed 5rem bar. That
+   row needs a measured 870px in French: at 390px, the whole of the archive
+   past "ŒUVRES" was off the right edge of the screen, with no scroll, no
+   overflow indicator and no way to reach it. Every page on the site was
+   affected, since this is the one piece of chrome all of them share.
+
+   Row one keeps the wordmark and FR/EN, which are what say where you are and
+   in which language; the nav takes the rows below. `order` is what puts FR/EN
+   on the first row at all -- it is LAST in the DOM (correct for the desktop
+   row, where it reads wordmark, nav, language), so without reordering it
+   would wrap to the bottom, below the nav, and the header would read as
+   ending on a language toggle rather than on the section list.
+
+   The header's height is no longer a number this stylesheet can state: it
+   depends on the width, on the language, and on the visitor's root font size.
+   Nothing here tries to state one. `height: auto` lets the content decide,
+   and Header.jsx measures the result into --header-space for the three rules
+   that need it (see tokens.css and lib/useHeaderSpace.js).
+
+   Still sticky, unchanged: a wrapped header that scrolled away would leave a
+   long article with no way back to the archive without scrolling to the top.
+
+   The breakpoint is the header's OWN, not the 768px the rest of this file
+   uses to tell a phone from a desktop, and it is a measurement rather than a
+   device class: laid out as one row, this header's content needs 971px in
+   French and 950px in English, gutters included. So it was never only phones
+   that lost the end of the nav -- every tablet, and any laptop browser window
+   narrower than about 970px, cut off Contact and the language toggle exactly
+   the same way. 1000px is that measured requirement with enough headroom for
+   a visitor browsing at a larger root font size, which scales the type and
+   the requirement with it. Nothing else in this file moves at this width;
+   only the header does, because only the header's content asks for it. */
+@media (max-width: 999.98px) {
+  .site-header {
+    height: auto;
+  }
+
+  .site-header-inner {
+    height: auto;
+    flex-wrap: wrap;
+    /* The wordmark is 18px and the nav 16px, so `center` (inherited from the
+       desktop rule) would set the two rows' items on subtly different optical
+       lines. Baseline aligns the type itself, which is what the eye reads. */
+    align-items: baseline;
+    /* The desktop rule spaces one row with `gap: var(--space-3)` on both
+       axes. 2rem between wrapped ROWS is a header half as tall again as it
+       needs to be, so the two axes part company here: the row gap is what
+       separates the wordmark from the nav beneath it, the column gap what
+       separates one nav item from the next. */
+    gap: var(--space-2) var(--space-3);
+    padding-block: var(--space-2);
+  }
+
+  .site-header .wordmark {
+    order: 1;
+  }
+
+  /* Pushed to the right end of the first row by the same `margin-left: auto`
+     that puts it at the right end of the desktop row -- it just has the
+     wordmark beside it now instead of the whole nav. */
+  .site-header .lang-switch {
+    order: 2;
+    margin-left: auto;
+    /* The desktop rule draws a 3px rule to its left, dividing `nav` from the
+       language toggle -- the header's only separator, and on one row it reads
+       as exactly that. Here nav is not beside it any more: the rule would sit
+       in open space between the wordmark and FR/EN, dividing nothing, which
+       reads as a stray mark rather than as punctuation. The `auto` margin
+       already sets the two apart. */
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  /* `flex-basis: 100%` is what forces the break: nav claims a whole line of
+     its own rather than trying to share the wordmark's, and then wraps
+     internally as its own flex container. `margin-left: auto` has to go with
+     it -- alone on a full-width line, an auto left margin would push the
+     whole nav to the right edge, which is the opposite of what it does on the
+     desktop row. */
+  .site-header nav {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    margin-left: 0;
+    /* The links carry their own vertical padding below, which is what
+       separates one row from the next -- a row-gap on top of it would space
+       the rows twice. */
+    row-gap: 0;
+  }
+
+  /* A nav link is bare text set on `line-height: 1`, so its clickable box is
+     exactly the 16px cap height of the type -- fine for a pointer, well under
+     the 24x24 CSS px WCAG 2.5.8 asks of a touch target (the same minimum the
+     exhibitions rail's dots are already sized to). Padding is the whole fix:
+     it enlarges the box without changing the type, and doubles as the space
+     between wrapped rows. */
+  .site-header nav a {
+    padding-block: 0.3125rem;
+  }
 }
 
 /* Client feedback: header + main together must fit exactly one viewport
@@ -340,15 +455,52 @@ picture {
   max-width: none;
 }
 
+/* Mobile vertical rhythm.
+
+   --space-4 is 4rem, and it is the right distance on a 1440px page: between
+   the header and an article's title, between that title and the photographs,
+   above a page's lede. On a 390x844 phone the same 64px is a fifth of the
+   viewport spent on nothing, several times per page -- the title of a work
+   sat below the fold's first third with white above and below it, and the
+   photograph the page exists to show started lower still. One step down the
+   same scale (--space-3, 2rem) keeps the intervals in proportion to each
+   other and to the type; nothing here invents a new value.
+
+   Only the spacings that read as a gap between BANDS of a page move. The
+   measure of the body copy, the gallery's own gutters and every other
+   horizontal value are untouched -- they were already sized in relative or
+   clamped units that shrink on their own. */
+@media (max-width: 767.98px) {
+  .article-layout {
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+
+  .article-header {
+    margin: var(--space-3) 0 var(--space-2);
+  }
+
+  .page-intro {
+    margin-top: var(--space-3);
+  }
+
+  .category-section {
+    margin-top: var(--space-3);
+  }
+}
+
 .category-section {
   margin-top: var(--space-4);
 }
 
 .category-section h2 {
   position: sticky;
-  top: var(--header-height); /* clears the sticky header exactly, since the
-                                 header's height is now a fixed, named token
-                                 rather than an emergent/hand-measured value */
+  top: var(--header-space); /* clears the sticky header exactly. --header-space,
+                               not --header-height: on mobile the header wraps
+                               and is taller than the token that sets the
+                               desktop bar, and a heading that stopped at the
+                               token's own 5rem would slide under the wrapped
+                               rows. See tokens.css. */
   z-index: 5;
   margin: 0 0 var(--space-2);
   padding: var(--space-1) 0;
@@ -425,7 +577,7 @@ picture {
 .slideshow {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - var(--header-height));
+  height: calc(100dvh - var(--header-space));
   position: relative;
   margin: 0;
   text-align: center;
@@ -725,10 +877,26 @@ picture {
    sequence still always fits inside that height. See
    ExhibitionsTimeline.jsx for the placement/measurement itself; this file
    only supplies the positioning context and visual treatment. */
+/* `minmax(0, 1fr)`, not the bare `1fr` this was, and the difference is the
+   whole reason /expositions and every exhibition article rendered as a blank
+   page on a phone. `1fr` is shorthand for `minmax(auto, 1fr)`, so the track
+   can never be narrower than its widest item's min-content -- and the rail
+   below it is a horizontal row of 39 dots, whose min-content is 1584px. The
+   track took that width, the content column beside it inherited it, and the
+   photograph sat entirely off the right-hand edge of a 390px screen with only
+   the title visible. The rail's own `overflow-x: auto` did not save it: the
+   grid ITEM is the `<nav>` wrapping the rail, which is `overflow: visible`,
+   so the automatic minimum size still applied to it. Flooring the track at 0
+   fixes it at the grid, where the rule that caused it lives.
+
+   `--space-4` (4rem) also only ever made sense as the gap between two
+   COLUMNS. Stacked, it is four rems of white between the year chips and the
+   exhibition they lead to, which reads as a page break rather than as two
+   parts of one control. */
 .exhibitions-layout {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
 }
 
 @media (min-width: 768px) {
@@ -745,7 +913,7 @@ picture {
        initial value computes to `stretch`), which is what lets both grid
        items below reach that full height with no `grid-template-rows`
        needed. */
-    height: calc(100dvh - var(--header-height));
+    height: calc(100dvh - var(--header-space));
     min-height: 0;
   }
 }
@@ -771,18 +939,20 @@ picture {
   }
 }
 
+/* The rail is desktop-only now (the year strip replaces it below 768px), so
+   what is left here is only what a list of absolutely positioned dots needs:
+   no bullets, no margin of its own, and the positioning context the media
+   query below adds. It used to carry `display: flex`, a `gap`, and
+   `overflow-x: auto` with its scrollbar hidden -- all of which described the
+   horizontal row it fell back to on mobile, and none of which ever did
+   anything on desktop, where every dot is placed by an explicit `top` and
+   `overflow` is set to `visible` a few lines down. Those properties went with
+   the layout they were for; leaving them would describe a mobile row that no
+   longer exists. */
 .exhibitions-timeline-rail {
-  display: flex;
-  gap: var(--space-2);
   margin: 0;
-  padding: 0 0 var(--space-1);
+  padding: 0;
   list-style: none;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.exhibitions-timeline-rail::-webkit-scrollbar {
-  display: none;
 }
 
 @media (min-width: 768px) {
@@ -797,8 +967,6 @@ picture {
   .exhibitions-timeline-rail {
     position: relative;
     height: 100%;
-    padding: 0;
-    overflow: visible;
   }
 
   .exhibitions-timeline-dot-item {
@@ -991,6 +1159,112 @@ picture {
   font-size: var(--text-m);
 }
 
+/* The mobile timeline: a sideways-scrolling row of year chips, replacing the
+   dot rail entirely below 768px (see ExhibitionsTimeline.jsx for why this is
+   a second list rather than the same one restyled, and for where a chip
+   leads). Ordered newest-first, like the rail above it and like the archive
+   itself.
+
+   `order: -1` puts the whole `<nav>` above the content column. The sketch
+   this was designed from had the chips between the exhibition's title and its
+   photograph, which the DOM cannot do at this breakpoint: the title and the
+   gallery are both inside `.exhibitions-content`, and the rail is that div's
+   SIBLING. Dissolving the wrapper with `display: contents` would let all
+   three interleave, and would also stop the page-transition fade working --
+   an element generating no box has no opacity to animate (see useContentFade,
+   whose whole job is animating exactly that div). Above the content it reads
+   as what it is: chrome for the section, then the exhibition you are looking
+   at. */
+.exhibitions-timeline-years {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* The strip scrolls, the page does not. `scrollbar-width: none` matches the
+     rail above, which hides its own the same way -- a scrollbar drawn across
+     a row of years is chrome on top of chrome. The chips are wide enough to
+     be dragged directly, so nothing is unreachable without one. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Snapping each year to the left edge as the strip is dragged: 30 years
+     read as a list of discrete things, not as a continuous ruler, and a
+     half-scrolled chip at the edge is the one thing that would make them look
+     otherwise. `proximity`, not `mandatory`, so a deliberate long flick
+     across a decade is not fought all the way. */
+  scroll-snap-type: x proximity;
+}
+
+.exhibitions-timeline-years::-webkit-scrollbar {
+  display: none;
+}
+
+.exhibitions-timeline-years > li {
+  /* Chips are as wide as their own four digits and no wider; without this
+     they would share the strip's width equally and shrink as years are
+     added. */
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+/* `.exhibitions-timeline a` above centres a dot inside a 24px square hit area
+   -- right for a dot, wrong for a word. Overridden wholesale here: a chip's
+   own padding is what gives it a touch target (0.375rem either side of
+   var(--text-m) on the body's 1.6 line-height comes to 33px, comfortably past
+   the 24px WCAG 2.5.8 asks for), and the year itself is what fills it. */
+.exhibitions-timeline-years a {
+  display: block;
+  padding: 0.375rem 0.5rem;
+  font-family: var(--font-chrome);
+  font-size: var(--text-m);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  text-decoration: none;
+  /* Square, like everything else on this site -- the only radius in this file
+     is the one that makes a dot round. Transparent at rest rather than absent
+     so the current year's own border below cannot shift its neighbours by a
+     pixel when it appears. */
+  border: 1px solid transparent;
+  transition: color 150ms ease-in, border-color 150ms ease-in;
+}
+
+/* Marked by a box AND by weight of colour, not by colour alone -- the same
+   requirement the rail's own current dot is built to (it fills solid and
+   scales up rather than merely darkening), so the current year survives a
+   colour-blind reading and a print. */
+.exhibitions-timeline-years a[aria-current='true'] {
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+.exhibitions-timeline-years a:hover,
+.exhibitions-timeline-years a:focus-visible {
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exhibitions-timeline-years a {
+    transition: none;
+  }
+}
+
+/* Exactly one of the two timelines is ever laid out. `display: none` (rather
+   than a visual hiding technique) is deliberate on both sides: it takes the
+   hidden one out of the accessibility tree along with the layout, so a screen
+   reader is never offered the same archive twice under one <nav>. */
+@media (min-width: 768px) {
+  .exhibitions-timeline-years {
+    display: none;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .exhibitions-timeline {
+    order: -1;
+  }
+}
+
 /* Below 768px the rail is a horizontal row (see .exhibitions-timeline-rail
    above): popping a label to the *left* of its dot, as the desktop column
    does, would routinely overlap the previous dot at that spacing. Above the
@@ -1008,25 +1282,20 @@ picture {
    clipping box on BOTH axes even though only horizontal scrolling is ever
    wanted. Reserving room INSIDE the box (padding, not a negative offset
    outside it) keeps the label inside the clip region instead. */
-@media (max-width: 767.98px) {
-  /* Task 36: out of scope for this task (desktop only), kept only from
-     becoming outright broken. Each year label used to be positioned above
-     its OWN dot's row-flow position because it lived inside that dot's
-     shared `<li>` (task 35, Part B's nested grouping). Task 36 flattened
-     the DOM (labels are now siblings positioned by explicit desktop `top`
-     pixel values, not by DOM adjacency -- see .exhibitions-timeline-label
-     above), which has no meaning on this row layout: every label's
-     absolute-positioning containing block is now the whole `<nav>`, not
-     its own dot, so they would all stack at the nav's own origin instead
-     of floating over their dot. Rather than design a second, horizontal
-     placement scheme this task was not asked for, labels are hidden below
-     768px -- the dot row itself is unaffected (dots stay `position:
-     static`, plain row flow, ignoring the desktop `top` styles entirely)
-     and remains just as usable as before this task. */
-  .exhibitions-timeline-rail {
-    padding-top: 0;
-  }
+/* The dot rail, its year labels and its floating scrubber are all desktop
+   now -- the year chips above replace the three of them below 768px.
 
+   The labels and the scrubber were already hidden here, and the note this
+   replaces explained why: both are positioned by explicit pixel `top` values
+   computed against a VERTICAL rail, which mean nothing once the dots are laid
+   out as a horizontal row, so they were switched off rather than given a
+   second placement scheme. What that left behind was the part worth fixing:
+   39 dots in a row, spaced as little as 10px apart, carrying no text at all
+   because their labels were the thing that had been hidden. Unlabelled and
+   near-touching, they said nothing about where they led and could not
+   reliably be hit with a thumb. The rail goes with them now. */
+@media (max-width: 767.98px) {
+  .exhibitions-timeline-rail,
   .exhibitions-timeline-label,
   .exhibitions-timeline-scrub {
     display: none;
@@ -1343,6 +1612,43 @@ picture {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+/* A gallery's column count is the artist's own per-block choice, stored with
+   the block and written inline by BlockRenderer.jsx -- three across is the
+   default and the common case. It is a choice made against a desktop column
+   roughly 1300px wide, though, and nothing was reinterpreting it further
+   down: three across a 390px phone leaves each photograph about 100px wide,
+   which is a contact sheet, not a work you can look at. These are
+   photographs of objects rendered at life size in the gallery; at 100px the
+   subject is no longer legible.
+
+   Both declarations have to be `!important`, which is not a preference here:
+   `--columns` is an inline style on the <ul> and `grid-column` an inline
+   style on each <li> (both are per-block data, so inline is the right place
+   for them), and an inline style outranks every selector in this file no
+   matter how specific. This is the one case the keyword exists for -- a
+   breakpoint overruling a value the cascade cannot otherwise reach.
+
+   The span override has to come with the column override, not after it: an
+   item still asking to span 2 in a 1-column grid does not clamp, it makes
+   the grid generate a second, implicit column and overflows the page. */
+@media (max-width: 767.98px) {
+  .block-gallery {
+    --columns: 2 !important;
+  }
+
+  .block-gallery > li {
+    grid-column: span 1 !important;
+  }
+}
+
+/* One across on a phone. A photograph the full width of the screen is the
+   whole point of the page. */
+@media (max-width: 480px) {
+  .block-gallery {
+    --columns: 1 !important;
+  }
 }
 
 .block-gallery button {
@@ -1884,4 +2190,118 @@ picture {
 
 .lightbox-next {
   right: var(--space-2);
+}
+
+/* Mobile fullscreen: every control gets its own strip, and none of them is
+   laid over the photograph.
+
+   On a desktop viewport the arrows sit in wide margins either side of the
+   image and the close button in a corner of open white -- there is room, and
+   nothing overlaps. On a phone there is no margin to sit in: the image is
+   `max-width: 90vw`, which leaves about 20px each side, while an arrow's own
+   box is 72px. Measured at 390px, `prev` spanned x 16..70 against an image
+   starting at x 20, and both arrows sat squarely inside the image's vertical
+   span as well -- so the controls were drawn ON the work. Worse than untidy:
+   they are --ink-muted grey, and most of this archive is photographs of
+   gallery interiors, so an arrow over a white wall is not dim, it is gone.
+   The client's report was that the back arrow had disappeared behind the
+   image; it had not, it was on top of it and the same colour.
+
+   So the image is given a box with the chrome's strips taken out of it, and
+   centred in what remains: padding on the container reserves the strips, and
+   the flex centring that was already here does the rest, with no change to
+   how the photograph is sized or scaled. The controls stay absolutely
+   positioned against the viewport (an absolutely positioned box resolves
+   against its containing block's PADDING box, so `bottom` and `top` here
+   still mean the screen's own edges, unaffected by that padding) -- they are
+   simply now measured into space the image no longer occupies.
+
+   Both arrows move to one row at the bottom, flanking the centre line, which
+   is also where an arrow belongs on a touch screen: the sides of a phone held
+   in one hand are the hardest part of it to reach, and the bottom the
+   easiest. The counter-anchoring (`left: 50%` with a negative margin for one,
+   `right: 50%` for the other) is what centres the PAIR rather than each
+   button, so the gap between them stays put whatever their own width. */
+@media (max-width: 767.98px) {
+  .lightbox {
+    /* One strip, at the bottom, holding every control -- so the photograph
+       gets the whole screen above it and the top edge is left entirely to the
+       work. Reserving a second strip at the top for the close button was the
+       first version of this and cost 56px of image height to hold one 22px
+       glyph; moving it down with the rest gave that back, and put it within
+       reach of the same thumb as the arrows.
+
+       The same budget whether or not this gallery has more than one image --
+       a single-image lightbox shows a little more white beneath the
+       photograph, which is a fair price for one rule instead of a
+       conditional one. */
+    padding: 0 0 8.5rem;
+  }
+
+  .lightbox img {
+    /* The container's padding above shrinks the box the image is centred in,
+       but not this cap, which is measured against the viewport -- so it has
+       to come down by the same amount or a tall photograph would still run
+       under the controls it was moved out of. */
+    max-height: calc(100dvh - 8.5rem);
+    /* Full width, up from the desktop rule's 90vw. Those side margins were
+       never breathing room -- they were the gap the arrows sat in, and the
+       arrows are at the bottom now. On a 390px screen this is a photograph
+       11% larger for nothing given up: most of this archive is wider than it
+       is tall, so on a phone the image is capped by WIDTH and the height
+       budget above is never what binds. */
+    max-width: 100vw;
+  }
+
+  /* All three controls onto one line at the foot of the screen, out of the
+     top corner and the side margins the desktop layout puts them in. A shared
+     height is what makes it read as a line rather than as three separate
+     controls that happen to be near each other: the arrows are drawn strokes
+     and the close a text glyph, so their natural boxes differ by 10px and
+     their centres would sit visibly off each other. Fixing the box and
+     centring the contents inside it lines up what the eye actually follows,
+     which is the marks, not the buttons. */
+  .lightbox button:not(.lightbox-image-button) {
+    top: auto;
+    transform: none;
+    bottom: var(--space-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 3.5rem;
+    padding-block: 0;
+  }
+
+  /* The pair is centred, not each button: anchoring one from the left of the
+     centre line and the other from the right keeps the gap between them fixed
+     whatever either one's own width turns out to be. */
+  .lightbox-prev,
+  .lightbox-next {
+    /* A step down from the desktop 2.5rem: that size was chosen for arrows
+       alone on a full, empty viewport. Side by side in a row they read as one
+       control, and the 3.5rem box above keeps each target at 56px, well past
+       the 24px minimum. */
+    font-size: 2rem;
+  }
+
+  .lightbox-prev {
+    left: 50%;
+    margin-left: -4.5rem;
+  }
+
+  .lightbox-next {
+    right: 50%;
+    margin-right: -4.5rem;
+  }
+
+  .lightbox-close {
+    right: var(--space-2);
+  }
+
+  /* Above the control row rather than at the very bottom of the screen, so
+     the chrome stacks in reading order: photograph, what it is, where to go
+     next. */
+  .lightbox-legend {
+    bottom: 5rem;
+  }
 }

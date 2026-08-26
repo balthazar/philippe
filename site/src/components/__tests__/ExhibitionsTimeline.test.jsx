@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { LangProvider } from '@/lang.jsx'
@@ -37,6 +37,17 @@ const items = [
   { _id: '1', slug: 'expo-1989', title: 'Expo 1989', yearStart: 1989 }, // flat 10 -- oldest, persistent
 ]
 
+// Both timelines -- the desktop dot rail and the mobile year strip -- are in
+// the DOM at once, and CSS alone decides which of the two is laid out (see
+// ExhibitionsTimeline.jsx for why they are two lists rather than one, and
+// base.css for the `display: none` that also takes the hidden one out of the
+// accessibility tree). jsdom applies no stylesheet, so BOTH are queryable
+// here and a document-wide `getByRole('link', { name: '2024' })` now finds
+// two. Every test below this line is about the rail, so every one of them
+// asks the rail rather than the document; the strip has its own block at the
+// end of this file.
+const railScope = () => within(document.querySelector('.exhibitions-timeline-rail'))
+
 const renderTimeline = (props, path = '/') =>
   render(
     <MemoryRouter initialEntries={[path]}>
@@ -49,29 +60,29 @@ const renderTimeline = (props, path = '/') =>
 describe('ExhibitionsTimeline', () => {
   it('renders one link per exhibition, all 11, at the root-level URL of its own article', () => {
     renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
-    const links = screen.getAllByRole('link')
+    const links = railScope().getAllByRole('link')
     expect(links).toHaveLength(11)
-    expect(screen.getByRole('link', { name: /Premier lieu/ })).toHaveAttribute('href', '/premier-lieu')
-    expect(screen.getByRole('link', { name: /Second lieu/ })).toHaveAttribute('href', '/second-lieu')
-    expect(screen.getByRole('link', { name: '1989' })).toHaveAttribute('href', '/expo-1989')
+    expect(railScope().getByRole('link', { name: /Premier lieu/ })).toHaveAttribute('href', '/premier-lieu')
+    expect(railScope().getByRole('link', { name: /Second lieu/ })).toHaveAttribute('href', '/second-lieu')
+    expect(railScope().getByRole('link', { name: '1989' })).toHaveAttribute('href', '/expo-1989')
   })
 
   it('builds English hrefs under /en when rendered on an English route', () => {
     renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 }, '/en')
-    expect(screen.getByRole('link', { name: '2024' })).toHaveAttribute('href', '/en/expo-2024')
+    expect(railScope().getByRole('link', { name: '2024' })).toHaveAttribute('href', '/en/expo-2024')
   })
 
   it('marks aria-current="true" on the current EXHIBITION\'s own link, not shared across its year', () => {
     renderTimeline({ currentSlug: 'second-lieu', currentYear: 2019 })
-    expect(screen.getByRole('link', { name: /Second lieu/ })).toHaveAttribute('aria-current', 'true')
+    expect(railScope().getByRole('link', { name: /Second lieu/ })).toHaveAttribute('aria-current', 'true')
     // The sibling exhibition in the SAME year is not also marked current.
-    expect(screen.getByRole('link', { name: /Premier lieu/ })).not.toHaveAttribute('aria-current')
-    expect(screen.getByRole('link', { name: '2024' })).not.toHaveAttribute('aria-current')
+    expect(railScope().getByRole('link', { name: /Premier lieu/ })).not.toHaveAttribute('aria-current')
+    expect(railScope().getByRole('link', { name: '2024' })).not.toHaveAttribute('aria-current')
   })
 
   it('marks no link current when the current slug matches none of them', () => {
     renderTimeline({ currentSlug: 'nope', currentYear: 1500 })
-    for (const link of screen.getAllByRole('link')) {
+    for (const link of railScope().getAllByRole('link')) {
       expect(link).not.toHaveAttribute('aria-current')
     }
   })
@@ -82,19 +93,19 @@ describe('ExhibitionsTimeline', () => {
   // them apart.
   it("names a single-exhibition year's link with just the year", () => {
     renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
-    expect(screen.getByRole('link', { name: '2024' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '1989' })).toBeInTheDocument()
+    expect(railScope().getByRole('link', { name: '2024' })).toBeInTheDocument()
+    expect(railScope().getByRole('link', { name: '1989' })).toBeInTheDocument()
   })
 
   it("distinguishes a multi-exhibition year's links from each other, both still naming the year", () => {
     renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
-    const premier = screen.getByRole('link', { name: /Premier lieu/ })
-    const second = screen.getByRole('link', { name: /Second lieu/ })
+    const premier = railScope().getByRole('link', { name: /Premier lieu/ })
+    const second = railScope().getByRole('link', { name: /Second lieu/ })
     expect(premier).toHaveAccessibleName(/2019/)
     expect(second).toHaveAccessibleName(/2019/)
     expect(premier).not.toBe(second)
     // Never the bare, undifferentiated year for either one.
-    expect(screen.queryAllByRole('link', { name: '2019' })).toHaveLength(0)
+    expect(railScope().queryAllByRole('link', { name: '2019' })).toHaveLength(0)
   })
 
   // The visible YEAR LABEL is shown once per year, not once per dot, even
@@ -121,9 +132,9 @@ describe('ExhibitionsTimeline', () => {
     const user = userEvent.setup()
     renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
     await user.tab()
-    expect(screen.getByRole('link', { name: '2024' })).toHaveFocus()
+    expect(railScope().getByRole('link', { name: '2024' })).toHaveFocus()
     await user.tab()
-    expect(screen.getByRole('link', { name: '2023' })).toHaveFocus()
+    expect(railScope().getByRole('link', { name: '2023' })).toHaveFocus()
   })
 
   // Task 38, part 5 (client feedback): persistent labels are spaced by
@@ -265,7 +276,7 @@ describe('ExhibitionsTimeline', () => {
     const { container } = renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
     // Tab to "Premier lieu" (flat index 5, the 6th link).
     for (let i = 0; i < 6; i++) await user.tab()
-    expect(screen.getByRole('link', { name: /Premier lieu/ })).toHaveFocus()
+    expect(railScope().getByRole('link', { name: /Premier lieu/ })).toHaveFocus()
     expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveTextContent('Premier lieu')
   })
 
@@ -285,8 +296,14 @@ describe('ExhibitionsTimeline', () => {
     await user.tab() // "before" button
     await user.tab() // first rail link
     expect(container.querySelector('.exhibitions-timeline-scrub')).toBeInTheDocument()
-    // Tab all the way through the rail and one step past it.
-    for (let i = 0; i < items.length; i++) await user.tab()
+    // Tab all the way through the rail, then through the mobile year strip
+    // that follows it in the DOM, and one step past both. In a browser the
+    // strip is `display: none` at this width and takes no tab stops at all,
+    // but jsdom applies no stylesheet, so its links are focusable here and
+    // have to be counted -- one per distinct YEAR (the strip groups; the
+    // rail does not), which is what makes this a Set rather than a length.
+    const years = new Set(items.map((item) => item.yearStart)).size
+    for (let i = 0; i < items.length + years; i++) await user.tab()
     expect(screen.getByRole('button', { name: 'after' })).toHaveFocus()
     expect(container.querySelector('.exhibitions-timeline-scrub')).not.toBeInTheDocument()
   })
@@ -311,7 +328,7 @@ describe('ExhibitionsTimeline', () => {
         </LangProvider>
       </MemoryRouter>
     )
-    const rail = screen.getByRole('link', { name: '2024' }).closest('.exhibitions-timeline-rail')
+    const rail = railScope().getByRole('link', { name: '2024' }).closest('.exhibitions-timeline-rail')
 
     // clientY: 0 is nearest the newest item (flat index 0, "expo-2024") by
     // nearestIndexByY -- confirm the label agrees first.
@@ -320,7 +337,7 @@ describe('ExhibitionsTimeline', () => {
 
     // Click a DIFFERENT link's own DOM node (the oldest, "1989") but at the
     // SAME clientY the label above was computed from.
-    const wrongLink = screen.getByRole('link', { name: '1989' })
+    const wrongLink = railScope().getByRole('link', { name: '1989' })
     fireEvent.click(wrongLink, { clientY: 0 })
 
     expect(screen.getByTestId('location')).toHaveTextContent('/expo-2024')
@@ -335,8 +352,8 @@ describe('ExhibitionsTimeline', () => {
         </LangProvider>
       </MemoryRouter>
     )
-    const rail = screen.getByRole('link', { name: '2024' }).closest('.exhibitions-timeline-rail')
-    const link = screen.getByRole('link', { name: '1989' })
+    const rail = railScope().getByRole('link', { name: '2024' }).closest('.exhibitions-timeline-rail')
+    const link = railScope().getByRole('link', { name: '1989' })
     fireEvent.click(link, { clientY: 0, metaKey: true })
     // Not overridden to the clientY-nearest target -- the click is left
     // alone entirely (jsdom does not itself follow the link's href).
@@ -369,7 +386,7 @@ describe('ExhibitionsTimeline', () => {
     // other, distinguishable only by `detail` staying 0 (see pointerNavRef
     // in the component). This viewer has no pointer, so the label has to
     // survive the navigation and follow the focused dot.
-    const link = screen.getByRole('link', { name: '1989' })
+    const link = railScope().getByRole('link', { name: '1989' })
     link.focus()
     fireEvent.click(link, { clientY: 700, detail: 0 })
 
@@ -406,7 +423,7 @@ describe('ExhibitionsTimeline', () => {
     fireEvent.mouseMove(rail, { clientY: 0 })
     expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveTextContent('2024')
 
-    const link = screen.getByRole('link', { name: '1989' })
+    const link = railScope().getByRole('link', { name: '1989' })
     link.focus() // as a real mouse click does
     fireEvent.click(link, { clientY: 700, detail: 1 })
 
@@ -585,5 +602,67 @@ describe('ExhibitionsTimeline', () => {
     const rail = container.querySelector('.exhibitions-timeline-rail')
     fireEvent.mouseMove(rail, { clientY: 0 })
     expect(container.querySelector('.exhibitions-timeline-scrub')).toHaveAttribute('aria-hidden', 'true')
+  })
+})
+
+// The mobile timeline. A second list, not the rail restyled -- see the
+// component for why -- so it gets its own scope and its own block. In a
+// browser exactly one of the two is ever laid out (a `display: none` per
+// breakpoint, which also takes the hidden one out of the accessibility
+// tree); jsdom applies no stylesheet, so both are here and each block asks
+// for the one it means.
+describe('ExhibitionsTimeline, mobile year strip', () => {
+  const strip = () => within(document.querySelector('.exhibitions-timeline-years'))
+
+  it('renders one link per YEAR, not one per exhibition', () => {
+    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    // 11 exhibitions across 10 distinct years: 2019 holds two (Premier lieu
+    // and Second lieu), which the rail gives two dots and this gives one
+    // chip. That collapse is the whole point of grouping -- two chips both
+    // reading "2019" would say nothing about which was which.
+    expect(strip().getAllByRole('link')).toHaveLength(10)
+    expect(railScope().getAllByRole('link')).toHaveLength(11)
+  })
+
+  it('sends a year holding ONE exhibition straight to that exhibition', () => {
+    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    expect(strip().getByRole('link', { name: '2024' })).toHaveAttribute('href', '/expo-2024')
+    expect(strip().getByRole('link', { name: '1989' })).toHaveAttribute('href', '/expo-1989')
+  })
+
+  it('sends a year holding SEVERAL to that year\'s own index, so none of them is unreachable', () => {
+    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    // 2019 holds Premier lieu and Second lieu. Linking the chip to either one
+    // would leave the other with no way in from the strip at all.
+    expect(strip().getByRole('link', { name: /^2019/ })).toHaveAttribute('href', '/2019')
+  })
+
+  it('names a crowded year by its count, so the chip says there is more than one behind it', () => {
+    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    expect(strip().getByRole('link', { name: '2019 \u2013 2 expositions' })).toBeInTheDocument()
+    // A year with a single exhibition is named by the year alone: there is
+    // nothing to disambiguate, and "2024 - 1 exposition" is noise.
+    expect(strip().getByRole('link', { name: '2024' })).toBeInTheDocument()
+  })
+
+  it('counts in English on an English route, and builds its hrefs under /en', () => {
+    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 }, '/en')
+    expect(strip().getByRole('link', { name: '2019 \u2013 2 exhibitions' })).toHaveAttribute('href', '/en/2019')
+    expect(strip().getByRole('link', { name: '2024' })).toHaveAttribute('href', '/en/expo-2024')
+  })
+
+  it('marks the current YEAR, and marks exactly one', () => {
+    renderTimeline({ currentSlug: 'expo-2023', currentYear: 2023 })
+    expect(strip().getByRole('link', { name: '2023' })).toHaveAttribute('aria-current', 'true')
+    const marked = strip().getAllByRole('link').filter((a) => a.hasAttribute('aria-current'))
+    expect(marked).toHaveLength(1)
+  })
+
+  it('marks the whole year current when the current exhibition is one of several in it', () => {
+    // The rail marks the EXHIBITION (aria-current on Second lieu's own dot,
+    // not Premier lieu's -- see the rail's own tests above). The strip has
+    // one chip for the pair, so what it can mark is the year.
+    renderTimeline({ currentSlug: 'second-lieu', currentYear: 2019 })
+    expect(strip().getByRole('link', { name: /^2019/ })).toHaveAttribute('aria-current', 'true')
   })
 })
