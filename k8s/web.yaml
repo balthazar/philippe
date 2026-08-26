@@ -55,13 +55,23 @@ spec:
 # hits philippe-web. The API mounts its routes under /api and /media itself
 # (api/src/app.js), so no prefix stripping is needed.
 #
-# One host. philippe.balthazar.dev was the staging domain and served the site
-# until the cutover; it is gone rather than kept as an alias, because a second
-# hostname answering with the same content is a duplicate of the site that can
-# be found, linked and indexed. SITE_URL in .github/workflows/deploy-web.yml
-# moved here in the same commit -- prerender builds canonical, hreflang, OG and
-# sitemap.xml from it, so leaving it behind would have had the live site naming
-# a domain that no longer resolves.
+# Two hosts, the same three rules. An Ingress rule takes one host, so this is
+# duplicated rather than shared -- the two blocks have to be edited in step.
+#
+# www.philippegronon.com is the real site. philippe.balthazar.dev was the
+# staging domain, was removed at the cutover, and is back by request as a
+# second way in; its Cloudflare record still points here, so the rule is all
+# that was missing.
+#
+# It is an alias, NOT a second site, and one thing keeps it that way: SITE_URL
+# in .github/workflows/deploy-web.yml names www.philippegronon.com, and
+# prerender builds canonical, hreflang, og:url, sitemap.xml and robots.txt from
+# it. So every page served on this host tells a crawler that the real page
+# lives on the other one. Point SITE_URL back at the staging domain and that
+# stops being true -- the two hostnames become genuine duplicate content
+# competing for the same ranking. If this alias is ever meant to be private
+# rather than merely secondary, the honest way is Cloudflare Access in front of
+# the host, not an Ingress rule that anyone who knows the name can reach.
 #
 # The apex (philippegronon.com, no www) is deliberately absent. It is a
 # redirect decision rather than a routing one -- one of the two spellings has
@@ -78,6 +88,18 @@ spec:
   ingressClassName: traefik
   rules:
     - host: www.philippegronon.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: philippe-api, port: { number: 80 } } }
+          - path: /media
+            pathType: Prefix
+            backend: { service: { name: philippe-api, port: { number: 80 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: philippe-web, port: { number: 80 } } }
+    - host: philippe.balthazar.dev
       http:
         paths:
           - path: /api
