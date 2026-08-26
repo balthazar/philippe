@@ -1003,7 +1003,17 @@
   gap: 0.6rem;
 }
 
+/* The tile is now a column: a square frame, and whatever sits under it (the
+   legend field). The square-ness and the crop moved to .gallery-editor-tile-frame
+   -- while they lived here, `overflow: hidden` on an `aspect-ratio: 1` box
+   clipped away anything rendered after the controls. */
 .gallery-editor-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-editor-tile-frame {
   position: relative;
   aspect-ratio: 1;
   border-radius: 4px;
@@ -1109,7 +1119,7 @@
 
 /* The trailing "+" tile: an empty grey placeholder, visually part of the
    same grid, rather than a separate labelled control above or below it. */
-.gallery-editor-add {
+.gallery-editor-add .gallery-editor-tile-frame {
   background: var(--surface);
   border: 1px dashed var(--line);
 }

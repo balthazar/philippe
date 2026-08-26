@@ -172,6 +172,14 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
                 setDragOverIndex(null)
               }}
             >
+              {/*
+                The square part of the tile: the aspect-ratio and the
+                overflow:hidden that crop a photograph to a tile. Both used to
+                sit on the <li> itself, which silently clipped away anything
+                rendered after the controls -- the legend field below was in
+                the DOM and invisible.
+              */}
+              <div className="gallery-editor-tile-frame">
               {thumbSrc(image) && <img src={thumbSrc(image)} alt={image.alt?.fr || ''} />}
               {/*
                 The position, shown on the tile. A gallery's order is what
@@ -220,11 +228,13 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
                   <TrashIcon />
                 </button>
               </div>
+              </div>
               {renderBelow?.(image, index)}
             </li>
             )
           })}
           <li className="gallery-editor-tile gallery-editor-add">
+            <div className="gallery-editor-tile-frame">
             <button
               type="button"
               aria-label={open ? 'Fermer la médiathèque' : 'Ajouter une image'}
@@ -233,6 +243,7 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
             >
               <PlusIcon />
             </button>
+            </div>
           </li>
         </ul>
         {library}
