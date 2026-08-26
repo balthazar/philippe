@@ -93,6 +93,27 @@ describe('MediaLibrary search', () => {
     expect(screen.getByText('0 image sur 3')).toBeInTheDocument()
   })
 
+  // The reported case, end to end through the component: the legends all
+  // read "Verso n°27, ...", so the two words a person remembers are split by
+  // "n°" and a contiguous-substring search found nothing.
+  it('finds an image from separate words that are not adjacent in the legend', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      items: [
+        { _id: 'v27', filename: 'a.jpg', alt: { fr: 'Verso n°27, Portrait, Anonyme, Malakoff - 2005', en: '' }, variants: {} },
+        { _id: 'v3', filename: 'b.jpg', alt: { fr: 'Verso n°3, Etude pour chevaux, Paris - 2005', en: '' }, variants: {} },
+      ],
+      total: 2,
+    })
+    render(<MediaLibrary />)
+    await waitFor(() => expect(screen.getByLabelText('Rechercher dans les textes alternatifs')).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText('Rechercher dans les textes alternatifs'), 'ver 27')
+
+    // Wait for the NON-match to go: both rows are on screen until the 200ms
+    // debounce settles, so waiting for the match to appear proves nothing.
+    await waitFor(() => expect(screen.queryByDisplayValue(/Verso n°3,/)).not.toBeInTheDocument())
+    expect(screen.getByDisplayValue(/Verso n°27/)).toBeInTheDocument()
+  })
+
   it('restores the full list when the search is cleared', async () => {
     await renderLibrary()
     const search = screen.getByLabelText('Rechercher dans les textes alternatifs')

@@ -2,23 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { apiGet, apiSend, apiUpload } from '@/api.js'
 import { useDebouncedValue } from '@/lib/useDebouncedValue.js'
 import { assessImage, formatBytes, formatDimensions, isOrphan, QUALITY } from './imageQuality.js'
+import { matchesQuery, searchableText } from './imageSearch.js'
 import { useSessionExpired } from './session.js'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { ConfirmDelete } from './ConfirmDelete.jsx'
 
 const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.variants.thumb.path}` : '')
 
-/**
- * Accent- and case-insensitive, so "developpement" finds "Cuvette de
- * développement" and "ecritoire" finds "Écritoire". Nearly every legend in
- * this archive carries an accent, and a search that made the artist reproduce
- * them exactly would be a search he stops using.
- */
-const normalize = (text) =>
-  String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-
-/** Both languages at once: he should not have to know which one holds the word he remembers. */
-const searchableText = (image) => `${image?.alt?.fr || ''} ${image?.alt?.en || ''}`
 
 export function MediaLibrary() {
   const onSessionExpired = useSessionExpired()
@@ -53,12 +43,10 @@ export function MediaLibrary() {
   }, [images])
 
   const visibleImages = useMemo(() => {
-    const needle = normalize(settledQuery).trim()
     return assessed.filter((entry) => {
       if (quality === 'orphan' && !entry.orphan) return false
       if (quality !== 'all' && quality !== 'orphan' && entry.quality !== quality) return false
-      if (!needle) return true
-      return normalize(searchableText(entry.image)).includes(needle)
+      return matchesQuery(searchableText(entry.image), settledQuery)
     })
   }, [assessed, settledQuery, quality])
 
