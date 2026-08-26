@@ -133,3 +133,49 @@ describe('ImagePicker gridStyle reordering', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+// The legend field, added under each tile so a caption can be fixed while
+// laying out a gallery instead of in /admin/media.
+describe('ImagePicker gridStyle renderBelow', () => {
+  it('renders the caller’s content under each tile', () => {
+    render(
+      <ImagePicker
+        multiple
+        gridStyle
+        value={[IMAGE, { ...IMAGE, _id: 'i2' }]}
+        onChange={() => {}}
+        renderBelow={(image) => <input aria-label={`legend ${image._id}`} readOnly value="" />}
+      />
+    )
+    expect(screen.getByLabelText('legend i1')).toBeInTheDocument()
+    expect(screen.getByLabelText('legend i2')).toBeInTheDocument()
+  })
+
+  /*
+    The tile is draggable as a whole, which was safe only while it held no
+    text field. Selecting text inside the legend would otherwise drag the
+    tile instead of selecting, so a drag beginning inside the legend is
+    refused. Everywhere else on the tile still drags.
+  */
+  it('refuses a drag that starts inside the legend field', () => {
+    const { container } = render(
+      <ImagePicker
+        multiple
+        gridStyle
+        value={[IMAGE, { ...IMAGE, _id: 'i2' }]}
+        onChange={() => {}}
+        renderBelow={(image) => (
+          <div className="gallery-editor-tile-legend">
+            <input aria-label={`legend ${image._id}`} readOnly value="" />
+          </div>
+        )}
+      />
+    )
+    const tile = container.querySelector('.gallery-editor-tile')
+    fireEvent.dragStart(screen.getByLabelText('legend i1'))
+    expect(tile).not.toHaveClass('is-dragging')
+
+    fireEvent.dragStart(tile)
+    expect(tile).toHaveClass('is-dragging')
+  })
+})

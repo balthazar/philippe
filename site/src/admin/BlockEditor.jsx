@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { LocalizedInput } from './LocalizedInput.jsx'
 import { RichText } from './RichText.jsx'
 import { ImagePicker } from './ImagePicker.jsx'
+import { ImageLegend } from './ImageLegend.jsx'
 import { ArrowUpIcon, ArrowDownIcon, TrashIcon, StarIcon, EyeIcon, WidthIcon } from './icons.jsx'
 
 // Task 30, part 5: `heading` is retired as an insertable block type. A
@@ -262,6 +263,15 @@ export function BlockEditor({ blocks = [], lang, onChange, onSetCover, coverId }
                     }),
                   })
                 }
+                /*
+                  The image's own legend, editable here rather than only in
+                  /admin/media. It saves itself on blur, separately from the
+                  article: the article form sends `image: <id>` and never the
+                  image document, so this cannot ride along with its save --
+                  and folding it in would make the unsaved-changes count claim
+                  edits the article does not own.
+                */
+                renderBelow={(image) => <ImageLegend image={image} lang={lang} />}
                 renderExtra={(image, j) => {
                   const item = block.items[j] || {}
                   const columns = block.columns || 3

@@ -1536,3 +1536,47 @@
   background: #9a6114;
   color: #fff;
 }
+
+/* The image's legend, edited on its own gallery tile. Sits under the
+   thumbnail rather than in the control row: it is a sentence, not a control,
+   and the row is a line of 16px icon buttons. */
+.gallery-editor-tile-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.gallery-editor-tile-legend input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.gallery-editor-tile-legend input:focus-visible {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.gallery-editor-tile-legend.is-error input {
+  border-color: #8a4438;
+}
+
+/* Reserves no width when idle: the state is transient, and a tile is narrow
+   enough that a permanent slot would squeeze the field it reports on. */
+.gallery-editor-tile-legend-state {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.gallery-editor-tile-legend.is-error .gallery-editor-tile-legend-state {
+  color: #8a4438;
+}

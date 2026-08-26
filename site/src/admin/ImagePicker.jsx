@@ -19,6 +19,8 @@ const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.vari
  * `renderExtra(image, index)`, also grid-only, lets the caller (BlockEditor)
  * inject gallery-specific controls (Cover/Hidden/Width) into each tile,
  * since this component only ever knows about images, never those concepts.
+ * `renderBelow(image, index)` is the same idea for content under the tile
+ * rather than in its control row -- the image's own legend, today.
  *
  * Grid mode is also reorderable, by drag or by the two arrow buttons on each
  * tile. Until it was, the only way to place a photograph was to have added it
@@ -33,7 +35,7 @@ const thumbSrc = (image) => (image?.variants?.thumb?.path ? `/media/${image.vari
  * image itself (its `alt`), not on the position, so moving a tile carries its
  * caption with it.
  */
-export function ImagePicker({ value, onChange, multiple = false, gridStyle = false, renderExtra }) {
+export function ImagePicker({ value, onChange, multiple = false, gridStyle = false, renderExtra, renderBelow }) {
   const onSessionExpired = useSessionExpired()
   const [images, setImages] = useState([])
   const [open, setOpen] = useState(false)
@@ -143,8 +145,11 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
             const showIndicator = dragIndex !== null && dragOverIndex === index && dragIndex !== index
             const indicatorSide = showIndicator ? (dragIndex < index ? 'after' : 'before') : null
             // The whole tile is draggable, unlike a block, which has a
-            // separate handle: a tile holds no text field for a drag to
-            // interfere with, so a handle would only be a smaller target.
+            // separate handle -- a handle would only be a smaller target.
+            // That used to rest on a tile holding no text field; it now
+            // holds the legend input, so onDragStart below refuses to start
+            // a drag that began inside it. Without that, selecting text in
+            // the legend drags the tile instead.
             return (
             <li
               key={image._id}
@@ -154,7 +159,10 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
                 indicatorSide ? `drop-indicator-${indicatorSide}` : '',
               ].filter(Boolean).join(' ')}
               draggable
-              onDragStart={() => setDragIndex(index)}
+              onDragStart={(e) => {
+                if (e.target.closest?.('.gallery-editor-tile-legend')) { e.preventDefault(); return }
+                setDragIndex(index)
+              }}
               onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
               onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index) }}
               onDrop={(e) => {
@@ -212,6 +220,7 @@ export function ImagePicker({ value, onChange, multiple = false, gridStyle = fal
                   <TrashIcon />
                 </button>
               </div>
+              {renderBelow?.(image, index)}
             </li>
             )
           })}
