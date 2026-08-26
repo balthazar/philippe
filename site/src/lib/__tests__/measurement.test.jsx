@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { useAnalytics, GA_MEASUREMENT_ID } from '../analytics.js'
+import { useAnalytics, GA_MEASUREMENT_ID } from '../measurement.js'
 
 // The hook is a no-op in dev (import.meta.env.DEV), which is what every test
 // run is. Flipping it here is what lets the production behaviour be tested at

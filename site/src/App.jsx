@@ -9,7 +9,7 @@ import { ArticleDetail } from '@/pages/ArticleDetail.jsx'
 import { SimplePage } from '@/pages/SimplePage.jsx'
 import { NotFound } from '@/pages/NotFound.jsx'
 import { ExhibitionsLayout } from '@/components/ExhibitionsLayout.jsx'
-import { useAnalytics } from '@/lib/analytics.js'
+import { useAnalytics } from '@/lib/measurement.js'
 
 // Lazy: the admin editor's own code (and admin.css) must never ship in the
 // public bundle. Only loaded when a visitor actually requests /admin.

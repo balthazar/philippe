@@ -1,3 +1,23 @@
+/*
+ * Named `measurement.js`, not `analytics.js`, and that is load-bearing rather
+ * than a matter of taste. Content blockers filter by URL PATH, and the common
+ * privacy lists carry a generic rule for `analytics.js` -- so a browser with
+ * one installed refused this exact request. The Vite dev server serves every
+ * source file at its own URL, App.jsx imports this module statically, and one
+ * refused module takes the whole graph down with it: the page loaded, Vite's
+ * own client connected, and React never mounted at all. A production build
+ * inlines a statically-imported module into the hashed main chunk, so the name
+ * never reaches a URL there and the public site was never affected -- this was
+ * only ever a way to make local development impossible for whoever ran a
+ * blocker. GA4's own term for the ID below is a "measurement ID", so the file
+ * is named for what it holds.
+ *
+ * The third-party gtag script IS blocked by those same lists, in dev and in
+ * production alike, and always has been. That is the visitor's call and costs
+ * nothing here: loadGtag() defines window.gtag itself before appending the
+ * script, so every call below pushes onto dataLayer whether the script ever
+ * arrives or not, and a blocked one is silently a no-op.
+ */
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 
