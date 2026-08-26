@@ -64,6 +64,23 @@ describe('stripDimensions', () => {
       .toBe('Antennes satellite - 1998, Diptyque')
   })
 
+  /*
+    The same decimal-comma trap, in the shape that makes it most obvious:
+    with no comma introducing it, the matcher used to start at the "5" of
+    "3,5", remove ",5 x 7 cm / Encadré 19 x 30 cm", and leave "Image 3".
+    Verified against the pre-fix matcher, which produces exactly that.
+
+    In the real archive these legends always read ", Image 3,5 x 7 cm ...",
+    and the leading comma routed them through a pass that swallowed the whole
+    run -- so the live data was never wrong. This pins the bare form anyway,
+    since nothing guarantees the next legend carries that comma.
+  */
+  it('drops the whole framed pair even with no comma introducing it', () => {
+    expect(stripDimensions('Image 3,5 x 7 cm / Encadré 19 x 30 cm')).toBe('')
+    expect(stripDimensions('Grattoir n°1 - 2007 Image 3,5 x 7 cm / Encadré 19 x 30 cm'))
+      .toBe('Grattoir n°1 - 2007')
+  })
+
   // A colon belongs to the measurement it introduces, not to the sentence.
   it('swallows a colon that introduces the size', () => {
     expect(stripDimensions('X, chaque élément : 57 x 70 cm')).toBe('X')
