@@ -8,6 +8,11 @@ import { ArticleBody } from '@/components/ArticleBody.jsx'
 import { usePageTitle } from '@/lib/usePageTitle.js'
 import { articlePageTitle, staticPageTitle } from '@/lib/pageTitle.js'
 
+// Same one-line form every other component that renders a stored image uses
+// (ArticleCard, BlockRenderer, Slideshow): a variant's `path` is relative to
+// the /media mount the API serves.
+const mediaSrc = (variant) => (variant?.path ? `/media/${variant.path}` : '')
+
 // Task 33, section 3: the only shape the 25 legacy exhibition-year URLs
 // (1989..2024) ever had -- shared with ExhibitionsLayout.jsx's own copy,
 // keep the two definitions in agreement.
@@ -145,11 +150,54 @@ export function ArticleDetail({ onTranslatedPath, onExhibitionsLayout }) {
         }
         return (
           <div className="exhibitions-year-index">
-            <h1>{slug}</h1>
+            {/*
+              Client call: the year is not written across the top of this page,
+              because the page never has to say it -- the timeline already
+              does, in whichever form the viewport is showing. On desktop the
+              rail marks this year's own label current (persistent and bolder,
+              see ExhibitionsTimeline.jsx); on mobile its chip is the one
+              boxed in the year strip. A heading repeating it was the largest
+              thing on a page whose actual content is the list beneath it.
+
+              Hidden rather than deleted. The year IS this page's heading, in
+              the sense a document outline means: without it the page has no
+              h1 at all, and a screen reader arriving here from the strip's
+              own "2012" link would land on a bare list of titles with nothing
+              naming what they have in common. `.sr-only` keeps it in the
+              accessibility tree and out of the layout, which is exactly the
+              distinction being drawn. The <title> already carries the year the
+              same way (usePageTitle above).
+            */}
+            <h1 className="sr-only">{slug}</h1>
             <ul>
               {yearExhibitions.map((item) => (
                 <li key={item._id || item.slug}>
-                  <Link to={href('article', item.slug)}>{item.title}</Link>
+                  <Link to={href('article', item.slug)}>
+                    {/*
+                      `thumb`, not `cover`: no exhibition in the archive has a
+                      cover set, so the API derives one from the first image in
+                      the article's own body and returns it under its own name
+                      (see api/src/routes/public.js). A cover set in the admin
+                      still takes priority there.
+
+                      alt="" on purpose. The exhibition's title sits directly
+                      beside it inside the same link, so the image adds nothing
+                      a screen reader has not just been given -- naming it
+                      again would announce every entry twice.
+                    */}
+                    <span className="exhibitions-year-index-thumb">
+                      {item.thumb?.variants?.thumb && (
+                        <img
+                          src={mediaSrc(item.thumb.variants.thumb)}
+                          width={item.thumb.variants.thumb.width}
+                          height={item.thumb.variants.thumb.height}
+                          alt=""
+                          loading="lazy"
+                        />
+                      )}
+                    </span>
+                    <span className="exhibitions-year-index-title">{item.title}</span>
+                  </Link>
                 </li>
               ))}
             </ul>

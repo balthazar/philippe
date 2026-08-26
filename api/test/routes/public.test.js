@@ -62,6 +62,100 @@ describe('GET /api/articles', () => {
   })
 })
 
+describe('GET /api/articles thumbnails', () => {
+  // The archive's exhibitions have no cover at all -- zero of forty -- so the
+  // list endpoint derives a default one from the article's own body. These
+  // cover the derivation itself; the fixture above is deliberately left alone
+  // so the rest of the file keeps testing what it always did.
+  const galleryArticle = (slug, items) => ({
+    category: 'exhibitions',
+    status: 'published',
+    slug: { fr: slug },
+    title: { fr: slug },
+    yearStart: 2011,
+    blocks: [{ type: 'gallery', items }],
+  })
+
+  it('falls back to the first image in the body when the article has no cover', async () => {
+    const first = await Image.create({ filename: 'first', width: 10, height: 10 })
+    const second = await Image.create({ filename: 'second', width: 10, height: 10 })
+    await Article.create(galleryArticle('sans-cover', [{ image: first._id }, { image: second._id }]))
+
+    const res = await request(createApp()).get('/api/articles?category=exhibitions')
+    const item = res.body.items.find((a) => a.slug === 'sans-cover')
+    expect(item.thumb.filename).toBe('first')
+    // The stored field is untouched: `thumb` is derived, `cover` is what the
+    // artist chose, and an article with no cover still reports none.
+    expect(item.cover).toBeFalsy()
+  })
+
+  it('prefers a real cover over the body, so setting one in the admin still wins', async () => {
+    const chosen = await Image.create({ filename: 'chosen', width: 10, height: 10 })
+    const body = await Image.create({ filename: 'body', width: 10, height: 10 })
+    await Article.create({
+      ...galleryArticle('avec-cover', [{ image: body._id }]),
+      cover: chosen._id,
+    })
+
+    const res = await request(createApp()).get('/api/articles?category=exhibitions')
+    const item = res.body.items.find((a) => a.slug === 'avec-cover')
+    expect(item.thumb.filename).toBe('chosen')
+  })
+
+  it('skips a hidden gallery item, which is in the data deliberately unshown', async () => {
+    const hidden = await Image.create({ filename: 'hidden', width: 10, height: 10 })
+    const shown = await Image.create({ filename: 'shown', width: 10, height: 10 })
+    await Article.create(
+      galleryArticle('avec-cachee', [{ image: hidden._id, hidden: true }, { image: shown._id }])
+    )
+
+    const res = await request(createApp()).get('/api/articles?category=exhibitions')
+    const item = res.body.items.find((a) => a.slug === 'avec-cachee')
+    expect(item.thumb.filename).toBe('shown')
+  })
+
+  it('reports null rather than omitting the field when there is no image anywhere', async () => {
+    await Article.create({
+      category: 'exhibitions',
+      status: 'published',
+      slug: { fr: 'sans-image' },
+      title: { fr: 'Sans image' },
+      yearStart: 2011,
+      blocks: [{ type: 'text', html: { fr: '<p>Texte seul</p>' } }],
+    })
+
+    const res = await request(createApp()).get('/api/articles?category=exhibitions')
+    const item = res.body.items.find((a) => a.slug === 'sans-image')
+    expect(item.thumb).toBeNull()
+  })
+
+  it('never leaks `blocks`, which are selected only to find the image', async () => {
+    const image = await Image.create({ filename: 'only', width: 10, height: 10 })
+    await Article.create(galleryArticle('avec-blocs', [{ image: image._id }]))
+
+    const res = await request(createApp()).get('/api/articles?category=exhibitions')
+    expect(res.body.items.every((a) => a.blocks === undefined)).toBe(true)
+  })
+
+  it('resolves a covered and an uncovered article in one response', async () => {
+    // The regression that made this worth its own test: `cover` arrives
+    // populated (a document), the body fallback arrives as an id, and an
+    // earlier version stringified both the same way -- so a single covered
+    // article in the list turned the whole request into a CastError.
+    const chosen = await Image.create({ filename: 'chosen', width: 10, height: 10 })
+    const body = await Image.create({ filename: 'body', width: 10, height: 10 })
+    await Article.create([
+      { ...galleryArticle('couvert', [{ image: body._id }]), cover: chosen._id },
+      galleryArticle('decouvert', [{ image: body._id }]),
+    ])
+
+    const res = await request(createApp()).get('/api/articles?category=exhibitions')
+    expect(res.status).toBe(200)
+    expect(res.body.items.find((a) => a.slug === 'couvert').thumb.filename).toBe('chosen')
+    expect(res.body.items.find((a) => a.slug === 'decouvert').thumb.filename).toBe('body')
+  })
+})
+
 describe('GET /api/articles/:slug', () => {
   it('finds an article by its French or English slug', async () => {
     expect((await request(createApp()).get('/api/articles/chassis')).status).toBe(200)

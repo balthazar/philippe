@@ -1415,22 +1415,68 @@ picture {
    list of links into the same section. */
 .exhibitions-year-index ul {
   list-style: none;
-  margin: var(--space-2) 0 0;
+  /* Flush with the top of the content column, which is where an exhibition's
+     own title sits (`.exhibitions-content .article-header { margin-top: 0 }`)
+     -- so arriving at a year lands the first entry exactly where the title of
+     a single exhibition would have been, rather than a step lower for no
+     reason the reader can see. The margin that used to be here was spacing
+     the list below a year heading that no longer occupies any space. */
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  /* A step up from --space-1, which was right for a list of bare titles and
+     too tight once each entry carries a photograph: adjacent thumbnails half
+     a space apart read as one strip of images rather than as one entry each. */
+  gap: var(--space-2);
 }
 
+/* Client request: each entry leads with a small photograph of the show, "so
+   it's a bit more inviting". The page it replaces was a stack of long
+   institutional titles -- "L'Œil photographique, Œuvres majeures des
+   collections photographiques du centre national des Arts Plastiques, Frac
+   Auvergne, Clermont-Ferrand" -- with nothing to look at and no way to tell
+   one from another at a glance. */
 .exhibitions-year-index a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-family: var(--font-chrome);
   font-size: var(--text-l);
   text-decoration: none;
   color: var(--ink);
 }
 
-.exhibitions-year-index a:hover,
-.exhibitions-year-index a:focus-visible {
+/* A common frame, like the works grid's own .card-frame and for the same
+   reason: installation views come in every proportion, and an image left to
+   its natural width would start each title at a different place down the
+   list. Fixed box, image contained inside it, so the titles share one left
+   edge whatever shape the photographs are.
+
+   No background. The client rejected a tinted letterbox on the works page,
+   and this is the same question: the frame aligns, it does not fill. */
+.exhibitions-year-index-thumb {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 6rem;
+  height: 4rem;
+}
+
+.exhibitions-year-index-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+}
+
+/* The rule goes under the title, not under the whole entry: `text-decoration`
+   propagates into everything inside the element it is set on, and on the
+   anchor that meant a line drawn under the photograph as well. Same
+   correction the bibliography's own entries already carry. */
+.exhibitions-year-index a:hover .exhibitions-year-index-title,
+.exhibitions-year-index a:focus-visible .exhibitions-year-index-title {
   text-decoration: underline;
 }
 

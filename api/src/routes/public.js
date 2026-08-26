@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { Article } from '#models/Article.js'
 import { Page } from '#models/Page.js'
-// Registered for its side effect only: `cover` and `blocks.image` populate
-// paths on Article/Page both ref 'Image', and nothing else in the process
-// loads this model, so without this import mongoose.populate() throws
-// MissingSchemaError (an unhandled rejection that hangs the request).
-import '../models/Image.js'
+// Imported for two reasons now. The side effect came first: `cover` and
+// `blocks.image` on Article/Page both ref 'Image', and nothing else in the
+// process loads this model, so without this import mongoose.populate() throws
+// MissingSchemaError (an unhandled rejection that hangs the request). The
+// binding itself is used by the thumbnail lookup in /articles below.
+import { Image } from '../models/Image.js'
 import { resolveDoc } from '#lib/localize.js'
 import { CATEGORIES, PAGE_KEYS } from '#lib/constants.js'
 import { asyncHandler } from '#middleware/asyncHandler.js'
@@ -15,6 +16,51 @@ export const publicRouter = Router()
 const langOf = (req) => (req.query.lang === 'en' ? 'en' : 'fr')
 const LIST_FIELDS = 'slug title yearLabel yearStart yearEnd category cover position'
 
+/*
+ * The image refs a `thumb` can be derived from, and NOTHING else off `blocks`.
+ * MongoDB projects sub-fields of an array, so this pulls the handful of
+ * ObjectIds each article's blocks point at without dragging along their
+ * sanitized body HTML -- which, over the 40 exhibitions this list holds, is
+ * most of the site's prose and would land in a response the timeline rail
+ * refetches on every language switch.
+ */
+const THUMB_FIELDS = 'blocks.type blocks.image blocks.items.image blocks.items.hidden'
+
+/**
+ * The id of the first image an article's own body shows -- the DEFAULT
+ * thumbnail, used when the article has no cover of its own.
+ *
+ * The default exists because no exhibition has a cover: zero of the forty in
+ * the archive, since the WordPress import that produced them had nothing to
+ * map one from and nothing since has needed one. `cover` is the works
+ * section's field -- it is what the homepage slideshow draws from and what the
+ * works grid renders -- and setting it forty more times by hand, on articles
+ * where it would never be seen anywhere else, is data entry standing in for a
+ * default. An exhibition already leads with a photograph of the show; that
+ * photograph is the thumbnail. A cover set in the admin still wins, here and
+ * everywhere else -- this only fills the gap where there is none.
+ *
+ * Hidden gallery items are skipped, for the same reason BlockRenderer filters
+ * them out of the grid and the lightbox: an image marked hidden is in the
+ * data deliberately (often as a cover candidate) and must not surface in a
+ * place the artist did not put it.
+ *
+ * Deliberately does NOT consider `article.cover`: by the time this is called
+ * that field is populated, so it holds the image document itself rather than
+ * an id, and an id is the only thing the caller's batch lookup can use. An
+ * earlier version returned it anyway, which stringified a document to
+ * "[object Object]", handed that to `$in`, and turned every request for a
+ * list containing even one covered article into a CastError.
+ */
+function bodyImageIdOf(article) {
+  for (const block of article.blocks || []) {
+    if (block.image) return block.image
+    const item = (block.items || []).find((i) => i.image && !i.hidden)
+    if (item) return item.image
+  }
+  return null
+}
+
 publicRouter.get('/articles', asyncHandler(async (req, res) => {
   const lang = langOf(req)
   const { category } = req.query
@@ -22,12 +68,39 @@ publicRouter.get('/articles', asyncHandler(async (req, res) => {
 
   const query = { status: 'published', ...(category ? { category } : {}) }
   const items = await Article.find(query)
-    .select(LIST_FIELDS)
+    .select(`${LIST_FIELDS} ${THUMB_FIELDS}`)
     .sort({ position: 1, yearStart: -1, createdAt: -1 })
     .populate('cover')
     .lean()
 
-  res.json({ items: items.map((a) => resolveDoc(a, lang)), total: items.length })
+  // One query for every default thumbnail in the list, rather than
+  // `.populate()` on the block paths: populating would fetch EVERY image every
+  // block points at -- roughly thirteen per exhibition, five hundred across
+  // the section -- and then throw all but the first of each away. Only the ids
+  // actually needed are looked up, and only for the articles that have no
+  // cover to use instead, so this costs one round trip and at most one image
+  // document per uncovered article.
+  //
+  // `cover` itself is left exactly as it was, populated and unchanged: `thumb`
+  // is a second, derived field, not a redefinition of the stored one. That
+  // keeps one key meaning one thing -- `cover` is what the artist chose, in
+  // the admin and in the API alike -- and it is why the works grid, which
+  // reads `cover`, cannot shift under this change.
+  const bodyIds = items.map((a) => (a.cover ? null : bodyImageIdOf(a)))
+  const needed = [...new Set(bodyIds.filter(Boolean).map(String))]
+  const images = needed.length ? await Image.find({ _id: { $in: needed } }).lean() : []
+  const byId = new Map(images.map((img) => [String(img._id), img]))
+
+  res.json({
+    items: items.map((a, i) => {
+      // `blocks` was selected only to find the id above -- it is not part of
+      // this endpoint's shape and must not leak into one.
+      const { blocks, ...rest } = a
+      const thumb = a.cover || (bodyIds[i] ? byId.get(String(bodyIds[i])) || null : null)
+      return { ...resolveDoc(rest, lang), thumb: thumb ? resolveDoc(thumb, lang) : null }
+    }),
+    total: items.length,
+  })
 }))
 
 publicRouter.get('/articles/:slug', asyncHandler(async (req, res) => {

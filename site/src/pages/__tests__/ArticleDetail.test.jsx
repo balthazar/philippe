@@ -307,6 +307,70 @@ describe('ArticleDetail', () => {
       expect(screen.getByRole('heading', { level: 1, name: '2013' })).toBeInTheDocument()
     })
 
+    it('keeps the year as the page\'s heading but out of the layout', async () => {
+      // Client call: the year is not written across the top of the page,
+      // because the timeline already says it -- the current year's own label
+      // on the desktop rail, the boxed chip on the mobile strip. It stays in
+      // the accessibility tree, though: without it the page has no h1 at all,
+      // and someone arriving from that chip would land on a list of titles
+      // with nothing naming what they have in common.
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      renderWithExhibitionsContext('/2013', [
+        { _id: 'a', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013 },
+      ])
+      await waitFor(() => expect(screen.getByText('Premier lieu')).toBeInTheDocument())
+      expect(screen.getByRole('heading', { level: 1, name: '2013' })).toHaveClass('sr-only')
+    })
+
+    it('leads each entry with its own photograph', async () => {
+      // Client request: "a bit more inviting" than a stack of long
+      // institutional titles. The image comes from `thumb`, which the API
+      // derives from the first image in the exhibition's own body -- no
+      // exhibition in the archive has a cover of its own to use instead.
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      renderWithExhibitionsContext('/2013', [
+        {
+          _id: 'a',
+          slug: 'premier-lieu',
+          title: 'Premier lieu',
+          yearStart: 2013,
+          thumb: { variants: { thumb: { path: 'ab/vue-thumb.webp', width: 600, height: 400 } } },
+        },
+      ])
+      await waitFor(() => expect(screen.getByText('Premier lieu')).toBeInTheDocument())
+      const img = screen.getByRole('link', { name: 'Premier lieu' }).querySelector('img')
+      expect(img).toHaveAttribute('src', '/media/ab/vue-thumb.webp')
+      // Sized from the variant, so the row does not reflow as it loads.
+      expect(img).toHaveAttribute('width', '600')
+      expect(img).toHaveAttribute('height', '400')
+    })
+
+    it('leaves the photograph unnamed, since the title beside it already names the entry', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      renderWithExhibitionsContext('/2013', [
+        {
+          _id: 'a',
+          slug: 'premier-lieu',
+          title: 'Premier lieu',
+          yearStart: 2013,
+          thumb: { variants: { thumb: { path: 'ab/vue-thumb.webp', width: 600, height: 400 } } },
+        },
+      ])
+      await waitFor(() => expect(screen.getByText('Premier lieu')).toBeInTheDocument())
+      // alt="", so the entry is announced once -- an accessible name of its
+      // own here would read every title twice.
+      expect(screen.getByRole('link', { name: 'Premier lieu' }).querySelector('img')).toHaveAttribute('alt', '')
+    })
+
+    it('renders the entry without an image rather than a broken one when there is no thumbnail', async () => {
+      vi.spyOn(api, 'apiGet').mockImplementation(notFound)
+      renderWithExhibitionsContext('/2013', [
+        { _id: 'a', slug: 'premier-lieu', title: 'Premier lieu', yearStart: 2013, thumb: null },
+      ])
+      await waitFor(() => expect(screen.getByText('Premier lieu')).toBeInTheDocument())
+      expect(screen.getByRole('link', { name: 'Premier lieu' }).querySelector('img')).toBeNull()
+    })
+
     it('shows a loading marker, not an empty list, while the exhibitions list is still in flight', async () => {
       vi.spyOn(api, 'apiGet').mockImplementation(notFound)
       const { container } = renderWithExhibitionsContext('/2013', undefined)
